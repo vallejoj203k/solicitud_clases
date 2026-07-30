@@ -9,6 +9,7 @@ import path from 'node:path';
 import { env } from './config/env.js';
 import { prisma } from './config/prisma.js';
 import { auth } from './middleware/auth.js';
+import { bootstrap, reportarBootstrap } from './config/bootstrap.js';
 import { errorHandler, notFoundHandler } from './middleware/errores.js';
 import { publicRouter } from './routes/public.routes.js';
 import { authRouter } from './routes/auth.routes.js';
@@ -73,6 +74,16 @@ if (fs.existsSync(env.clientDist)) {
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// Prepara la base si es un despliegue nuevo (disciplinas + administrador). Es
+// solo-inserción, así que en arranques posteriores no hace nada.
+try {
+  reportarBootstrap(await bootstrap());
+} catch (e) {
+  // Un fallo aquí no debe impedir que la app sirva: puede ser una base que
+  // todavía no termina de aceptar conexiones.
+  console.error('[inicio] No se pudo preparar la base:', e.message);
+}
 
 const servidor = app.listen(env.puerto, () => {
   console.log(`[server] Escuchando en http://localhost:${env.puerto} (${env.esProduccion ? 'producción' : 'desarrollo'})`);

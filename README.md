@@ -310,17 +310,37 @@ React. Un dominio, sin CORS, sin variable de API, más barato.
 
 6. **Genera el dominio**: *Settings → Networking → Generate Domain*.
 
-7. **Carga los datos iniciales.** El deploy crea las tablas pero la base queda vacía: sin
-   disciplinas ni administrador no puedes entrar a `/admin`. Con el CLI de Railway
-   (`npm i -g @railway/cli && railway login && railway link`):
+7. **Listo.** En el primer arranque, si la base está vacía, la app crea sola las dos
+   disciplinas y un usuario administrador. Las credenciales quedan impresas en los logs
+   del servicio:
+
+   ```
+   ══════════════════════════════════════════════════════════════
+    [inicio] No había ningún administrador: se creó uno.
+
+      Usuario    : 3001234567
+      Contraseña : EjWCGDQeLeZV
+   ══════════════════════════════════════════════════════════════
+   ```
+
+   Si definiste `ADMIN_TELEFONO` y `ADMIN_PASSWORD` se usan esos valores; si no, la
+   contraseña se genera al azar (nunca queda una contraseña por defecto conocida en un
+   sitio público). Esta preparación es **solo-inserción**: se puede reiniciar las veces
+   que sea sin duplicar ni sobrescribir nada.
+
+   Con eso ya puedes entrar a `/admin` y crear tu programación. No hace falta el CLI de
+   Railway ni correr el seed.
+
+8. **Opcional — datos de demostración.** Si quieres las 40+ clases de prueba, con el CLI
+   de Railway (`npm i -g @railway/cli && railway login && railway link`):
 
    ```bash
    railway run node server/prisma/seed.js
    ```
 
-   ⚠️ **Solo la primera vez, sobre una base vacía**: el seed borra todo antes de sembrar.
+   ⚠️ El seed **borra todo** antes de sembrar. Solo sobre una base sin datos reales.
 
-8. **Si no puedes entrar al panel**, revisa qué administradores existen realmente:
+9. **Si no puedes entrar al panel**, revisa qué administradores existen:
 
    ```bash
    railway run node server/scripts/admin.mjs listar
@@ -328,19 +348,16 @@ React. Un dominio, sin CORS, sin variable de API, más barato.
 
    El login responde siempre "usuario o contraseña incorrectos" —tanto si el usuario no
    existe como si la clave está mal— para no revelar qué teléfonos hay registrados, así
-   que este comando es la forma de saber cuál de los dos casos es.
-
-   Para crear un administrador o cambiarle la contraseña **sin borrar datos** (a
-   diferencia del seed):
+   que este comando es la forma de saber cuál de los dos casos es. Para cambiar la
+   contraseña sin borrar datos:
 
    ```bash
    railway run node server/scripts/admin.mjs crear \
      --telefono 3001234567 --password "TU_CLAVE" --nombre "Tu Nombre"
    ```
 
-   Si el teléfono ya existe como cliente, lo promueve a ADMIN conservando sus reservas.
-   `ADMIN_PASSWORD` solo se lee en el momento del seed: cambiar esa variable después **no**
-   cambia la contraseña, porque el hash ya está guardado en la base.
+   `ADMIN_PASSWORD` solo se lee cuando **no existe todavía** ningún administrador:
+   cambiar esa variable después no cambia la contraseña, porque el hash ya está en la base.
 
 ### Alternativa: dos servicios separados
 

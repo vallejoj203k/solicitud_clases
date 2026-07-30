@@ -10,31 +10,10 @@ import { PrismaClient } from '@prisma/client';
 import { env } from '../src/config/env.js';
 import { desdeFechaHoraLocal, proximosDias } from '../src/utils/fechas.js';
 import { expandirLayout } from '../src/utils/layout.js';
+import { LAYOUT_SPINNING, LAYOUT_RUNNING, TIPOS_CLASE } from '../src/config/catalogoInicial.js';
 import { generarCodigoReserva } from '../src/utils/codigo.js';
 
 const prisma = new PrismaClient();
-
-const LAYOUT_SPINNING = {
-  titulo: 'TARIMA · INSTRUCTOR',
-  numeracion: 'porFila',
-  pasilloDespuesDeCol: 3, // pasillo central entre la columna 3 y la 4
-  filas: [
-    { label: 'A', puestos: 6, nota: 'Primera fila' },
-    { label: 'B', puestos: 6 },
-    { label: 'C', puestos: 6 },
-    { label: 'D', puestos: 6 },
-  ],
-};
-
-const LAYOUT_RUNNING = {
-  titulo: 'PANTALLAS · FRENTE',
-  numeracion: 'continua', // trotadoras numeradas 1..12
-  filas: [
-    { label: 'F1', puestos: 4, nota: 'Frente' },
-    { label: 'F2', puestos: 4 },
-    { label: 'F3', puestos: 4 },
-  ],
-};
 
 const CLIENTES_DEMO = [
   { nombre: 'Laura Gómez', telefono: '3101234567' },
@@ -87,31 +66,11 @@ async function main() {
   });
 
   console.log('› Creando tipos de clase...');
-  const spinning = await prisma.tipoClase.create({
-    data: {
-      slug: 'spinning',
-      nombre: 'Spinning',
-      descripcion: 'Ritmo, música alta y 45 minutos que se sienten como 10.',
-      color: '#4CE0E0',
-      icono: 'bike',
-      precioCop: 25000,
-      orden: 1,
-      layoutPuestos: LAYOUT_SPINNING,
-    },
-  });
-
-  const running = await prisma.tipoClase.create({
-    data: {
-      slug: 'running',
-      nombre: 'Running',
-      descripcion: 'Series, cuestas y trote continuo guiado por un coach.',
-      color: '#C8F751',
-      icono: 'run',
-      precioCop: 22000,
-      orden: 0,
-      layoutPuestos: LAYOUT_RUNNING,
-    },
-  });
+  const creados = {};
+  for (const tipo of TIPOS_CLASE) {
+    creados[tipo.slug] = await prisma.tipoClase.create({ data: tipo });
+  }
+  const { running, spinning } = creados;
 
   console.log('› Creando instructores...');
   const instructores = await Promise.all(
