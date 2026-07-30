@@ -21,10 +21,33 @@ if (faltantes.length) {
   process.exit(1);
 }
 
-const esProduccion = process.env.NODE_ENV === 'production';
+// Railway define estas variables en todos sus despliegues. Las miramos para no
+// depender de que alguien se acuerde de poner NODE_ENV=production: si no, la app
+// arrancaria en modo desarrollo y firmaria los tokens con el secreto de ejemplo,
+// que esta publicado en el repositorio y serviria para falsificar una sesion de
+// administrador.
+const enPlataforma = Boolean(
+  process.env.RAILWAY_ENVIRONMENT ||
+    process.env.RAILWAY_ENVIRONMENT_NAME ||
+    process.env.RAILWAY_PROJECT_ID ||
+    process.env.RAILWAY_SERVICE_ID
+);
+
+const esProduccion = process.env.NODE_ENV === 'production' || enPlataforma;
 
 if (esProduccion && !process.env.JWT_SECRET) {
-  console.error('[config] JWT_SECRET es obligatorio en produccion.');
+  console.error('');
+  console.error('═════════════════════════════════════════════════════════════════');
+  console.error(' [config] Falta JWT_SECRET y esto es un despliegue real.');
+  console.error('');
+  console.error(' Sin esa variable los tokens se firmarian con el secreto de');
+  console.error(' ejemplo, que esta publicado en el repositorio: cualquiera podria');
+  console.error(' falsificar una sesion de administrador. El servidor no arranca.');
+  console.error('');
+  console.error(' Genera uno y agregalo a las variables del servicio:');
+  console.error("   node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"");
+  console.error('═════════════════════════════════════════════════════════════════');
+  console.error('');
   process.exit(1);
 }
 

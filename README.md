@@ -363,10 +363,16 @@ listados en `CORS_ORIGINS` y a su propio dominio.
 
 Ver `.env.example`. Las imprescindibles:
 
+> El servidor se considera en producción si `NODE_ENV=production` **o** si detecta las
+> variables que Railway inyecta (`RAILWAY_ENVIRONMENT` y compañía), y en ese caso **se
+> niega a arrancar sin `JWT_SECRET`**. Es a propósito: sin esa variable firmaría los
+> tokens con el secreto de ejemplo, que está en el repositorio, y cualquiera podría
+> falsificar una sesión de administrador.
+
 | Variable | Obligatoria | Por defecto |
 | --- | --- | --- |
 | `DATABASE_URL` | sí | — |
-| `JWT_SECRET` | sí en producción | valor de desarrollo |
+| `JWT_SECRET` | sí en cualquier despliegue | valor de desarrollo (solo en local) |
 | `PORT` | no | `4000` |
 | `NODE_ENV` | no | `development` |
 | `APP_URL` | no | `http://localhost:5173` |
