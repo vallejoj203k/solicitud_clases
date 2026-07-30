@@ -292,16 +292,19 @@ React. Un dominio, sin CORS, sin variable de API, más barato.
 
    | | |
    | --- | --- |
-   | Build | `npm ci --include=dev && npm run build` |
+   | Build | `npm run build` |
    | Start | `npm start` |
    | Healthcheck | `/api/salud` |
 
    `npm start` corre `prisma migrate deploy` antes de levantar el servidor, así que **cada
    despliegue aplica las migraciones pendientes solo**.
 
-   > El `--include=dev` no es opcional: con `NODE_ENV=production`, `npm ci` omite las
-   > devDependencies y Vite y Tailwind son justamente devDependencies, así que el build
-   > fallaría sin esa bandera.
+   > El build **no** debe repetir `npm ci`: Nixpacks ya instala las dependencias en su
+   > propia fase, y un segundo `npm ci` falla con `EBUSY` al intentar borrar
+   > `node_modules/.cache`, que el builder tiene montado como caché.
+   >
+   > Vite y Tailwind son devDependencies y con `NODE_ENV=production` npm las omitiría, así
+   > que el `.npmrc` de la raíz lleva `include=dev` para forzar su instalación.
 
 6. **Genera el dominio**: *Settings → Networking → Generate Domain*.
 
@@ -318,7 +321,7 @@ Si prefieres escalar el frontend por su cuenta:
 | | Servicio API | Servicio Frontend |
 | --- | --- | --- |
 | Root Directory | `server` | `client` |
-| Build | `npm ci --include=dev && npm run build` | `npm ci --include=dev && npm run build` |
+| Build | `npm run build` | `npm run build` |
 | Start | `npm start` | servir `dist/` como sitio estático |
 | Variables | las de arriba + `CORS_ORIGINS=https://tu-frontend.up.railway.app` | `VITE_API_URL=https://tu-api.up.railway.app` |
 
