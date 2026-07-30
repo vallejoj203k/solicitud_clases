@@ -1,0 +1,156 @@
+// Esquema de datos de la app de reservas.
+//
+// Decision de diseno importante: NO existe una tabla `Puesto` materializada.
+// El mapa de puestos vive como JSON en `TipoClase.layoutPuestos` (o en
+// `Clase.layoutOverride` si una clase puntual usa otro salon) y la ocupacion se
+// deriva de las reservas activas. Esto evita duplicar el estado "ocupado" en dos
+// lugares -que es la fuente clasica de inconsistencias- y evita generar N filas
+// por cada clase creada. Ver `services/disponibilidad.service.js`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Rol {
+  CLIENTE
+  ADMIN
+}
+
+enum EstadoClase {
+  ACTIVA
+  CANCELADA
+}
+
+enum EstadoReserva {
+  CONFIRMADA
+  CANCELADA
+  ASISTIO
+  NO_SHOW
+}
+
+enum EstadoPago {
+  PENDIENTE
+  PAGADO
+  RECHAZADO
+}
+
+model Usuario {
+  id           String   @id @default(cuid())
+  nombre       String
+  // El telefono es el identificador natural del cliente: con el reconocemos a
+  // quien ya reservo antes y le evitamos volver a llenar el formulario.
+  telefono     String   @unique
+  email        String?
+  rol          Rol      @default(CLIENTE)
+  // Solo los admin tienen password. Los clientes no inician sesion.
+  passwordHash String?
+  notas        String?
+  creadoEn     DateTime @default(now())
+
+  reservas Reserva[]
+
+  @@index([nombre])
+  @@index([rol])
+}
+
+model TipoClase {
+  id          String  @id @default(cuid())
+  slug        String  @unique // "running" | "spinning"
+  nombre      String
+  descripcion String
+  // Color de acento en hex, lo consume el frontend para diferenciar la disciplina.
+  color       String  @default("#C8F751")
+  icono       String  @default("run")
+  // Estructura del mapa de puestos. Ver docs/layout en el README.
+  // { titulo, filas: [{ label, puestos, offset? }], pasilloDespuesDeCol?, numeracion }
+  layoutPuestos Json
+  precioCop   Int     @default(0)
+  orden       Int     @default(0)
+  activo      Boolean @default(true)
+
+  clases Clase[]
+}
+
+model Instructor {
+  id     String  @id @default(cuid())
+  nombre String
+  foto   String?
+  activo Boolean @default(true)
+
+  clases Clase[]
+}
+
+model Clase {
+  id          String @id @default(cuid())
+  tipoClaseId String
+  tipoClase   TipoClase @relation(fields: [tipoClaseId], references: [id], onDelete: Restrict)
+
+  instructorId String?
+  instructor   Instructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+
+  // Instante de inicio en UTC. El gimnasio opera en America/Bogota (UTC-5 fijo,
+  // sin horario de verano), la conversion se hace en `utils/fechas.js`.
+  inicioEn    DateTime
+  duracionMin Int      @default(50)
+
+  // Cupo maximo real de la clase. Puede ser menor que el total de puestos del
+  // layout (ej. salon de 20 bicis pero solo se abren 16).
+  cupoMaximo  Int
+  precioCop   Int      @default(0)
+
+  // Si la clase se dicta en un salon distinto al habitual del tipo de clase.
+  layoutOverride    Json?
+  // Puestos fuera de servicio SOLO para esta clase (ej. ["B3"] bici danada).
+  puestosBloqueados String[] @default([])
+
+  estado   EstadoClase @default(ACTIVA)
+  notas    String?
+  creadoEn DateTime    @default(now())
+
+  reservas Reserva[]
+
+  @@index([inicioEn])
+  @@index([tipoClaseId, inicioEn])
+  @@index([estado, inicioEn])
+}
+
+model Reserva {
+  id     String @id @default(cuid())
+  // Codigo corto legible para el check-in en recepcion / QR (ej. "K7QF2M").
+  codigo String @unique
+
+  claseId String
+  clase   Clase  @relation(fields: [claseId], references: [id], onDelete: Cascade)
+
+  usuarioId String
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // Codigo del puesto dentro del layout, ej. "A1", "B4".
+  puestoCodigo String
+
+  estado     EstadoReserva @default(CONFIRMADA)
+
+  // --- Bloque de pago -------------------------------------------------------
+  // Hoy el admin marca el pago a mano. Los campos `metodoPago` / `pagoRef` /
+  // `pagoPayload` ya estan listos para guardar la respuesta de una pasarela
+  // (Wompi, Stripe) sin cambiar el modelo. Ver `services/pago.service.js`.
+  estadoPago        EstadoPago @default(PENDIENTE)
+  montoCop          Int        @default(0)
+  metodoPago        String? // "efectivo" | "transferencia" | "wompi" | "stripe"
+  pagoRef           String? // id de la transaccion en la pasarela
+  pagoPayload       Json?
+  pagoActualizadoEn DateTime?
+
+  creadoEn    DateTime  @default(now())
+  canceladoEn DateTime?
+
+  @@index([claseId, estado])
+  @@index([usuarioId, creadoEn])
+  @@index([estadoPago])
+  @@index([creadoEn])
+}

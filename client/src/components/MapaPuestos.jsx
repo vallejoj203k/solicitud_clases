@@ -1,0 +1,155 @@
+import { cx } from './ui.jsx';
+
+/**
+ * Mapa de puestos reutilizable.
+ *
+ * NO conoce nada de running ni de spinning: dibuja lo que le llega en `mapa`,
+ * que el servidor arma expandiendo el `layoutPuestos` del tipo de clase. Un
+ * salón nuevo con otra distribución funciona sin tocar este componente.
+ *
+ * mapa = {
+ *   titulo, columnas, pasilloDespuesDeCol,
+ *   filas: [{ label, nota, offset, puestos: [{ codigo, etiqueta, columna, estado }] }]
+ * }
+ * estado ∈ "libre" | "ocupado" | "bloqueado" | "sinCupo"
+ */
+const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de zoom
+const ANCHO_PASILLO = 14;
+
+function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
+  const disponible = puesto.estado === 'libre';
+  const conTinte = disponible || puesto.estado === 'libreFijo';
+  const etiquetas = {
+    libre: 'disponible',
+    libreFijo: 'disponible',
+    ocupado: 'ocupado',
+    bloqueado: 'fuera de servicio',
+    sinCupo: 'sin cupo',
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={!disponible}
+      aria-pressed={seleccionado}
+      aria-label={`Puesto ${puesto.codigo}, ${etiquetas[puesto.estado]}`}
+      onClick={() => disponible && onSeleccionar(puesto.codigo)}
+      style={{
+        gridColumn: puesto.columnaGrid,
+        ...(seleccionado
+          ? { backgroundColor: acento, borderColor: acento }
+          : // Los puestos libres llevan un tinte del color de la disciplina para
+            // que salten a la vista frente a los ocupados, que quedan apagados.
+            conTinte
+            ? { borderColor: `${acento}66`, backgroundColor: `${acento}14` }
+            : {}),
+      }}
+      className={cx(
+        'relative aspect-square rounded-xl border text-[13px] font-bold tabular-nums',
+        'flex items-center justify-center transition-all duration-150 select-none',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-carbon-800 focus-visible:ring-volt-500',
+        seleccionado && 'text-carbon-900 scale-105 shadow-alzado animate-latido z-10',
+        !seleccionado && conTinte && 'text-humo-100',
+        !seleccionado && disponible && 'hover:brightness-125 active:scale-95',
+        puesto.estado === 'libreFijo' && 'cursor-default',
+        puesto.estado === 'ocupado' && 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed',
+        puesto.estado === 'sinCupo' && 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed',
+        puesto.estado === 'bloqueado' &&
+          'bg-transparent border-dashed border-carbon-600 text-carbon-500 cursor-not-allowed'
+      )}
+    >
+      {puesto.estado === 'bloqueado' ? '×' : puesto.etiqueta}
+    </button>
+  );
+}
+
+export default function MapaPuestos({
+  mapa,
+  seleccionado = null,
+  onSeleccionar = () => {},
+  acento = '#C8F751',
+  // En el panel de admin el mapa es solo una vista del salón: no se elige nada.
+  soloLectura = false,
+}) {
+  if (!mapa) return null;
+
+  const { columnas, pasilloDespuesDeCol } = mapa;
+  const hayPasillo = Boolean(pasilloDespuesDeCol) && pasilloDespuesDeCol < columnas;
+
+  // El pasillo se implementa como una columna extra y estrecha del grid: así el
+  // layout sigue siendo una sola cuadrícula y las columnas quedan alineadas
+  // entre filas aunque tengan distinta cantidad de puestos.
+  const anchos = [];
+  for (let c = 1; c <= columnas; c += 1) {
+    anchos.push(`minmax(${ANCHO_MIN_PUESTO}px, 1fr)`);
+    if (hayPasillo && c === pasilloDespuesDeCol) anchos.push(`${ANCHO_PASILLO}px`);
+  }
+  const gridTemplateColumns = anchos.join(' ');
+
+  const posicionGrid = (columna) =>
+    hayPasillo && columna > pasilloDespuesDeCol ? columna + 1 : columna;
+
+  return (
+    <div className="animate-aparecer">
+      {mapa.titulo && (
+        <div className="mb-5">
+          <div className="mx-auto max-w-[70%] rounded-b-3xl bg-gradient-to-b from-carbon-600 to-carbon-700 border-x border-b border-carbon-600 py-2 text-center">
+            <span className="etiqueta text-humo-300">{mapa.titulo}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Scroll horizontal solo si el salón es muy ancho para la pantalla. */}
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="min-w-fit space-y-2">
+          {mapa.filas.map((fila) => (
+            <div key={fila.label} className="flex items-center gap-2">
+              <span className="w-6 shrink-0 text-center text-[11px] font-bold text-carbon-500 tabular-nums">
+                {fila.label}
+              </span>
+              <div className="grid flex-1 gap-2" style={{ gridTemplateColumns }}>
+                {fila.puestos.map((puesto) => (
+                  <Puesto
+                    key={puesto.codigo}
+                    puesto={{
+                      ...puesto,
+                      columnaGrid: posicionGrid(puesto.columna),
+                      estado: soloLectura && puesto.estado === 'libre' ? 'libreFijo' : puesto.estado,
+                    }}
+                    seleccionado={seleccionado === puesto.codigo}
+                    onSeleccionar={onSeleccionar}
+                    acento={acento}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Leyenda acento={acento} soloLectura={soloLectura} />
+    </div>
+  );
+}
+
+function Leyenda({ acento, soloLectura }) {
+  const items = [
+    { texto: 'Disponible', estilo: { borderColor: `${acento}66`, backgroundColor: `${acento}14` } },
+    ...(soloLectura ? [] : [{ texto: 'Tu puesto', estilo: { backgroundColor: acento, borderColor: acento } }]),
+    { texto: 'Ocupado', clase: 'bg-carbon-800 border-carbon-700' },
+    { texto: 'Fuera de servicio', clase: 'border-dashed border-carbon-600' },
+  ];
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+      {items.map((item) => (
+        <span key={item.texto} className="flex items-center gap-1.5 text-[11px] text-humo-500">
+          <span
+            className={cx('w-3.5 h-3.5 rounded-[5px] border', item.clase)}
+            style={item.estilo}
+          />
+          {item.texto}
+        </span>
+      ))}
+    </div>
+  );
+}

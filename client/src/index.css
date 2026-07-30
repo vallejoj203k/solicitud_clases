@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-carbon-900 text-humo-100 font-sans antialiased;
+    /* Evita el rebote horizontal en móvil */
+    overflow-x: hidden;
+  }
+
+  /* Respeta el notch de los iPhone: el CTA fijo nunca queda bajo la barra de gestos. */
+  .pb-segura {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  ::selection {
+    @apply bg-volt-500 text-carbon-900;
+  }
+}
+
+@layer components {
+  /* Carrusel horizontal sin barra de scroll visible, con snap para el dedo. */
+  .fila-scroll {
+    @apply flex gap-2 overflow-x-auto snap-x snap-mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .fila-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tarjeta {
+    @apply rounded-3xl bg-carbon-700 border border-carbon-600;
+  }
+
+  .etiqueta {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-humo-500;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

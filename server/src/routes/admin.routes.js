@@ -1,0 +1,226 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { prisma } from '../config/prisma.js';
+import { asyncHandler, noEncontrado } from '../utils/errores.js';
+import { requiereAdmin } from '../middleware/auth.js';
+import { layoutSchema, expandirLayout } from '../utils/layout.js';
+import { aCsv } from '../utils/csv.js';
+import { listarClases } from '../services/disponibilidad.service.js';
+import {
+  crearClase,
+  crearClasesEnLote,
+  actualizarClase,
+  cancelarClase,
+  eliminarClase,
+} from '../services/clase.service.js';
+import { actualizarEstadoPago } from '../services/pago.service.js';
+import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
+import {
+  dashboard,
+  reservasDeClase,
+  reportePagos,
+  listarClientes,
+  detalleCliente,
+  COLUMNAS_CSV,
+} from '../services/reporte.service.js';
+
+export const adminRouter = Router();
+adminRouter.use(requiereAdmin);
+
+// --- 1. Dashboard -----------------------------------------------------------
+adminRouter.get(
+  '/dashboard',
+  asyncHandler(async (_req, res) => res.json(await dashboard()))
+);
+
+// --- 2. Gestion de horarios -------------------------------------------------
+const claseSchema = z.object({
+  tipoClaseId: z.string().min(1),
+  instructorId: z.string().nullish(),
+  fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato YYYY-MM-DD'),
+  hora: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:mm'),
+  duracionMin: z.number().int().min(10).max(240).default(50),
+  cupoMaximo: z.number().int().min(1).max(200),
+  precioCop: z.number().int().min(0).optional(),
+  layoutOverride: layoutSchema.nullish(),
+  puestosBloqueados: z.array(z.string()).default([]),
+  notas: z.string().max(300).nullish(),
+});
+
+adminRouter.get(
+  '/clases',
+  asyncHandler(async (req, res) => {
+    const { desde, hasta, tipo, incluirPasadas } = req.query;
+    const clases = await listarClases({
+      tipoSlug: tipo || undefined,
+      desde: desde || undefined,
+      hasta: hasta || undefined,
+      incluirPasadas: incluirPasadas === 'true',
+    });
+    res.json(clases);
+  })
+);
+
+adminRouter.post(
+  '/clases',
+  asyncHandler(async (req, res) => {
+    const clase = await crearClase(claseSchema.parse(req.body));
+    res.status(201).json(clase);
+  })
+);
+
+const loteSchema = claseSchema.omit({ fecha: true, hora: true }).extend({
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  diasSemana: z.array(z.number().int().min(0).max(6)).min(1),
+  horas: z.array(z.string().regex(/^\d{2}:\d{2}$/)).min(1),
+});
+
+adminRouter.post(
+  '/clases/lote',
+  asyncHandler(async (req, res) => {
+    const creadas = await crearClasesEnLote(loteSchema.parse(req.body));
+    res.status(201).json({ creadas: creadas.length, clases: creadas });
+  })
+);
+
+adminRouter.patch(
+  '/clases/:id',
+  asyncHandler(async (req, res) => {
+    const parcial = claseSchema.partial().extend({ estado: z.enum(['ACTIVA', 'CANCELADA']).optional() });
+    res.json(await actualizarClase(req.params.id, parcial.parse(req.body)));
+  })
+);
+
+adminRouter.post(
+  '/clases/:id/cancelar',
+  asyncHandler(async (req, res) => res.json(await cancelarClase(req.params.id)))
+);
+
+adminRouter.delete(
+  '/clases/:id',
+  asyncHandler(async (req, res) => res.json(await eliminarClase(req.params.id)))
+);
+
+// --- 3. Vista por clase: inscritos ------------------------------------------
+adminRouter.get(
+  '/clases/:id/reservas',
+  asyncHandler(async (req, res) => {
+    const datos = await reservasDeClase(req.params.id);
+    if (!datos) throw noEncontrado('Clase');
+    res.json(datos);
+  })
+);
+
+const pagoSchema = z.object({
+  estadoPago: z.enum(['PENDIENTE', 'PAGADO', 'RECHAZADO']),
+  metodoPago: z.enum(['efectivo', 'transferencia', 'datafono', 'cortesia']).nullish(),
+  montoCop: z.number().int().min(0).optional(),
+});
+
+adminRouter.patch(
+  '/reservas/:id/pago',
+  asyncHandler(async (req, res) => {
+    const datos = pagoSchema.parse(req.body);
+    res.json(await actualizarEstadoPago(req.params.id, datos));
+  })
+);
+
+adminRouter.post(
+  '/reservas/:id/cancelar',
+  asyncHandler(async (req, res) => {
+    res.json(await cancelarReserva({ reservaId: req.params.id, porAdmin: true }));
+  })
+);
+
+adminRouter.post(
+  '/reservas/:id/asistencia',
+  asyncHandler(async (req, res) => {
+    const { asistio } = z.object({ asistio: z.boolean() }).parse(req.body);
+    res.json(await marcarAsistencia(req.params.id, asistio));
+  })
+);
+
+// --- 4. Reporte de pagos ----------------------------------------------------
+const reporteSchema = z.object({
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  tipo: z.string().optional(),
+  estadoPago: z.enum(['PENDIENTE', 'PAGADO', 'RECHAZADO']).optional(),
+});
+
+adminRouter.get(
+  '/reportes/pagos',
+  asyncHandler(async (req, res) => {
+    const { tipo, ...resto } = reporteSchema.parse(req.query);
+    res.json(await reportePagos({ ...resto, tipoSlug: tipo }));
+  })
+);
+
+adminRouter.get(
+  '/reportes/pagos.csv',
+  asyncHandler(async (req, res) => {
+    const { tipo, ...resto } = reporteSchema.parse(req.query);
+    const reporte = await reportePagos({ ...resto, tipoSlug: tipo });
+    const nombre = `pagos_${resto.desde ?? 'inicio'}_${resto.hasta ?? 'hoy'}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
+    res.send(aCsv(COLUMNAS_CSV, reporte.filas));
+  })
+);
+
+// --- 5. Clientes ------------------------------------------------------------
+adminRouter.get(
+  '/clientes',
+  asyncHandler(async (req, res) => {
+    res.json(await listarClientes({ busqueda: req.query.q || undefined }));
+  })
+);
+
+adminRouter.get(
+  '/clientes/:id',
+  asyncHandler(async (req, res) => {
+    const cliente = await detalleCliente(req.params.id);
+    if (!cliente) throw noEncontrado('Cliente');
+    res.json(cliente);
+  })
+);
+
+// --- Catalogos auxiliares ---------------------------------------------------
+adminRouter.get(
+  '/tipos-clase',
+  asyncHandler(async (_req, res) => {
+    const tipos = await prisma.tipoClase.findMany({ orderBy: { orden: 'asc' } });
+    res.json(
+      tipos.map((t) => ({
+        ...t,
+        // Se envia el layout ya expandido para que el admin lo previsualice sin
+        // tener que reimplementar las reglas de numeracion en el frontend.
+        layoutExpandido: expandirLayout(t.layoutPuestos),
+      }))
+    );
+  })
+);
+
+adminRouter.get(
+  '/instructores',
+  asyncHandler(async (_req, res) => {
+    res.json(await prisma.instructor.findMany({ where: { activo: true }, orderBy: { nombre: 'asc' } }));
+  })
+);
+
+adminRouter.post(
+  '/instructores',
+  asyncHandler(async (req, res) => {
+    const datos = z.object({ nombre: z.string().trim().min(2).max(60) }).parse(req.body);
+    res.status(201).json(await prisma.instructor.create({ data: datos }));
+  })
+);
+
+/** Previsualiza un layout arbitrario (usado por el editor de salones del admin). */
+adminRouter.post(
+  '/layouts/preview',
+  asyncHandler(async (req, res) => {
+    res.json(expandirLayout(req.body));
+  })
+);
