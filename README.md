@@ -66,6 +66,8 @@ Abre <http://localhost:5173>.
 | `npm run db:seed` | Reinicia y siembra datos de prueba |
 | `npm run db:reset` | Borra la base, re-migra y siembra |
 | `npm run db:studio` | Prisma Studio |
+| `npm run admin:listar` | Muestra los administradores que existen en la base |
+| `npm run admin:crear -- --telefono <tel> --password "<clave>"` | Crea un admin o le cambia la contraseña |
 
 > El `.env` vive en la raíz para compartirlo entre `client` y `server`. Como el CLI de
 > Prisma solo busca el `.env` junto al schema, los scripts de base de datos pasan por
@@ -308,11 +310,37 @@ React. Un dominio, sin CORS, sin variable de API, más barato.
 
 6. **Genera el dominio**: *Settings → Networking → Generate Domain*.
 
-7. **Carga los datos iniciales.** El seed borra todo, así que en producción crea las
-   disciplinas y el usuario admin a mano. La forma más rápida es abrir una shell
-   (`railway run bash`, con el CLI instalado y `railway link` hecho) y ejecutar
-   `node prisma/seed.js` **solo la primera vez, sobre una base vacía**. Después, todo se
-   gestiona desde el panel `/admin`.
+7. **Carga los datos iniciales.** El deploy crea las tablas pero la base queda vacía: sin
+   disciplinas ni administrador no puedes entrar a `/admin`. Con el CLI de Railway
+   (`npm i -g @railway/cli && railway login && railway link`):
+
+   ```bash
+   railway run node server/prisma/seed.js
+   ```
+
+   ⚠️ **Solo la primera vez, sobre una base vacía**: el seed borra todo antes de sembrar.
+
+8. **Si no puedes entrar al panel**, revisa qué administradores existen realmente:
+
+   ```bash
+   railway run node server/scripts/admin.mjs listar
+   ```
+
+   El login responde siempre "usuario o contraseña incorrectos" —tanto si el usuario no
+   existe como si la clave está mal— para no revelar qué teléfonos hay registrados, así
+   que este comando es la forma de saber cuál de los dos casos es.
+
+   Para crear un administrador o cambiarle la contraseña **sin borrar datos** (a
+   diferencia del seed):
+
+   ```bash
+   railway run node server/scripts/admin.mjs crear \
+     --telefono 3001234567 --password "TU_CLAVE" --nombre "Tu Nombre"
+   ```
+
+   Si el teléfono ya existe como cliente, lo promueve a ADMIN conservando sus reservas.
+   `ADMIN_PASSWORD` solo se lee en el momento del seed: cambiar esa variable después **no**
+   cambia la contraseña, porque el hash ya está guardado en la base.
 
 ### Alternativa: dos servicios separados
 
