@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api, descargar } from '../api/client.js';
 import { Aviso, Boton, Cargando, Insignia, Vacio } from '../components/ui.jsx';
@@ -14,16 +14,41 @@ import { pesos } from '../lib/formato.js';
 export default function Reserva() {
   const { codigo } = useParams();
   const [params] = useSearchParams();
+  const queryClient = useQueryClient();
   const esNueva = params.get('nueva') === '1';
   const [qr, setQr] = useState(null);
+
+  // Wompi devuelve al cliente con el id de la transacción en la URL. Se lo
+  // pasamos al servidor para que le pregunte directamente a Wompi en vez de
+  // esperar el webhook, que puede tardar unos segundos.
+  const idTransaccion = params.get('id') || undefined;
 
   const { data: reserva, isLoading, error } = useQuery({
     queryKey: ['reserva', codigo],
     queryFn: () => api.reserva(codigo),
   });
 
+  const esperandoPago = reserva?.estado === 'PENDIENTE_PAGO';
+
+  const { data: estadoPago } = useQuery({
+    queryKey: ['estadoPago', codigo, idTransaccion],
+    queryFn: () => api.estadoPago(codigo, idTransaccion),
+    enabled: Boolean(reserva) && esperandoPago,
+    // Mientras el pago se resuelve se consulta cada 3 s; el webhook suele
+    // llegar antes, pero así la pantalla no se queda colgada.
+    refetchInterval: 3000,
+  });
+
+  // Cuando el pago se resuelve, se recarga la reserva completa.
   useEffect(() => {
-    if (!reserva) return;
+    if (estadoPago && estadoPago.estado !== 'PENDIENTE_PAGO') {
+      queryClient.invalidateQueries({ queryKey: ['reserva', codigo] });
+      queryClient.invalidateQueries({ queryKey: ['misReservas'] });
+    }
+  }, [estadoPago, codigo, queryClient]);
+
+  useEffect(() => {
+    if (!reserva || reserva.estado === 'PENDIENTE_PAGO') return;
     // QR generado en el navegador: no se envía nada a ningún servicio externo.
     QRCode.toDataURL(reserva.codigo, {
       width: 320,
@@ -51,6 +76,29 @@ export default function Reserva() {
 
   const acento = reserva.clase.tipoClase.color;
   const cancelada = reserva.estado === 'CANCELADA';
+  const expirada = reserva.estado === 'EXPIRADA';
+
+  // Todavía en la pasarela o esperando la confirmación de Wompi.
+  if (reserva.estado === 'PENDIENTE_PAGO') {
+    return <EsperandoPago reserva={reserva} acento={acento} notas={estadoPago?.notasPago} />;
+  }
+
+  if (expirada) {
+    return (
+      <Vacio
+        titulo={reserva.estadoPago === 'RECHAZADO' ? 'El pago no se completó' : 'Se venció el tiempo para pagar'}
+        descripcion={
+          reserva.notasPago ||
+          'Tu puesto volvió a quedar libre. Puedes intentarlo de nuevo, el cupo se asigna a quien pague primero.'
+        }
+        accion={
+          <Link to="/">
+            <Boton>Volver a reservar</Boton>
+          </Link>
+        }
+      />
+    );
+  }
 
   return (
     <div className="min-h-dvh px-5 py-8 pb-16 max-w-lg mx-auto">
@@ -157,6 +205,73 @@ export default function Reserva() {
           Volver al inicio
         </Link>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Pantalla intermedia mientras Wompi resuelve el pago.
+ *
+ * El puesto ya está apartado, así que nadie más lo puede tomar; lo único que
+ * falta es la confirmación. Se ofrece volver a la pasarela por si el cliente
+ * cerró la ventana sin pagar.
+ */
+function EsperandoPago({ reserva, acento, notas }) {
+  const [reintentando, setReintentando] = useState(false);
+  const minutosRestantes = reserva.expiraEn
+    ? Math.max(0, Math.round((new Date(reserva.expiraEn).getTime() - Date.now()) / 60000))
+    : null;
+
+  const volverAPagar = async () => {
+    setReintentando(true);
+    try {
+      const { url } = await api.checkout(reserva.codigo);
+      window.location.href = url;
+    } catch {
+      setReintentando(false);
+    }
+  };
+
+  return (
+    <div className="min-h-dvh px-5 py-16 max-w-sm mx-auto text-center">
+      <div
+        className="w-16 h-16 rounded-full mx-auto flex items-center justify-center"
+        style={{ backgroundColor: `${acento}24` }}
+      >
+        <span
+          className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: acento, borderTopColor: 'transparent' }}
+        />
+      </div>
+
+      <h1 className="mt-5 text-2xl font-extrabold tracking-tightest">Confirmando tu pago…</h1>
+      <p className="mt-2 text-sm text-humo-500">
+        Te guardamos el puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span>
+        {minutosRestantes !== null && minutosRestantes > 0
+          ? ` por ${minutosRestantes} minuto${minutosRestantes === 1 ? '' : 's'} más`
+          : ''}
+        . Esta pantalla se actualiza sola.
+      </p>
+
+      {notas && (
+        <div className="mt-5">
+          <Aviso tono="info">{notas}</Aviso>
+        </div>
+      )}
+
+      <div className="mt-8 space-y-3">
+        <Boton className="w-full" cargando={reintentando} onClick={volverAPagar}>
+          Volver a la pasarela de pago
+        </Boton>
+        <Link to="/mis-reservas" className="block text-sm text-humo-500 hover:text-humo-100">
+          Ver mis reservas
+        </Link>
+      </div>
+
+      <p className="mt-8 text-xs text-humo-500">
+        Si ya pagaste, espera unos segundos: la confirmación llega sola. No cierres esta
+        página.
+      </p>
     </div>
   );
 }

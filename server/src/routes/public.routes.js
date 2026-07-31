@@ -14,6 +14,7 @@ import {
   recuperarAcceso,
 } from '../services/reserva.service.js';
 import { enviarConfirmacionReserva, enviarCancelacion } from '../services/notificaciones.service.js';
+import { wompiConfigurado, construirCheckout } from '../services/wompi.service.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errores.js';
 
@@ -28,6 +29,7 @@ function serializarReserva(r) {
     estado: r.estado,
     estadoPago: r.estadoPago,
     montoCop: r.montoCop,
+    expiraEn: r.expiraEn?.toISOString() ?? null,
     creadoEn: r.creadoEn.toISOString(),
     cliente: r.usuario ? { id: r.usuario.id, nombre: r.usuario.nombre, telefono: r.usuario.telefono } : null,
     clase: {
@@ -132,14 +134,31 @@ publicRouter.post(
       );
     }
 
-    const reserva = await crearReserva({ ...datos, usuarioId });
+    // Solo se cobra en línea si está activado Y hay llaves; si falta algo se
+    // sigue cobrando en recepción en vez de dejar la app sin reservar.
+    const pagoEnLinea = env.pagos.modo === 'wompi' && wompiConfigurado();
+    const reserva = await crearReserva({ ...datos, usuarioId, pagoEnLinea });
 
-    // El correo es un extra: si falla, la reserva ya quedó hecha igual.
-    enviarConfirmacionReserva(reserva, generarIcs(reserva)).catch(() => {});
+    // Con pago en línea el cupo todavía no es firme: la confirmación se envía
+    // cuando Wompi avise que el pago entró.
+    let checkout = null;
+    if (reserva.estado === 'PENDIENTE_PAGO') {
+      checkout = construirCheckout({
+        referencia: reserva.codigo,
+        montoCop: reserva.montoCop,
+        correo: reserva.usuario.email ?? undefined,
+        urlRetorno: `${env.appUrl}/reserva/${reserva.codigo}`,
+      }).url;
+    } else {
+      // El correo es un extra: si falla, la reserva ya quedó hecha igual.
+      enviarConfirmacionReserva(reserva, generarIcs(reserva)).catch(() => {});
+    }
     const token = firmarToken({ sub: reserva.usuarioId, rol: 'CLIENTE', nombre: reserva.usuario.nombre }, 'CLIENTE');
 
     res.status(201).json({
       reserva: serializarReserva(reserva),
+      // Si viene, el frontend debe mandar al cliente a pagar antes de nada.
+      checkout,
       // El token queda en el dispositivo: es lo que le permite ver y cancelar
       // sus reservas sin tener que crear una contrasena.
       token,
@@ -223,6 +242,8 @@ publicRouter.post(
 publicRouter.get('/configuracion', (_req, res) => {
   res.json({
     horasLimiteCancelacion: env.horasLimiteCancelacion,
+    pagoEnLinea: env.pagos.modo === 'wompi' && wompiConfigurado(),
+    minutosParaPagar: env.pagos.minutosParaPagar,
     gimnasio: env.gimnasio,
   });
 });

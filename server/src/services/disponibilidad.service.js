@@ -1,9 +1,9 @@
 import { prisma } from '../config/prisma.js';
 import { expandirLayout } from '../utils/layout.js';
 import { noEncontrado } from '../utils/errores.js';
+import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
 import { inicioDelDia, finDelDia, fechaISOLocal, horaLocal } from '../utils/fechas.js';
 
-const ESTADOS_ACTIVOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
 /** El layout de la clase: el propio si tiene override, si no el de su tipo. */
 export function resolverLayout(clase) {
@@ -72,7 +72,7 @@ async function contarOcupacion(claseIds) {
   if (claseIds.length === 0) return new Map();
   const filas = await prisma.reserva.groupBy({
     by: ['claseId'],
-    where: { claseId: { in: claseIds }, estado: { in: ESTADOS_ACTIVOS } },
+    where: { claseId: { in: claseIds }, estado: { in: ESTADOS_OCUPAN_PUESTO } },
     _count: { _all: true },
   });
   return new Map(filas.map((f) => [f.claseId, f._count._all]));
@@ -173,7 +173,7 @@ export async function obtenerDisponibilidad(claseId) {
   if (!clase) throw noEncontrado('Clase');
 
   const reservas = await prisma.reserva.findMany({
-    where: { claseId, estado: { in: ESTADOS_ACTIVOS } },
+    where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
     select: { puestoCodigo: true },
   });
 

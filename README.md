@@ -86,7 +86,8 @@ Instructor  id, nombre, foto?, activo
 Clase       id, tipoClaseId, instructorId?, inicioEn(UTC), duracionMin, cupoMaximo,
             precioCop, layoutOverride(JSON)?, puestosBloqueados[], estado(ACTIVA|CANCELADA), notas
 Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
-            estado(CONFIRMADA|CANCELADA|ASISTIO|NO_SHOW),
+            estado(PENDIENTE_PAGO|CONFIRMADA|CANCELADA|EXPIRADA|ASISTIO|NO_SHOW),
+            expiraEn?, notasPago?,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
 ```
@@ -199,18 +200,56 @@ propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 
 ## Pagos
 
-No hay pasarela conectada. El cliente paga en recepción y el administrador marca el pago
-desde el panel (`efectivo`, `transferencia`, `datáfono`, `cortesía`).
+Dos modos, según `PAGO_MODO`:
 
-La estructura ya está lista para enchufar **Wompi** o **Stripe** sin migrar datos:
-`Reserva` guarda `estadoPago`, `metodoPago`, `pagoRef` (id de la transacción externa) y
-`pagoPayload` (respuesta cruda del proveedor). En `server/src/services/pago.service.js`
-están los dos puntos de extensión:
+- **`manual`** (por defecto): el cliente reserva y paga en recepción; el administrador
+  marca el pago desde el panel.
+- **`wompi`**: el cliente paga antes de que su cupo quede confirmado.
 
-- `iniciarPagoOnline()` — crear la transacción y devolver la URL de checkout.
-- `registrarResultadoExterno()` — lo que llamaría el webhook tras validar la firma.
+### El puesto se aparta, no se vende, mientras se paga
 
-El panel, los reportes y el CSV ya leen de esos mismos campos.
+Cobrar primero y reservar después deja el puesto suelto durante los minutos que la persona
+está en la pasarela: dos personas podrían pagar por la misma bicicleta y a una habría que
+devolverle la plata a mano. Por eso:
+
+1. Al confirmar, la reserva nace en **`PENDIENTE_PAGO`** con `expiraEn` a
+   `MINUTOS_PARA_PAGAR` minutos. Ese estado **ocupa el puesto** en el mapa —nadie más lo
+   puede tomar— pero **no es una venta**: no aparece en el reporte de pagos ni suma a los
+   ingresos.
+2. Se redirige a Wompi con una **firma de integridad**
+   (`SHA256(referencia + centavos + moneda + secreto)`), que impide pagar $1.000 por una
+   clase de $25.000 editando la URL.
+3. El **webhook** (`POST /api/pagos/wompi/webhook`) confirma la reserva. La firma del
+   evento se valida siempre: sin eso cualquiera podría anunciar un pago y llevarse un cupo.
+   Es idempotente, porque Wompi reintenta.
+4. Si el pago se rechaza o el plazo vence, la reserva pasa a **`EXPIRADA`** y el puesto
+   vuelve al mapa. Lo liberan dos mecanismos: un barrido cada minuto y una expiración
+   dentro de la propia transacción de `crearReserva`, para que un plazo vencido nunca
+   bloquee a alguien que sí quiere pagar.
+
+Al volver del checkout la app le pregunta a Wompi por la transacción en vez de esperar el
+webhook, así la confirmación es inmediata; el webhook sigue siendo la fuente autoritativa
+para quien cierra el navegador sin volver.
+
+**Caso raro pero real:** si el pago entra después de expirar y el puesto ya se lo dieron a
+otra persona, la reserva queda con el pago registrado y una nota en `notasPago` para que
+recepción gestione la devolución. No se le quita el puesto a quien ya lo tenía.
+
+### Poner Wompi en marcha
+
+1. Crea la cuenta de comercio en Wompi (requiere RUT y cuenta bancaria del gimnasio).
+2. En *Desarrolladores* copia la llave pública, la privada, el secreto de integridad y el
+   secreto de eventos. **Empieza con las de sandbox.**
+3. Configúralas junto con `PAGO_MODO=wompi` y `WOMPI_AMBIENTE=sandbox`.
+4. En el panel de Wompi registra la URL de eventos:
+   `https://tu-app.up.railway.app/api/pagos/wompi/webhook`
+5. Prueba el flujo completo con las tarjetas de prueba de Wompi antes de pasar a
+   `WOMPI_AMBIENTE=produccion` con las llaves de producción.
+
+`GET /api/configuracion` dice si el cobro en línea está activo; el frontend cambia el botón
+a "Ir a pagar" según eso.
+
+---
 
 ---
 

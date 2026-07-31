@@ -1,9 +1,9 @@
 import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { expandirLayout } from '../utils/layout.js';
+import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
 import { desdeFechaHoraLocal, sumarDias, fechaISOLocal } from '../utils/fechas.js';
 
-const ESTADOS_ACTIVOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 const incluir = { tipoClase: true, instructor: true };
 
 /** Valida que el cupo pedido quepa en el layout elegido. */
@@ -109,7 +109,7 @@ export async function actualizarClase(id, datos) {
 
   // No se puede reducir el cupo por debajo de lo ya vendido.
   const ocupados = await prisma.reserva.count({
-    where: { claseId: id, estado: { in: ESTADOS_ACTIVOS } },
+    where: { claseId: id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
   });
   if (cupoMaximo < ocupados) {
     throw new AppError(
@@ -123,7 +123,7 @@ export async function actualizarClase(id, datos) {
   const nuevosBloqueos = puestosBloqueados.filter((c) => !actual.puestosBloqueados.includes(c));
   if (nuevosBloqueos.length) {
     const enConflicto = await prisma.reserva.findMany({
-      where: { claseId: id, estado: { in: ESTADOS_ACTIVOS }, puestoCodigo: { in: nuevosBloqueos } },
+      where: { claseId: id, estado: { in: ESTADOS_OCUPAN_PUESTO }, puestoCodigo: { in: nuevosBloqueos } },
       select: { puestoCodigo: true },
     });
     if (enConflicto.length) {
@@ -163,7 +163,7 @@ export async function cancelarClase(id) {
       include: incluir,
     });
     await tx.reserva.updateMany({
-      where: { claseId: id, estado: { in: ESTADOS_ACTIVOS } },
+      where: { claseId: id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
       data: { estado: 'CANCELADA', canceladoEn: new Date() },
     });
     return clase;

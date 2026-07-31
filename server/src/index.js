@@ -14,6 +14,8 @@ import { errorHandler, notFoundHandler } from './middleware/errores.js';
 import { publicRouter } from './routes/public.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { adminRouter } from './routes/admin.routes.js';
+import { pagosRouter } from './routes/pagos.routes.js';
+import { expirarReservasVencidas } from './services/reserva.service.js';
 
 const app = express();
 
@@ -57,6 +59,7 @@ app.get('/api/salud', async (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api', pagosRouter);
 app.use('/api', publicRouter);
 
 // --- SPA --------------------------------------------------------------------
@@ -84,6 +87,17 @@ try {
   // todavía no termina de aceptar conexiones.
   console.error('[inicio] No se pudo preparar la base:', e.message);
 }
+
+// Barrido de puestos apartados cuyo plazo de pago vencio. `crearReserva` tambien
+// expira los de su clase dentro de la transaccion, asi que esto es la red de
+// seguridad para que el mapa no muestre ocupado algo que ya se libero.
+const BARRIDO_MS = 60_000;
+const barrido = setInterval(() => {
+  expirarReservasVencidas()
+    .then((n) => n > 0 && console.log(`[pagos] ${n} reserva(s) sin pagar liberadas.`))
+    .catch((e) => console.error('[pagos] Falló el barrido:', e.message));
+}, BARRIDO_MS);
+barrido.unref();
 
 const servidor = app.listen(env.puerto, () => {
   console.log(`[server] Escuchando en http://localhost:${env.puerto} (${env.esProduccion ? 'producción' : 'desarrollo'})`);

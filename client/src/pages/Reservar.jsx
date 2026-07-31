@@ -47,6 +47,8 @@ export default function Reservar() {
   const desde = hoyISO();
   const hasta = sumarDiasISO(desde, 6);
 
+  const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
+
   const { data, isLoading } = useQuery({
     queryKey: ['clases', slug, desde],
     queryFn: () => api.clases({ tipo: slug, desde, hasta }),
@@ -97,10 +99,17 @@ export default function Reservar() {
               aceptaDatos,
             }),
       }),
-    onSuccess: ({ reserva, token, cliente: perfil }) => {
+    onSuccess: ({ reserva, token, cliente: perfil, checkout }) => {
       guardarToken('cliente', token);
       guardarCliente(perfil);
       queryClient.invalidateQueries({ queryKey: ['inicio'] });
+
+      // Con pago en línea el puesto quedó apartado, no confirmado: se manda a
+      // la pasarela. Wompi devuelve a /reserva/:codigo cuando termina.
+      if (checkout) {
+        window.location.href = checkout;
+        return;
+      }
       navegar(`/reserva/${reserva.codigo}?nueva=1`, { replace: true });
     },
     onError: (err) => {
@@ -234,6 +243,7 @@ export default function Reservar() {
         setEmail={setEmail}
         aceptaDatos={aceptaDatos}
         setAceptaDatos={setAceptaDatos}
+        config={config}
         error={errorReserva}
         cargando={reservar.isPending}
         onConfirmar={() => {
@@ -323,6 +333,7 @@ function HojaConfirmacion({
   setEmail,
   aceptaDatos,
   setAceptaDatos,
+  config,
   error,
   cargando,
   onConfirmar,
@@ -431,7 +442,9 @@ function HojaConfirmacion({
           <span className="text-xl font-extrabold tracking-tightest">{pesos(clase.precioCop)}</span>
         </div>
         <p className="text-xs text-humo-500 -mt-2 px-1">
-          Pagas en recepción antes de la clase (efectivo o transferencia).
+          {config?.pagoEnLinea
+            ? `Te llevamos a pagar. Te guardamos el puesto ${config.minutosParaPagar} minutos mientras completas el pago.`
+            : 'Pagas en recepción antes de la clase (efectivo o transferencia).'}
         </p>
 
         {error && <Aviso>{error.message}</Aviso>}
@@ -443,7 +456,7 @@ function HojaConfirmacion({
           onClick={onConfirmar}
           style={datosCompletos && !cargando ? { backgroundColor: acento } : undefined}
         >
-          Confirmar reserva
+          {config?.pagoEnLinea ? 'Ir a pagar' : 'Confirmar reserva'}
         </Boton>
       </div>
     </Hoja>
