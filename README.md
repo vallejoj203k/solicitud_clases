@@ -68,6 +68,7 @@ Abre <http://localhost:5173>.
 | `npm run db:studio` | Prisma Studio |
 | `npm run admin:listar` | Muestra los administradores que existen en la base |
 | `npm run admin:crear -- --telefono <tel> --password "<clave>"` | Crea un admin o le cambia la contraseña |
+| `node server/scripts/admin.mjs revisar-puestos` | Busca reservas cuyo puesto ya no existe en su salón |
 
 > El `.env` vive en la raíz para compartirlo entre `client` y `server`. Como el CLI de
 > Prisma solo busca el `.env` junto al schema, los scripts de base de datos pasan por
@@ -116,6 +117,15 @@ ejemplo), se puede añadir al JSON del layout sin migrar datos.
   ]
 }
 ```
+
+Los salones actuales: **Spinning** 18 bicicletas en 3 columnas × 6 filas (`A1`…`F3`) y
+**Running** 6 trotadoras en 2 columnas × 3 filas (`1`…`6`). Se definen en
+`server/src/config/catalogoInicial.js`; cambiarlos en una base que ya existe requiere una
+migración de datos (ver `migrations/*_salon_real`), porque el bootstrap de arranque solo
+inserta lo que falta y nunca sobrescribe.
+
+Al crear una clase, el campo **Cupo** se rellena solo con el tamaño del salón (18 o 6) y
+se puede bajar; no se puede subir por encima del salón (`422 CUPO_EXCEDE_LAYOUT`).
 
 El layout describe el **salón completo**; `Clase.cupoMaximo` decide cuántos de esos
 puestos se ponen a la venta en cada clase. El mapa dibuja exactamente `cupoMaximo`
