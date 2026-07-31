@@ -128,6 +128,42 @@ export async function resumenHome({ horariosPorTipo = 3 } = {}) {
 }
 
 /**
+ * Decide qué puestos del salón se ponen a la venta en una clase concreta.
+ *
+ * El layout describe el salón completo (por ejemplo 12 trotadoras), pero el
+ * `cupoMaximo` puede ser menor. Antes se dibujaba el salón entero y los puestos
+ * sobrantes se apagaban a medida que se llenaba, lo que hacía imposible entender
+ * de un vistazo cuántos cupos había: se veían 12 cuadros para un cupo de 6.
+ * Ahora se ofrecen exactamente `cupoMaximo` puestos.
+ *
+ * Reglas, en este orden:
+ *   1. Los puestos ya reservados siempre se muestran (si no, la reserva de
+ *      alguien desaparecería del mapa al bajar el cupo).
+ *   2. Los bloqueados se muestran marcados como fuera de servicio, pero no
+ *      consumen cupo: son parte del salón, no de la venta.
+ *   3. Se completa con los primeros puestos libres hasta llegar al cupo.
+ *
+ * El conjunto resultante es estable mientras las reservas salgan del propio
+ * mapa: reservar uno de los puestos ofrecidos no cambia cuáles se ofrecen.
+ */
+export function puestosEnJuego({ layout, ocupados, bloqueados, cupoMaximo }) {
+  const enJuego = new Set();
+  let libresPorAsignar = Math.max(0, cupoMaximo - ocupados.size);
+
+  for (const codigo of layout.codigos) {
+    if (ocupados.has(codigo)) {
+      enJuego.add(codigo);
+    } else if (bloqueados.has(codigo)) {
+      enJuego.add(codigo);
+    } else if (libresPorAsignar > 0) {
+      enJuego.add(codigo);
+      libresPorAsignar -= 1;
+    }
+  }
+  return enJuego;
+}
+
+/**
  * Estado completo de una clase, incluyendo el mapa de puestos con el estado de
  * cada uno. Es lo que consume el componente SeatMap del frontend: el cliente no
  * interpreta el JSON del layout, solo dibuja las filas que le llegan.
@@ -145,26 +181,31 @@ export async function obtenerDisponibilidad(claseId) {
   const bloqueados = new Set(clase.puestosBloqueados || []);
   const layout = resolverLayout(clase);
 
-  const cupos = calcularCupos({
-    totalPuestos: layout.total,
-    bloqueados: layout.codigos.filter((c) => bloqueados.has(c)).length,
-    ocupados: ocupados.size,
+  // Solo se dibujan los puestos que esta clase pone a la venta, de modo que la
+  // cantidad de cuadros del mapa coincida con el cupo configurado.
+  const enJuego = puestosEnJuego({
+    layout,
+    ocupados,
+    bloqueados,
     cupoMaximo: clase.cupoMaximo,
   });
 
-  const filas = layout.filas.map((fila) => ({
-    ...fila,
-    puestos: fila.puestos.map((p) => ({
-      ...p,
-      estado: ocupados.has(p.codigo)
-        ? 'ocupado'
-        : bloqueados.has(p.codigo)
-          ? 'bloqueado'
-          : cupos.disponibles === 0
-            ? 'sinCupo'
-            : 'libre',
-    })),
-  }));
+  const filas = layout.filas
+    .map((fila) => ({
+      ...fila,
+      puestos: fila.puestos
+        .filter((p) => enJuego.has(p.codigo))
+        .map((p) => ({
+          ...p,
+          estado: ocupados.has(p.codigo)
+            ? 'ocupado'
+            : bloqueados.has(p.codigo)
+              ? 'bloqueado'
+              : 'libre',
+        })),
+    }))
+    // Una fila del salón que quedó completamente fuera del cupo no se dibuja.
+    .filter((fila) => fila.puestos.length > 0);
 
   return {
     clase: serializarClase(clase, ocupados.size),
