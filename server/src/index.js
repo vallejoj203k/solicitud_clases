@@ -66,6 +66,12 @@ app.use('/api', publicRouter);
 // En produccion este mismo servicio sirve el build de React. Asi Railway solo
 // necesita un servicio, no hay CORS y todo vive bajo el mismo dominio.
 if (fs.existsSync(env.clientDist)) {
+  // Las fotos del gimnasio cambian muy de vez en cuando y pesan; se cachean por
+  // una semana para que quien reserva cada semana no las vuelva a descargar.
+  app.use(
+    '/images',
+    express.static(path.join(env.clientDist, 'images'), { maxAge: '7d', immutable: false })
+  );
   app.use(express.static(env.clientDist, { maxAge: '1h', index: false }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();

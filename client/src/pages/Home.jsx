@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import { Cargando, Aviso, BarraDisponibilidad, cx } from '../components/ui.jsx';
 import { ICONOS_DISCIPLINA, IconoFlecha, IconoCandado, IconoCalendario } from '../components/Iconos.jsx';
-import { hora12 } from '../lib/formato.js';
+import { hora12, pesos } from '../lib/formato.js';
 import { leerCliente } from '../lib/sesion.js';
 
 /**
@@ -82,27 +82,54 @@ function TarjetaDisciplina({ tipo, onIrAPuestos }) {
 
   return (
     <section className="tarjeta overflow-hidden animate-aparecer">
-      {/* Cabecera: toda el área es tocable y lleva al listado completo del tipo. */}
+      {/* Cabecera: la foto del salón, resuelta por el slug igual que en la
+          pantalla de reserva (/images/spinning.jpg, /images/running.jpg). Si la
+          foto no existe, el `url()` falla en silencio y queda el fondo oscuro.
+          Toda el área es tocable y lleva al listado completo del tipo. */}
       <Link
         to={`/reservar/${tipo.slug}`}
-        className="block p-5 relative active:scale-[.995] transition-transform"
+        className="group block relative h-[210px] active:scale-[.995] transition-transform"
       >
         <div
-          className="absolute inset-0 opacity-[0.07] pointer-events-none"
-          style={{ background: `radial-gradient(120% 90% at 100% 0%, ${acento} 0%, transparent 60%)` }}
+          className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
+          style={{ backgroundImage: `url(/images/${tipo.slug}.jpg)` }}
         />
-        <div className="relative flex items-start justify-between gap-4">
+        {/* Degradado con paradas explícitas: sólido donde va el texto (el tercio
+            inferior) y casi limpio arriba, para que la foto se vea de verdad.
+            Sin él, el nombre compite con las bicicletas de la imagen.
+            No se le pone tinte de color encima: ensuciaba las fotos, que ya
+            traen los neones verdes y morados de la paleta. */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(to top, #1C2028 30%, rgba(28,32,40,0.82) 55%, rgba(28,32,40,0.10) 100%)',
+          }}
+        />
+
+        <span
+          className="absolute top-4 right-4 px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-sm"
+          style={{ backgroundColor: `${acento}E6`, color: '#0F1115' }}
+        >
+          {pesos(tipo.precioCop)}
+        </span>
+
+        <div className="absolute inset-x-0 bottom-0 p-5 flex items-end justify-between gap-4">
           <div className="min-w-0">
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
-              style={{ backgroundColor: `${acento}1F`, color: acento }}
+              className="w-11 h-11 rounded-2xl flex items-center justify-center mb-2.5 backdrop-blur-sm"
+              style={{ backgroundColor: `${acento}2E`, color: acento }}
             >
-              <Icono className="w-7 h-7" />
+              <Icono className="w-6 h-6" />
             </div>
-            <h2 className="text-2xl font-extrabold tracking-tightest">{tipo.nombre}</h2>
-            <p className="mt-1 text-sm text-humo-500 leading-snug max-w-[34ch]">{tipo.descripcion}</p>
+            <h2 className="text-[26px] leading-none font-extrabold tracking-tightest">
+              {tipo.nombre}
+            </h2>
+            <p className="mt-1.5 text-sm text-humo-500 leading-snug max-w-[32ch]">
+              {tipo.descripcion}
+            </p>
           </div>
-          <span className="shrink-0 mt-1 p-2.5 rounded-full bg-carbon-600 text-humo-300">
+          <span className="shrink-0 p-2.5 rounded-full bg-carbon-900/60 backdrop-blur-sm text-humo-100 border border-white/10">
             <IconoFlecha />
           </span>
         </div>
