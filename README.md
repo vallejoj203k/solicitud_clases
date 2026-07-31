@@ -416,6 +416,19 @@ Ver `.env.example`. Las imprescindibles:
 
 ---
 
+## Imágenes
+
+Las fotos del gimnasio van en `/images` (raíz del repositorio), con el **nombre del slug
+de la disciplina**: `running.jpg`, `spinning.jpg`. La pantalla de reserva las usa como
+cabecera según la clase que se esté reservando.
+
+Vite solo publica lo que está en `client/public`, así que `client/scripts/copiar-imagenes.mjs`
+copia esa carpeta antes de `dev` y de `build` (el destino está en `.gitignore`: el original
+es lo que se versiona). Para una disciplina nueva basta con dejar `<slug>.jpg` ahí; si no
+existe la foto, la pantalla queda con el fondo oscuro de siempre, sin imagen rota.
+
+---
+
 ## Diseño
 
 Paleta **Volt**: base carbón (`#0F1115`) con acento lima eléctrico (`#C8F751`) para

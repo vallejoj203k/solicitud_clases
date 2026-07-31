@@ -7,6 +7,7 @@ import { hoyISO, sumarDiasISO, hora12, fechaLarga, pesos } from '../lib/formato.
 import CarruselDias from '../components/CarruselDias.jsx';
 import TarjetaHorario from '../components/TarjetaHorario.jsx';
 import MapaPuestos from '../components/MapaPuestos.jsx';
+import FondoDisciplina from '../components/FondoDisciplina.jsx';
 import {
   Aviso,
   Boton,
@@ -124,8 +125,12 @@ export default function Reservar() {
   const enPasoPuesto = Boolean(claseId);
 
   return (
-    <div className="min-h-dvh pb-40">
-      <header className="sticky top-0 z-30 bg-carbon-900/90 backdrop-blur border-b border-carbon-700">
+    <div className="relative min-h-dvh pb-40">
+      {/* La foto corresponde a la disciplina de la URL, así aparece de una vez
+          aunque los datos de la clase todavía estén cargando. */}
+      <FondoDisciplina slug={slug} altura={enPasoPuesto ? 'banda' : 'hero'} />
+
+      <header className="sticky top-0 z-30 bg-carbon-900/70 backdrop-blur-md border-b border-carbon-700/60">
         <div className="px-5 py-3 flex items-center gap-3">
           {enPasoPuesto ? (
             <button
