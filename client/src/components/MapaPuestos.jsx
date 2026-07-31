@@ -42,8 +42,15 @@ function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
           ? { backgroundColor: acento, borderColor: acento }
           : // Los puestos libres llevan un tinte del color de la disciplina para
             // que salten a la vista frente a los ocupados, que quedan apagados.
+            // El tinte va como capa sobre un fondo OPACO, no como color
+            // translúcido: detrás puede haber una foto y los números tienen que
+            // leerse igual.
             conTinte
-            ? { borderColor: `${acento}66`, backgroundColor: `${acento}14` }
+            ? {
+                borderColor: `${acento}80`,
+                backgroundColor: '#1C2028',
+                backgroundImage: `linear-gradient(0deg, ${acento}1F, ${acento}1F)`,
+              }
             : {}),
       }}
       className={cx(
@@ -56,7 +63,7 @@ function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
         puesto.estado === 'libreFijo' && 'cursor-default',
         puesto.estado === 'ocupado' && 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed',
         puesto.estado === 'bloqueado' &&
-          'bg-transparent border-dashed border-carbon-600 text-carbon-500 cursor-not-allowed'
+          'bg-carbon-900 border-dashed border-carbon-600 text-carbon-500 cursor-not-allowed'
       )}
     >
       {puesto.estado === 'bloqueado' ? '×' : puesto.etiqueta}
@@ -135,10 +142,17 @@ export default function MapaPuestos({
 
 function Leyenda({ acento, soloLectura }) {
   const items = [
-    { texto: 'Disponible', estilo: { borderColor: `${acento}66`, backgroundColor: `${acento}14` } },
+    {
+      texto: 'Disponible',
+      estilo: {
+        borderColor: `${acento}80`,
+        backgroundColor: '#1C2028',
+        backgroundImage: `linear-gradient(0deg, ${acento}1F, ${acento}1F)`,
+      },
+    },
     ...(soloLectura ? [] : [{ texto: 'Tu puesto', estilo: { backgroundColor: acento, borderColor: acento } }]),
     { texto: 'Ocupado', clase: 'bg-carbon-800 border-carbon-700' },
-    { texto: 'Fuera de servicio', clase: 'border-dashed border-carbon-600' },
+    { texto: 'Fuera de servicio', clase: 'bg-carbon-900 border-dashed border-carbon-600' },
   ];
   return (
     <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">

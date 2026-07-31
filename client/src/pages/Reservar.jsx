@@ -126,9 +126,9 @@ export default function Reservar() {
 
   return (
     <div className="relative min-h-dvh pb-40">
-      {/* La foto corresponde a la disciplina de la URL, así aparece de una vez
-          aunque los datos de la clase todavía estén cargando. */}
-      <FondoDisciplina slug={slug} altura={enPasoPuesto ? 'banda' : 'hero'} />
+      {/* La foto sale de la disciplina de la URL, así aparece de una vez aunque
+          los datos de la clase todavía estén cargando. */}
+      <FondoDisciplina slug={slug} />
 
       <header className="sticky top-0 z-30 bg-carbon-900/70 backdrop-blur-md border-b border-carbon-700/60">
         <div className="px-5 py-3 flex items-center gap-3">

@@ -420,7 +420,12 @@ Ver `.env.example`. Las imprescindibles:
 
 Las fotos del gimnasio van en `/images` (raíz del repositorio), con el **nombre del slug
 de la disciplina**: `running.jpg`, `spinning.jpg`. La pantalla de reserva las usa como
-cabecera según la clase que se esté reservando.
+fondo a pantalla completa según la clase que se esté reservando.
+
+Sobre la foto va un velo oscuro (`OPACIDAD_VELO` en `FondoDisciplina.jsx`): las dos fotos
+tienen mucho contraste y sin él los números de los puestos no se leen. Para que la foto se
+vea más, ese es el único valor a tocar. Por lo mismo los cuadros del mapa son opacos, con
+el color de la disciplina como capa encima y no como transparencia.
 
 Vite solo publica lo que está en `client/public`, así que `client/scripts/copiar-imagenes.mjs`
 copia esa carpeta antes de `dev` y de `build` (el destino está en `.gitignore`: el original
