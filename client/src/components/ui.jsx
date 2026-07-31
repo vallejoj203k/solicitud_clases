@@ -167,7 +167,9 @@ export function Hoja({ abierta, onCerrar, titulo, children, className = '' }) {
         aria-label={titulo}
         className={cx(
           'relative w-full sm:max-w-lg bg-carbon-800 border-t sm:border border-carbon-600',
-          'rounded-t-4xl sm:rounded-3xl animate-subirHoja max-h-[92vh] overflow-y-auto',
+          // En móvil sube desde abajo; en pantalla grande crece desde el centro.
+          'rounded-t-4xl sm:rounded-3xl max-h-[92vh] overflow-y-auto',
+          'animate-subirHoja sm:animate-surgir',
           className
         )}
       >

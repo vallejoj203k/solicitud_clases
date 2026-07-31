@@ -177,8 +177,13 @@ En `/recuperar` la recupera con **código + teléfono**. Se piden los dos a prop
 teléfono solo se podrían enumerar números y ver quién va a qué clase; con el código solo,
 bastaría con ver el QR de otra persona.
 
-**Check-in.** `/admin/recepcion` busca por código, teléfono o nombre y desde ahí se marca
-asistencia y se cobra en efectivo, sin abrir la clase.
+**Check-in.** `/admin/recepcion` abre con la agenda: todas las clases de la más cercana a
+la más lejana (desde una hora atrás, para que la que está en curso no desaparezca),
+agrupadas por día y marcadas con «En curso». Al abrir una clase se ve el mapa del salón con
+los puestos reservados; tocando uno se despliega la ficha de quien lo reservó —nombre,
+teléfono, código, estado y pago— y desde ahí se marca asistencia y se cobra en efectivo.
+Arriba sigue la búsqueda por código, teléfono o nombre, con las mismas dos acciones, para
+quien llega con su QR.
 
 **Plazo de cancelación.** El cliente cancela por su cuenta hasta `HORAS_LIMITE_CANCELACION`
 horas antes (2 por defecto); después la app se lo dice y no le ofrece el botón. El
