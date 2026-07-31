@@ -117,6 +117,13 @@ ejemplo), se puede añadir al JSON del layout sin migrar datos.
 }
 ```
 
+El layout describe el **salón completo**; `Clase.cupoMaximo` decide cuántos de esos
+puestos se ponen a la venta en cada clase. El mapa dibuja exactamente `cupoMaximo`
+puestos: si el salón tiene 12 trotadoras y la clase abre 6, se ven 6 cuadros, no 12 con
+la mitad apagada. Los ya reservados se muestran siempre y los bloqueados aparecen
+marcados sin consumir cupo (ver `puestosEnJuego` en `disponibilidad.service.js`). La API
+rechaza con `409 PUESTO_FUERA_DE_CUPO` un puesto que no esté entre los ofrecidos.
+
 El componente `MapaPuestos` **no interpreta este JSON**: el servidor lo expande
 (`server/src/utils/layout.js`) y envía las filas con el código y el estado de cada puesto
 ya resueltos. Añadir un salón con otra distribución es cambiar el JSON, sin tocar código

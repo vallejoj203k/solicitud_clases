@@ -11,7 +11,7 @@ import { cx } from './ui.jsx';
  *   titulo, columnas, pasilloDespuesDeCol,
  *   filas: [{ label, nota, offset, puestos: [{ codigo, etiqueta, columna, estado }] }]
  * }
- * estado ∈ "libre" | "ocupado" | "bloqueado" | "sinCupo"
+ * estado ∈ "libre" | "ocupado" | "bloqueado"
  */
 const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de zoom
 const ANCHO_PASILLO = 14;
@@ -24,7 +24,6 @@ function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
     libreFijo: 'disponible',
     ocupado: 'ocupado',
     bloqueado: 'fuera de servicio',
-    sinCupo: 'sin cupo',
   };
 
   return (
@@ -53,7 +52,6 @@ function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
         !seleccionado && disponible && 'hover:brightness-125 active:scale-95',
         puesto.estado === 'libreFijo' && 'cursor-default',
         puesto.estado === 'ocupado' && 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed',
-        puesto.estado === 'sinCupo' && 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed',
         puesto.estado === 'bloqueado' &&
           'bg-transparent border-dashed border-carbon-600 text-carbon-500 cursor-not-allowed'
       )}

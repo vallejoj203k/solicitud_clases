@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { generarCodigoReserva, normalizarTelefono } from '../utils/codigo.js';
-import { resolverLayout } from './disponibilidad.service.js';
+import { resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
 
 const ESTADOS_ACTIVOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
@@ -86,12 +86,28 @@ export async function crearReserva({ claseId, puestoCodigo, nombre, telefono, us
       );
     }
 
-    const ocupados = await tx.reserva.count({
+    const reservasActivas = await tx.reserva.findMany({
       where: { claseId, estado: { in: ESTADOS_ACTIVOS } },
+      select: { puestoCodigo: true },
     });
-    const bloqueados = layout.codigos.filter((c) => (clase.puestosBloqueados || []).includes(c)).length;
-    const capacidad = Math.min(layout.total - bloqueados, clase.cupoMaximo);
-    if (ocupados >= capacidad) throw new AppError('Esta clase ya está llena.', 409, 'CLASE_LLENA');
+    const ocupados = new Set(reservasActivas.map((r) => r.puestoCodigo));
+    const bloqueadosSet = new Set(clase.puestosBloqueados || []);
+
+    const capacidad = Math.min(layout.total - bloqueadosSet.size, clase.cupoMaximo);
+    if (ocupados.size >= capacidad) throw new AppError('Esta clase ya está llena.', 409, 'CLASE_LLENA');
+
+    // El puesto tiene que estar entre los que esta clase pone a la venta. El
+    // layout puede tener 12 trotadoras y la clase abrir solo 6: las otras 6 no
+    // se ofrecen en el mapa y tampoco se aceptan por la API.
+    const enJuego = puestosEnJuego({
+      layout,
+      ocupados,
+      bloqueados: bloqueadosSet,
+      cupoMaximo: clase.cupoMaximo,
+    });
+    if (!enJuego.has(puestoCodigo)) {
+      throw new AppError('Ese puesto no está disponible en esta clase.', 409, 'PUESTO_FUERA_DE_CUPO');
+    }
 
     // (2) El INSERT. Si el puesto se colo por otra via, el indice unico parcial
     // lanza P2002 -> 409 PUESTO_OCUPADO.
