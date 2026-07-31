@@ -14,3 +14,4 @@ coverage/
 
 # Copia generada por client/scripts/copiar-imagenes.mjs
 client/public/images/
+respaldos/

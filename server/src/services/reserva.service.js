@@ -2,24 +2,32 @@ import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { generarCodigoReserva, normalizarTelefono } from '../utils/codigo.js';
 import { resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
+import { env } from '../config/env.js';
 
 const ESTADOS_ACTIVOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
 const incluirCompleto = {
   clase: { include: { tipoClase: true, instructor: true } },
-  usuario: { select: { id: true, nombre: true, telefono: true } },
+  // `email` va aqui porque las notificaciones leen el destinatario de esta misma
+  // consulta; sin el, el correo de confirmacion se descarta por "sin destinatario".
+  usuario: { select: { id: true, nombre: true, telefono: true, email: true } },
 };
 
 /** Crea el cliente si es su primera vez; si ya existe actualiza el nombre. */
-export async function upsertCliente(tx, { nombre, telefono }) {
+export async function upsertCliente(tx, { nombre, telefono, email, aceptaDatos }) {
   const tel = normalizarTelefono(telefono);
   if (tel.length < 7) throw new AppError('El teléfono no es válido.', 422, 'TELEFONO_INVALIDO');
+
+  const correo = email?.trim().toLowerCase() || undefined;
+  // La autorizacion de tratamiento de datos (Ley 1581) se sella con la fecha en
+  // que la persona marco la casilla; queda como constancia.
+  const consentimiento = aceptaDatos ? { aceptoDatosEn: new Date() } : {};
 
   return tx.usuario.upsert({
     where: { telefono: tel },
     // Si vuelve a reservar, respetamos el nombre nuevo que escriba.
-    update: { nombre: nombre.trim() },
-    create: { nombre: nombre.trim(), telefono: tel, rol: 'CLIENTE' },
+    update: { nombre: nombre.trim(), ...(correo ? { email: correo } : {}), ...consentimiento },
+    create: { nombre: nombre.trim(), telefono: tel, email: correo, rol: 'CLIENTE', ...consentimiento },
   });
 }
 
@@ -43,7 +51,15 @@ export async function upsertCliente(tx, { nombre, telefono }) {
  *  protege el cupo agregado; el indice hace que sea imposible corromper los
  *  datos aunque alguien escriba por fuera de este servicio.
  */
-export async function crearReserva({ claseId, puestoCodigo, nombre, telefono, usuarioId }) {
+export async function crearReserva({
+  claseId,
+  puestoCodigo,
+  nombre,
+  telefono,
+  email,
+  aceptaDatos,
+  usuarioId,
+}) {
   return prisma.$transaction(async (tx) => {
     const clase = await tx.clase.findUnique({
       where: { id: claseId },
@@ -70,7 +86,7 @@ export async function crearReserva({ claseId, puestoCodigo, nombre, telefono, us
     const cliente = usuarioId
       ? await tx.usuario.findUnique({ where: { id: usuarioId } })
       : null;
-    const usuario = cliente ?? (await upsertCliente(tx, { nombre, telefono }));
+    const usuario = cliente ?? (await upsertCliente(tx, { nombre, telefono, email, aceptaDatos }));
 
     // Una persona no puede tener dos puestos activos en la misma clase: evita
     // tanto reservas duplicadas por doble toque como el acaparamiento de bicis.
@@ -154,8 +170,19 @@ export async function cancelarReserva({ reservaId, codigo, usuarioId, porAdmin =
     if (reserva.usuarioId !== usuarioId) {
       throw new AppError('Esta reserva no es tuya.', 403, 'SIN_PERMISO');
     }
-    if (reserva.clase.inicioEn.getTime() <= Date.now()) {
-      throw new AppError('No puedes cancelar una clase que ya empezó.', 409, 'CLASE_INICIADA');
+    // El cliente cancela solo hasta N horas antes; despues el puesto ya no se
+    // alcanza a revender y la cancelacion pasa por recepcion. El admin no tiene
+    // este limite.
+    const limite = reserva.clase.inicioEn.getTime() - env.horasLimiteCancelacion * 3600_000;
+    if (Date.now() > limite) {
+      const h = env.horasLimiteCancelacion;
+      throw new AppError(
+        reserva.clase.inicioEn.getTime() <= Date.now()
+          ? 'Esta clase ya empezó.'
+          : `Solo puedes cancelar hasta ${h} hora${h === 1 ? '' : 's'} antes de la clase. Escríbenos y lo vemos.`,
+        409,
+        'FUERA_DE_PLAZO'
+      );
     }
   }
 
@@ -168,6 +195,35 @@ export async function cancelarReserva({ reservaId, codigo, usuarioId, porAdmin =
     data: { estado: 'CANCELADA', canceladoEn: new Date() },
     include: incluirCompleto,
   });
+}
+
+/**
+ * Recupera la sesion de un cliente que perdio el acceso (cambio de celular,
+ * borro los datos del navegador, entra desde otro equipo).
+ *
+ * Se exigen las DOS cosas -codigo de reserva y telefono- a proposito: con el
+ * telefono solo, cualquiera podria enumerar numeros y ver quien va a que clase;
+ * con el codigo solo, bastaria con ver el QR de otra persona. Juntos, quien los
+ * tiene es el dueno de la reserva.
+ */
+export async function recuperarAcceso({ codigo, telefono }) {
+  const tel = normalizarTelefono(telefono);
+  const reserva = await prisma.reserva.findUnique({
+    where: { codigo: String(codigo).trim().toUpperCase() },
+    include: incluirCompleto,
+  });
+
+  // Mismo error para codigo inexistente y telefono que no coincide: no revelamos
+  // si ese codigo existe.
+  if (!reserva || normalizarTelefono(reserva.usuario.telefono) !== tel) {
+    throw new AppError(
+      'No encontramos una reserva con ese código y ese teléfono.',
+      404,
+      'RECUPERACION_FALLIDA'
+    );
+  }
+
+  return reserva;
 }
 
 /** Marca asistencia desde el check-in de recepcion (escaneando el codigo). */

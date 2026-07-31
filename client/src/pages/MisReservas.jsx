@@ -17,6 +17,9 @@ export default function MisReservas() {
     queryFn: api.misReservas,
   });
 
+  const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
+  const horasLimite = config?.horasLimiteCancelacion ?? 2;
+
   const cancelar = useMutation({
     mutationFn: (codigo) => api.cancelarReserva(codigo),
     onSuccess: () => {
@@ -60,12 +63,20 @@ export default function MisReservas() {
             titulo="Todavía no tienes reservas"
             descripcion="Cuando reserves un puesto lo verás aquí, con su código de ingreso."
             accion={
-              <Link to="/">
-                <Boton>
-                  Ver clases
-                  <IconoFlecha />
-                </Boton>
-              </Link>
+              <div className="space-y-3">
+                <Link to="/" className="block">
+                  <Boton className="w-full">
+                    Ver clases
+                    <IconoFlecha />
+                  </Boton>
+                </Link>
+                <Link
+                  to="/recuperar"
+                  className="block text-xs text-humo-500 hover:text-humo-300 underline underline-offset-4"
+                >
+                  ¿Ya reservaste desde otro celular? Recupera tu reserva
+                </Link>
+              </div>
             }
           />
         )}
@@ -78,6 +89,7 @@ export default function MisReservas() {
                 <Fila
                   key={r.id}
                   reserva={r}
+                  horasLimite={horasLimite}
                   onCancelar={() => cancelar.mutate(r.codigo)}
                   cancelando={cancelar.isPending && cancelar.variables === r.codigo}
                 />
@@ -108,6 +120,14 @@ export default function MisReservas() {
             >
               No soy {cliente.nombre.split(' ')[0]} — usar otro teléfono
             </button>
+            <p className="mt-3">
+              <Link
+                to="/recuperar"
+                className="text-xs text-humo-500 hover:text-humo-300 underline underline-offset-4"
+              >
+                Recuperar una reserva hecha en otro celular
+              </Link>
+            </p>
           </div>
         )}
       </main>
@@ -115,9 +135,13 @@ export default function MisReservas() {
   );
 }
 
-function Fila({ reserva, onCancelar, cancelando, historica }) {
+function Fila({ reserva, onCancelar, cancelando, historica, horasLimite = 2 }) {
   const acento = reserva.clase.tipoClase.color;
   const cancelada = reserva.estado === 'CANCELADA';
+  // El servidor manda el mismo límite; aquí solo se refleja para no ofrecer un
+  // botón que va a fallar.
+  const dentroDePlazo =
+    new Date(reserva.clase.inicioEn).getTime() - horasLimite * 3600_000 > Date.now();
 
   return (
     <div className={cx('tarjeta p-4', (historica || cancelada) && 'opacity-70')}>
@@ -150,14 +174,20 @@ function Fila({ reserva, onCancelar, cancelando, historica }) {
               Ver código
             </Boton>
           </Link>
-          <Boton
-            variante="peligro"
-            className="min-h-[44px] text-sm px-4"
-            cargando={cancelando}
-            onClick={onCancelar}
-          >
-            Cancelar
-          </Boton>
+          {dentroDePlazo ? (
+            <Boton
+              variante="peligro"
+              className="min-h-[44px] text-sm px-4"
+              cargando={cancelando}
+              onClick={onCancelar}
+            >
+              Cancelar
+            </Boton>
+          ) : (
+            <span className="flex items-center px-3 text-[11px] text-humo-500 max-w-[9rem] leading-tight">
+              Ya no se puede cancelar ({horasLimite}h antes)
+            </span>
+          )}
         </div>
       )}
     </div>

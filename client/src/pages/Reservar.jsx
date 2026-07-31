@@ -41,6 +41,8 @@ export default function Reservar() {
   const cliente = leerCliente();
   const [nombre, setNombre] = useState(cliente?.nombre ?? '');
   const [telefono, setTelefono] = useState(cliente?.telefono ?? '');
+  const [email, setEmail] = useState('');
+  const [aceptaDatos, setAceptaDatos] = useState(false);
 
   const desde = hoyISO();
   const hasta = sumarDiasISO(desde, 6);
@@ -86,7 +88,14 @@ export default function Reservar() {
       api.crearReserva({
         claseId,
         puestoCodigo: puesto,
-        ...(cliente ? {} : { nombre: nombre.trim(), telefono: telefono.trim() }),
+        ...(cliente
+          ? {}
+          : {
+              nombre: nombre.trim(),
+              telefono: telefono.trim(),
+              email: email.trim() || undefined,
+              aceptaDatos,
+            }),
       }),
     onSuccess: ({ reserva, token, cliente: perfil }) => {
       guardarToken('cliente', token);
@@ -221,6 +230,10 @@ export default function Reservar() {
         setNombre={setNombre}
         telefono={telefono}
         setTelefono={setTelefono}
+        email={email}
+        setEmail={setEmail}
+        aceptaDatos={aceptaDatos}
+        setAceptaDatos={setAceptaDatos}
         error={errorReserva}
         cargando={reservar.isPending}
         onConfirmar={() => {
@@ -306,6 +319,10 @@ function HojaConfirmacion({
   setNombre,
   telefono,
   setTelefono,
+  email,
+  setEmail,
+  aceptaDatos,
+  setAceptaDatos,
   error,
   cargando,
   onConfirmar,
@@ -313,7 +330,9 @@ function HojaConfirmacion({
 }) {
   if (!clase) return null;
 
-  const datosCompletos = cliente || (nombre.trim().length >= 2 && telefono.replace(/\D/g, '').length >= 7);
+  const datosCompletos =
+    cliente ||
+    (nombre.trim().length >= 2 && telefono.replace(/\D/g, '').length >= 7 && aceptaDatos);
 
   return (
     <Hoja abierta={abierta} onCerrar={onCerrar} titulo="Confirma tu reserva">
@@ -361,7 +380,7 @@ function HojaConfirmacion({
                 autoComplete="name"
               />
             </Campo>
-            <Campo etiqueta="Teléfono" ayuda="Solo lo usamos para identificar tu reserva.">
+            <Campo etiqueta="Teléfono" ayuda="Con él recuperas tu reserva si cambias de celular.">
               <Entrada
                 value={telefono}
                 onChange={(e) => setTelefono(e.target.value)}
@@ -370,6 +389,40 @@ function HojaConfirmacion({
                 autoComplete="tel"
               />
             </Campo>
+            <Campo etiqueta="Correo (opcional)" ayuda="Te enviamos la confirmación y el recordatorio.">
+              <Entrada
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tucorreo@ejemplo.com"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+              />
+            </Campo>
+
+            {/* Ley 1581 de 2012: la autorización tiene que ser explícita, por eso
+                la casilla arranca desmarcada y el botón no se habilita sin ella. */}
+            <label className="flex items-start gap-3 rounded-2xl bg-carbon-700/60 border border-carbon-600 p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aceptaDatos}
+                onChange={(e) => setAceptaDatos(e.target.checked)}
+                className="mt-0.5 w-5 h-5 shrink-0 rounded accent-volt-500"
+              />
+              <span className="text-xs text-humo-300 leading-relaxed">
+                Autorizo el tratamiento de mis datos personales para gestionar mis reservas,
+                según la{' '}
+                <Link
+                  to="/privacidad"
+                  target="_blank"
+                  className="text-volt-500 underline underline-offset-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  política de privacidad
+                </Link>
+                .
+              </span>
+            </label>
           </div>
         )}
 

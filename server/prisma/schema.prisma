@@ -50,6 +50,9 @@ model Usuario {
   // Solo los admin tienen password. Los clientes no inician sesion.
   passwordHash String?
   notas        String?
+  // Momento en que la persona autorizo el tratamiento de sus datos
+  // (Ley 1581 de 2012). Null = todavia no lo ha hecho.
+  aceptoDatosEn DateTime?
   creadoEn     DateTime @default(now())
 
   reservas Reserva[]

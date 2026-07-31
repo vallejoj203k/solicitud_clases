@@ -199,6 +199,65 @@ export const COLUMNAS_CSV = [
   { clave: 'montoCop', titulo: 'Monto (COP)' },
 ];
 
+/**
+ * Búsqueda para el mostrador: código de reserva, teléfono o nombre.
+ *
+ * Es lo que se usa cuando alguien llega a recepción con su QR o dictando su
+ * código; antes había que abrir la clase y buscar a ojo en la lista.
+ * Prioriza las reservas de hoy y las próximas, que son las que importan al
+ * hacer check-in.
+ */
+export async function buscarReservas(consulta) {
+  const q = String(consulta || '').trim();
+  if (q.length < 3) return [];
+
+  const soloDigitos = q.replace(/\D/g, '');
+  const condiciones = [
+    { codigo: { equals: q.toUpperCase() } },
+    { usuario: { nombre: { contains: q, mode: 'insensitive' } } },
+  ];
+  if (soloDigitos.length >= 4) {
+    condiciones.push({ usuario: { telefono: { contains: soloDigitos } } });
+  }
+
+  const reservas = await prisma.reserva.findMany({
+    where: { OR: condiciones },
+    include: {
+      clase: { include: { tipoClase: true, instructor: true } },
+      usuario: { select: { id: true, nombre: true, telefono: true } },
+    },
+    orderBy: { clase: { inicioEn: 'asc' } },
+    take: 40,
+  });
+
+  const ahora = Date.now();
+  return reservas
+    .map((r) => ({
+      id: r.id,
+      codigo: r.codigo,
+      puestoCodigo: r.puestoCodigo,
+      estado: r.estado,
+      estadoPago: r.estadoPago,
+      metodoPago: r.metodoPago,
+      montoCop: r.montoCop,
+      usuario: r.usuario,
+      claseId: r.clase.id,
+      tipoClase: r.clase.tipoClase.nombre,
+      color: r.clase.tipoClase.color,
+      fecha: fechaISOLocal(r.clase.inicioEn),
+      hora: horaLocal(r.clase.inicioEn),
+      inicioEn: r.clase.inicioEn.toISOString(),
+      yaPaso: r.clase.inicioEn.getTime() < ahora,
+    }))
+    // Las próximas primero; las pasadas al final, de más reciente a más vieja.
+    .sort((a, b) => {
+      if (a.yaPaso !== b.yaPaso) return a.yaPaso ? 1 : -1;
+      const ta = new Date(a.inicioEn).getTime();
+      const tb = new Date(b.inicioEn).getTime();
+      return a.yaPaso ? tb - ta : ta - tb;
+    });
+}
+
 /** Listado de clientes con su historial resumido. */
 export async function listarClientes({ busqueda } = {}) {
   const where = { rol: 'CLIENTE' };

@@ -81,6 +81,9 @@ export const api = {
   reserva: (codigo) => pedir(`/reservas/${codigo}`),
   misReservas: () => pedir('/mis-reservas'),
   cancelarReserva: (codigo) => pedir(`/reservas/${codigo}/cancelar`, { metodo: 'POST' }),
+  recuperarReserva: (codigo, telefono) =>
+    pedir('/reservas/recuperar', { metodo: 'POST', cuerpo: { codigo, telefono } }),
+  configuracion: () => pedir('/configuracion'),
 
   // --- Admin ---------------------------------------------------------------
   admin: {
@@ -129,6 +132,7 @@ export const api = {
         'admin'
       );
     },
+    buscar: (q) => pedir(`/admin/buscar?q=${encodeURIComponent(q)}`, { tipoToken: 'admin' }),
     clientes: (q) => pedir(`/admin/clientes${q ? `?q=${encodeURIComponent(q)}` : ''}`, { tipoToken: 'admin' }),
     cliente: (id) => pedir(`/admin/clientes/${id}`, { tipoToken: 'admin' }),
     tiposClase: () => pedir('/admin/tipos-clase', { tipoToken: 'admin' }),

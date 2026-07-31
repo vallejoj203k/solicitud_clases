@@ -69,6 +69,7 @@ Abre <http://localhost:5173>.
 | `npm run admin:listar` | Muestra los administradores que existen en la base |
 | `npm run admin:crear -- --telefono <tel> --password "<clave>"` | Crea un admin o le cambia la contraseña |
 | `node server/scripts/admin.mjs revisar-puestos` | Busca reservas cuyo puesto ya no existe en su salón |
+| `npm run db:backup` | Copia comprimida de la base en `respaldos/` (requiere `pg_dump`) |
 
 > El `.env` vive en la raíz para compartirlo entre `client` y `server`. Como el CLI de
 > Prisma solo busca el `.env` junto al schema, los scripts de base de datos pasan por
@@ -165,6 +166,34 @@ Hay dos candados, a propósito:
 
 Verificado con 10 peticiones simultáneas al mismo puesto: 1 × `201`, 9 × `409`, una sola
 fila en la base.
+
+---
+
+## Operación
+
+**Recuperar una reserva.** El cliente no tiene contraseña: su sesión vive en el navegador.
+En `/recuperar` la recupera con **código + teléfono**. Se piden los dos a propósito: con el
+teléfono solo se podrían enumerar números y ver quién va a qué clase; con el código solo,
+bastaría con ver el QR de otra persona.
+
+**Check-in.** `/admin/recepcion` busca por código, teléfono o nombre y desde ahí se marca
+asistencia y se cobra en efectivo, sin abrir la clase.
+
+**Plazo de cancelación.** El cliente cancela por su cuenta hasta `HORAS_LIMITE_CANCELACION`
+horas antes (2 por defecto); después la app se lo dice y no le ofrece el botón. El
+administrador puede cancelar siempre.
+
+**Correos.** Confirmación (con el `.ics` adjunto) y aviso de cancelación. Si no hay
+`SMTP_*` configurado, el servicio se apaga solo y avisa en los logs; nada más se rompe. Un
+correo que falla nunca tumba una reserva.
+
+**Habeas data (Ley 1581).** El formulario exige marcar la autorización antes de guardar
+datos de alguien nuevo; queda sellada con fecha en `Usuario.aceptoDatosEn`. El texto está
+en `/privacidad` y se alimenta de `GIMNASIO_NOMBRE`, `GIMNASIO_DIRECCION` y
+`GIMNASIO_CONTACTO`.
+
+**Respaldos.** Railway hace los suyos según el plan; `npm run db:backup` genera una copia
+propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 
 ---
 
