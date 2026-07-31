@@ -7,6 +7,7 @@
  *
  *   node server/scripts/admin.mjs listar
  *   node server/scripts/admin.mjs crear --telefono 3001234567 --password "clave" --nombre "Ana"
+ *   node server/scripts/admin.mjs revisar-puestos
  *
  * En Railway:  railway run node server/scripts/admin.mjs listar
  */
@@ -14,6 +15,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import '../src/config/env.js';
 import { normalizarTelefono } from '../src/utils/codigo.js';
+import { expandirLayout } from '../src/utils/layout.js';
 
 const prisma = new PrismaClient();
 
@@ -102,15 +104,61 @@ async function crear(args) {
   console.log('\n  Ya puedes entrar en /admin/login.\n');
 }
 
+/**
+ * Busca reservas cuyo puesto ya no existe en el salón de su clase. Puede pasar
+ * si se cambia la distribución del salón después de haber vendido cupos: la
+ * reserva sigue siendo válida pero su puesto no se puede dibujar en el mapa.
+ */
+async function revisarPuestos() {
+  const clases = await prisma.clase.findMany({
+    include: {
+      tipoClase: true,
+      reservas: {
+        where: { estado: { in: ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'] } },
+        include: { usuario: { select: { nombre: true, telefono: true } } },
+      },
+    },
+  });
+
+  const huerfanas = [];
+  for (const clase of clases) {
+    const { codigos } = expandirLayout(clase.layoutOverride ?? clase.tipoClase.layoutPuestos);
+    for (const r of clase.reservas) {
+      if (!codigos.includes(r.puestoCodigo)) {
+        huerfanas.push({
+          codigo: r.codigo,
+          puesto: r.puestoCodigo,
+          clase: `${clase.tipoClase.nombre} ${clase.inicioEn.toISOString().slice(0, 16).replace('T', ' ')}`,
+          cliente: `${r.usuario.nombre} (${r.usuario.telefono})`,
+        });
+      }
+    }
+  }
+
+  if (huerfanas.length === 0) {
+    console.log('\n✔ Todas las reservas apuntan a un puesto que existe en su salón.\n');
+    return;
+  }
+
+  console.log(`\n⚠ ${huerfanas.length} reserva(s) sobre puestos que ya no existen:\n`);
+  for (const h of huerfanas) {
+    console.log(`  ${h.codigo}  puesto ${h.puesto.padEnd(4)}  ${h.clase}  ${h.cliente}`);
+  }
+  console.log('\n  Estas reservas siguen contando para el cupo pero no se dibujan en el mapa.');
+  console.log('  Contacta a cada persona y reubícala: cancela su reserva desde el panel');
+  console.log('  (Clases → la clase → Cancelar) y vuelve a reservarle un puesto válido.\n');
+}
+
 const [comando, ...resto] = process.argv.slice(2);
 const args = leerArgumentos(resto);
 
-const comandos = { listar, crear };
+const comandos = { listar, crear, 'revisar-puestos': revisarPuestos };
 
 if (!comandos[comando]) {
   console.log('\nUso:');
   console.log('  node server/scripts/admin.mjs listar');
-  console.log('  node server/scripts/admin.mjs crear --telefono <tel> --password "<clave>" [--nombre "<nombre>"] [--email <correo>]\n');
+  console.log('  node server/scripts/admin.mjs crear --telefono <tel> --password "<clave>" [--nombre "<nombre>"] [--email <correo>]');
+  console.log('  node server/scripts/admin.mjs revisar-puestos\n');
   process.exit(comando ? 1 : 0);
 }
 

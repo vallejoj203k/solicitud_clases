@@ -87,8 +87,8 @@ async function main() {
   console.log('› Programando clases de los próximos 10 días...');
   const dias = proximosDias(10);
   const programacion = [
-    { tipo: running, horas: ['06:00', '18:30'], cupo: 12, duracion: 60 },
-    { tipo: spinning, horas: ['07:00', '12:15', '19:00'], cupo: 24, duracion: 45 },
+    { tipo: running, horas: ['06:00', '18:30'], cupo: 6, duracion: 60 },
+    { tipo: spinning, horas: ['07:00', '12:15', '19:00'], cupo: 18, duracion: 45 },
   ];
 
   const clasesCreadas = [];
@@ -113,7 +113,7 @@ async function main() {
               precioCop: tipo.precioCop,
               // Un puesto fuera de servicio en algunas clases para ver el estado
               // "bloqueado" en el mapa.
-              puestosBloqueados: aleatorio() < 0.2 ? [tipo.slug === 'spinning' ? 'C4' : '7'] : [],
+              puestosBloqueados: aleatorio() < 0.2 ? [tipo.slug === 'spinning' ? 'C2' : '5'] : [],
             },
           })
         );

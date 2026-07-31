@@ -14,6 +14,9 @@ import { cx } from './ui.jsx';
  * estado ∈ "libre" | "ocupado" | "bloqueado"
  */
 const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de zoom
+// Tope de tamaño: en un salón angosto (3 columnas) los puestos crecerían hasta
+// ocupar toda la pantalla y las últimas filas quedarían fuera de vista.
+const ANCHO_MAX_PUESTO = 60;
 const ANCHO_PASILLO = 14;
 
 function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
@@ -79,7 +82,7 @@ export default function MapaPuestos({
   // entre filas aunque tengan distinta cantidad de puestos.
   const anchos = [];
   for (let c = 1; c <= columnas; c += 1) {
-    anchos.push(`minmax(${ANCHO_MIN_PUESTO}px, 1fr)`);
+    anchos.push(`minmax(${ANCHO_MIN_PUESTO}px, ${ANCHO_MAX_PUESTO}px)`);
     if (hayPasillo && c === pasilloDespuesDeCol) anchos.push(`${ANCHO_PASILLO}px`);
   }
   const gridTemplateColumns = anchos.join(' ');
@@ -101,11 +104,11 @@ export default function MapaPuestos({
       <div className="-mx-1 overflow-x-auto px-1 pb-1">
         <div className="min-w-fit space-y-2">
           {mapa.filas.map((fila) => (
-            <div key={fila.label} className="flex items-center gap-2">
+            <div key={fila.label} className="flex items-center justify-center gap-2">
               <span className="w-6 shrink-0 text-center text-[11px] font-bold text-carbon-500 tabular-nums">
                 {fila.label}
               </span>
-              <div className="grid flex-1 gap-2" style={{ gridTemplateColumns }}>
+              <div className="grid gap-2" style={{ gridTemplateColumns }}>
                 {fila.puestos.map((puesto) => (
                   <Puesto
                     key={puesto.codigo}

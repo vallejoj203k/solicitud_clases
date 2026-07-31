@@ -6,25 +6,28 @@
  * los layouts estén definidos en un solo lugar.
  */
 
+// Salón real: 18 bicicletas en 3 columnas x 6 filas.
 export const LAYOUT_SPINNING = {
   titulo: 'TARIMA · INSTRUCTOR',
-  numeracion: 'porFila',
-  pasilloDespuesDeCol: 3, // pasillo central entre la columna 3 y la 4
+  numeracion: 'porFila', // A1..A3, B1..B3, ... F1..F3
   filas: [
-    { label: 'A', puestos: 6, nota: 'Primera fila' },
-    { label: 'B', puestos: 6 },
-    { label: 'C', puestos: 6 },
-    { label: 'D', puestos: 6 },
+    { label: 'A', puestos: 3, nota: 'Primera fila' },
+    { label: 'B', puestos: 3 },
+    { label: 'C', puestos: 3 },
+    { label: 'D', puestos: 3 },
+    { label: 'E', puestos: 3 },
+    { label: 'F', puestos: 3 },
   ],
 };
 
+// Salón real: 6 trotadoras en 2 columnas x 3 filas.
 export const LAYOUT_RUNNING = {
   titulo: 'PANTALLAS · FRENTE',
-  numeracion: 'continua', // trotadoras numeradas 1..12
+  numeracion: 'continua', // trotadoras numeradas 1..6
   filas: [
-    { label: 'F1', puestos: 4, nota: 'Frente' },
-    { label: 'F2', puestos: 4 },
-    { label: 'F3', puestos: 4 },
+    { label: 'F1', puestos: 2, nota: 'Frente' },
+    { label: 'F2', puestos: 2 },
+    { label: 'F3', puestos: 2 },
   ],
 };
 
