@@ -9,10 +9,12 @@ import {
   IconoDinero,
   IconoUsuario,
   IconoRayo,
+  IconoBuscar,
 } from '../../components/Iconos.jsx';
 
 const SECCIONES = [
   { a: '/admin', texto: 'Resumen', Icono: IconoPanel, exacto: true },
+  { a: '/admin/recepcion', texto: 'Recepción', Icono: IconoBuscar },
   { a: '/admin/clases', texto: 'Clases', Icono: IconoCalendario },
   { a: '/admin/pagos', texto: 'Pagos', Icono: IconoDinero },
   { a: '/admin/clientes', texto: 'Clientes', Icono: IconoUsuario },
@@ -87,7 +89,7 @@ export default function AdminLayout() {
 
       {/* Barra inferior en móvil: navegación al alcance del pulgar. */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-carbon-800/95 backdrop-blur border-t border-carbon-700 pb-segura">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5">
           {SECCIONES.map(({ a, texto, Icono, exacto }) => (
             <NavLink
               key={a}

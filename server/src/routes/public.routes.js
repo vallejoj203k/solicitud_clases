@@ -11,7 +11,10 @@ import {
   obtenerPorCodigo,
   listarReservasDeUsuario,
   cancelarReserva,
+  recuperarAcceso,
 } from '../services/reserva.service.js';
+import { enviarConfirmacionReserva, enviarCancelacion } from '../services/notificaciones.service.js';
+import { env } from '../config/env.js';
 import { AppError } from '../utils/errores.js';
 
 export const publicRouter = Router();
@@ -105,6 +108,8 @@ const nuevaReserva = z.object({
   puestoCodigo: z.string().min(1).max(6),
   nombre: z.string().trim().min(2, 'Escribe tu nombre').max(60).optional(),
   telefono: z.string().trim().min(7, 'Teléfono inválido').max(20).optional(),
+  email: z.string().trim().email('Correo inválido').max(120).optional().or(z.literal('')),
+  aceptaDatos: z.boolean().optional(),
 });
 
 publicRouter.post(
@@ -118,8 +123,19 @@ publicRouter.post(
     if (!usuarioId && (!datos.nombre || !datos.telefono)) {
       throw new AppError('Necesitamos tu nombre y tu teléfono.', 422, 'DATOS_INCOMPLETOS');
     }
+    // Ley 1581: sin autorizacion explicita no se guardan los datos de alguien nuevo.
+    if (!usuarioId && !datos.aceptaDatos) {
+      throw new AppError(
+        'Necesitamos tu autorización para guardar tus datos.',
+        422,
+        'FALTA_AUTORIZACION'
+      );
+    }
 
     const reserva = await crearReserva({ ...datos, usuarioId });
+
+    // El correo es un extra: si falla, la reserva ya quedó hecha igual.
+    enviarConfirmacionReserva(reserva, generarIcs(reserva)).catch(() => {});
     const token = firmarToken({ sub: reserva.usuarioId, rol: 'CLIENTE', nombre: reserva.usuario.nombre }, 'CLIENTE');
 
     res.status(201).json({
@@ -168,6 +184,45 @@ publicRouter.post(
   asyncHandler(async (req, res) => {
     if (!req.usuario?.sub) throw new AppError('Sesión no encontrada.', 401, 'NO_AUTENTICADO');
     const reserva = await cancelarReserva({ codigo: req.params.codigo, usuarioId: req.usuario.sub });
+    enviarCancelacion(reserva).catch(() => {});
     res.json(serializarReserva(reserva));
   })
 );
+
+/**
+ * Recuperar el acceso a las reservas desde otro dispositivo, con el código de
+ * la reserva y el teléfono. Devuelve un token nuevo para ese cliente.
+ */
+const recuperacion = z.object({
+  codigo: z.string().trim().min(4).max(12),
+  telefono: z.string().trim().min(7).max(20),
+});
+
+publicRouter.post(
+  '/reservas/recuperar',
+  asyncHandler(async (req, res) => {
+    const datos = recuperacion.parse(req.body);
+    const reserva = await recuperarAcceso(datos);
+
+    res.json({
+      reserva: serializarReserva(reserva),
+      token: firmarToken(
+        { sub: reserva.usuarioId, rol: 'CLIENTE', nombre: reserva.usuario.nombre },
+        'CLIENTE'
+      ),
+      cliente: {
+        id: reserva.usuario.id,
+        nombre: reserva.usuario.nombre,
+        telefono: reserva.usuario.telefono,
+      },
+    });
+  })
+);
+
+/** Datos que el frontend necesita mostrar (plazos, datos del gimnasio). */
+publicRouter.get('/configuracion', (_req, res) => {
+  res.json({
+    horasLimiteCancelacion: env.horasLimiteCancelacion,
+    gimnasio: env.gimnasio,
+  });
+});

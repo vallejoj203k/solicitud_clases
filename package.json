@@ -21,6 +21,7 @@
     "db:seed": "npm run db:seed -w server",
     "db:reset": "npm run db:reset -w server",
     "db:studio": "npm run db:studio -w server",
+    "db:backup": "node server/scripts/respaldo.mjs",
     "admin:listar": "node server/scripts/admin.mjs listar",
     "admin:crear": "node server/scripts/admin.mjs crear",
     "postinstall": "npm run prisma:generate -w server"

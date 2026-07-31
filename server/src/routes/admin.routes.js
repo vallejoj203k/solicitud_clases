@@ -17,6 +17,7 @@ import { actualizarEstadoPago } from '../services/pago.service.js';
 import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
 import {
   dashboard,
+  buscarReservas,
   reservasDeClase,
   reportePagos,
   listarClientes,
@@ -166,6 +167,14 @@ adminRouter.get(
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${nombre}"`);
     res.send(aCsv(COLUMNAS_CSV, reporte.filas));
+  })
+);
+
+// --- Check-in en recepcion --------------------------------------------------
+adminRouter.get(
+  '/buscar',
+  asyncHandler(async (req, res) => {
+    res.json(await buscarReservas(req.query.q));
   })
 );
 

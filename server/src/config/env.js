@@ -66,6 +66,26 @@ export const env = {
   tzGimnasio: process.env.TZ_GIMNASIO || 'America/Bogota',
   rootDir,
   clientDist: path.join(rootDir, 'client/dist'),
+  // Horas antes del inicio hasta las que el cliente puede cancelar solo.
+  // Pasado ese punto tiene que hablar con recepcion; el admin siempre puede.
+  horasLimiteCancelacion: Number(process.env.HORAS_LIMITE_CANCELACION ?? 2),
+
+  // Correo saliente. Si no esta configurado, las notificaciones se desactivan
+  // solas y el resto de la app sigue funcionando igual.
+  smtp: {
+    host: process.env.SMTP_HOST || null,
+    puerto: Number(process.env.SMTP_PORT || 587),
+    usuario: process.env.SMTP_USER || null,
+    password: process.env.SMTP_PASSWORD || null,
+    remitente: process.env.SMTP_FROM || 'Reservas <no-reply@gimnasio.com>',
+  },
+
+  gimnasio: {
+    nombre: process.env.GIMNASIO_NOMBRE || 'el gimnasio',
+    direccion: process.env.GIMNASIO_DIRECCION || '',
+    contacto: process.env.GIMNASIO_CONTACTO || '',
+  },
+
   admin: {
     telefono: process.env.ADMIN_TELEFONO || '3001234567',
     password: process.env.ADMIN_PASSWORD || 'admin123',
