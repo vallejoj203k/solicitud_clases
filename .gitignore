@@ -11,3 +11,6 @@ npm-debug.log*
 .idea/
 coverage/
 .pgdata/
+
+# Copia generada por client/scripts/copiar-imagenes.mjs
+client/public/images/
