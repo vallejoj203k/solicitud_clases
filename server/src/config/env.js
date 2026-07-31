@@ -80,6 +80,27 @@ export const env = {
     remitente: process.env.SMTP_FROM || 'Reservas <no-reply@gimnasio.com>',
   },
 
+  // Pagos en linea. `modo`:
+  //   "manual" -> se cobra en recepcion y el admin marca el pago (comportamiento previo)
+  //   "wompi"  -> el cliente paga antes de que se confirme el cupo
+  // Si se pide "wompi" pero faltan las llaves, se cae a "manual" para no dejar
+  // la app sin poder reservar.
+  pagos: {
+    modo: process.env.PAGO_MODO === 'wompi' ? 'wompi' : 'manual',
+    // Minutos que se le guarda el puesto a quien esta pagando.
+    minutosParaPagar: Number(process.env.MINUTOS_PARA_PAGAR ?? 15),
+  },
+
+  wompi: {
+    ambiente: process.env.WOMPI_AMBIENTE === 'produccion' ? 'produccion' : 'sandbox',
+    llavePublica: process.env.WOMPI_LLAVE_PUBLICA || null,
+    llavePrivada: process.env.WOMPI_LLAVE_PRIVADA || null,
+    secretoIntegridad: process.env.WOMPI_SECRETO_INTEGRIDAD || null,
+    secretoEventos: process.env.WOMPI_SECRETO_EVENTOS || null,
+    // Solo para pruebas automatizadas: apunta la integracion a un Wompi simulado.
+    urlBasePruebas: process.env.WOMPI_URL_PRUEBAS || null,
+  },
+
   gimnasio: {
     nombre: process.env.GIMNASIO_NOMBRE || 'el gimnasio',
     direccion: process.env.GIMNASIO_DIRECCION || '',

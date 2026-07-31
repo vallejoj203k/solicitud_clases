@@ -1,8 +1,8 @@
 import { prisma } from '../config/prisma.js';
 import { inicioDelDia, finDelDia, fechaISOLocal, horaLocal, sumarDias } from '../utils/fechas.js';
 import { serializarClase, calcularCupos, resolverLayout } from './disponibilidad.service.js';
+import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 
-const ESTADOS_ACTIVOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
 /** Metricas de la pantalla principal del panel de administracion. */
 export async function dashboard() {
@@ -18,11 +18,11 @@ export async function dashboard() {
       orderBy: { inicioEn: 'asc' },
     }),
     prisma.reserva.count({
-      where: { estado: { in: ESTADOS_ACTIVOS }, clase: { inicioEn: { gte: inicioHoy, lt: finHoy } } },
+      where: { estado: { in: ESTADOS_CONFIRMADOS }, clase: { inicioEn: { gte: inicioHoy, lt: finHoy } } },
     }),
     prisma.reserva.aggregate({
       where: {
-        estado: { in: ESTADOS_ACTIVOS },
+        estado: { in: ESTADOS_CONFIRMADOS },
         estadoPago: 'PENDIENTE',
         clase: { inicioEn: { gte: inicioHoy } },
       },
@@ -41,7 +41,7 @@ export async function dashboard() {
   const conteos = idsProximas.length
     ? await prisma.reserva.groupBy({
         by: ['claseId'],
-        where: { claseId: { in: idsProximas }, estado: { in: ESTADOS_ACTIVOS } },
+        where: { claseId: { in: idsProximas }, estado: { in: ESTADOS_CONFIRMADOS } },
         _count: { _all: true },
       })
     : [];
@@ -51,7 +51,7 @@ export async function dashboard() {
   const ingresosHoy = await prisma.reserva.aggregate({
     where: {
       estadoPago: 'PAGADO',
-      estado: { in: ESTADOS_ACTIVOS },
+      estado: { in: ESTADOS_CONFIRMADOS },
       clase: { inicioEn: { gte: inicioHoy, lt: finHoy } },
     },
     _sum: { montoCop: true },
@@ -101,7 +101,7 @@ export async function reservasDeClase(claseId) {
     orderBy: [{ estado: 'asc' }, { puestoCodigo: 'asc' }],
   });
 
-  const activas = reservas.filter((r) => ESTADOS_ACTIVOS.includes(r.estado));
+  const activas = reservas.filter((r) => ESTADOS_CONFIRMADOS.includes(r.estado));
   const layout = resolverLayout(clase);
   const bloqueados = (clase.puestosBloqueados || []).filter((c) => layout.codigos.includes(c)).length;
 
@@ -129,7 +129,7 @@ export async function reservasDeClase(claseId) {
 
 /** Reporte de pagos filtrable por rango de fechas de clase y tipo de clase. */
 export async function reportePagos({ desde, hasta, tipoSlug, estadoPago }) {
-  const where = { estado: { in: ESTADOS_ACTIVOS } };
+  const where = { estado: { in: ESTADOS_CONFIRMADOS } };
   const filtroClase = {};
 
   if (desde || hasta) {
@@ -281,7 +281,7 @@ export async function listarClientes({ busqueda } = {}) {
   });
 
   return clientes.map((c) => {
-    const activas = c.reservas.filter((r) => ESTADOS_ACTIVOS.includes(r.estado));
+    const activas = c.reservas.filter((r) => ESTADOS_CONFIRMADOS.includes(r.estado));
     const ultima = activas[0];
     return {
       id: c.id,

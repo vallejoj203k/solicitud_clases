@@ -84,6 +84,9 @@ export const api = {
   recuperarReserva: (codigo, telefono) =>
     pedir('/reservas/recuperar', { metodo: 'POST', cuerpo: { codigo, telefono } }),
   configuracion: () => pedir('/configuracion'),
+  estadoPago: (codigo, idTransaccion) =>
+    pedir(`/reservas/${codigo}/estado-pago${idTransaccion ? `?id=${encodeURIComponent(idTransaccion)}` : ''}`),
+  checkout: (codigo) => pedir(`/reservas/${codigo}/checkout`),
 
   // --- Admin ---------------------------------------------------------------
   admin: {

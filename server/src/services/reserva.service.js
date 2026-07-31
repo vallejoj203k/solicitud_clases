@@ -3,8 +3,9 @@ import { AppError, noEncontrado } from '../utils/errores.js';
 import { generarCodigoReserva, normalizarTelefono } from '../utils/codigo.js';
 import { resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
 import { env } from '../config/env.js';
+import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
+import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
 
-const ESTADOS_ACTIVOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
 const incluirCompleto = {
   clase: { include: { tipoClase: true, instructor: true } },
@@ -12,6 +13,25 @@ const incluirCompleto = {
   // consulta; sin el, el correo de confirmacion se descarta por "sin destinatario".
   usuario: { select: { id: true, nombre: true, telefono: true, email: true } },
 };
+
+/**
+ * Libera los puestos de quienes no terminaron de pagar a tiempo.
+ *
+ * Se llama desde un barrido periodico Y dentro de `crearReserva`, antes de mirar
+ * la disponibilidad: asi un puesto vencido nunca bloquea a alguien que si quiere
+ * pagar, aunque el barrido no haya corrido todavia.
+ */
+export async function expirarReservasVencidas(tx = prisma, claseId = undefined) {
+  const { count } = await tx.reserva.updateMany({
+    where: {
+      estado: 'PENDIENTE_PAGO',
+      expiraEn: { lt: new Date() },
+      ...(claseId ? { claseId } : {}),
+    },
+    data: { estado: 'EXPIRADA' },
+  });
+  return count;
+}
 
 /** Crea el cliente si es su primera vez; si ya existe actualiza el nombre. */
 export async function upsertCliente(tx, { nombre, telefono, email, aceptaDatos }) {
@@ -59,6 +79,7 @@ export async function crearReserva({
   email,
   aceptaDatos,
   usuarioId,
+  pagoEnLinea = false,
 }) {
   return prisma.$transaction(async (tx) => {
     const clase = await tx.clase.findUnique({
@@ -74,6 +95,10 @@ export async function crearReserva({
     // (1) Lock de la fila de la clase. Cualquier otra reserva para esta misma
     // clase espera aqui hasta que la transaccion actual termine.
     await tx.$queryRaw`SELECT id FROM "Clase" WHERE id = ${claseId} FOR UPDATE`;
+
+    // Dentro del lock: los puestos apartados por alguien que nunca pago vuelven
+    // a estar libres antes de calcular la disponibilidad.
+    await expirarReservasVencidas(tx, claseId);
 
     const layout = resolverLayout(clase);
     if (!layout.codigos.includes(puestoCodigo)) {
@@ -91,19 +116,21 @@ export async function crearReserva({
     // Una persona no puede tener dos puestos activos en la misma clase: evita
     // tanto reservas duplicadas por doble toque como el acaparamiento de bicis.
     const yaTiene = await tx.reserva.findFirst({
-      where: { claseId, usuarioId: usuario.id, estado: { in: ESTADOS_ACTIVOS } },
+      where: { claseId, usuarioId: usuario.id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
     });
     if (yaTiene) {
       throw new AppError(
-        `Ya tienes el puesto ${yaTiene.puestoCodigo} reservado en esta clase.`,
+        yaTiene.estado === 'PENDIENTE_PAGO'
+          ? `Ya tienes apartado el puesto ${yaTiene.puestoCodigo}; termina de pagarlo o espera a que se libere.`
+          : `Ya tienes el puesto ${yaTiene.puestoCodigo} reservado en esta clase.`,
         409,
         'YA_RESERVADO',
-        { codigo: yaTiene.codigo, puestoCodigo: yaTiene.puestoCodigo }
+        { codigo: yaTiene.codigo, puestoCodigo: yaTiene.puestoCodigo, estado: yaTiene.estado }
       );
     }
 
     const reservasActivas = await tx.reserva.findMany({
-      where: { claseId, estado: { in: ESTADOS_ACTIVOS } },
+      where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
       select: { puestoCodigo: true },
     });
     const ocupados = new Set(reservasActivas.map((r) => r.puestoCodigo));
@@ -125,6 +152,13 @@ export async function crearReserva({
       throw new AppError('Ese puesto no está disponible en esta clase.', 409, 'PUESTO_FUERA_DE_CUPO');
     }
 
+    const montoCop = clase.precioCop || clase.tipoClase.precioCop || 0;
+
+    // Con pago en linea el puesto queda APARTADO, no confirmado: se le guarda a
+    // esta persona mientras paga y se libera solo si no lo hace a tiempo. Sin
+    // pasarela (o con clases gratis) la reserva nace confirmada, como antes.
+    const conPasarela = pagoEnLinea && montoCop > 0;
+
     // (2) El INSERT. Si el puesto se colo por otra via, el indice unico parcial
     // lanza P2002 -> 409 PUESTO_OCUPADO.
     const reserva = await tx.reserva.create({
@@ -133,8 +167,12 @@ export async function crearReserva({
         claseId,
         usuarioId: usuario.id,
         puestoCodigo,
-        montoCop: clase.precioCop || clase.tipoClase.precioCop || 0,
+        montoCop,
+        estado: conPasarela ? 'PENDIENTE_PAGO' : 'CONFIRMADA',
         estadoPago: 'PENDIENTE',
+        expiraEn: conPasarela
+          ? new Date(Date.now() + env.pagos.minutosParaPagar * 60_000)
+          : null,
       },
       include: incluirCompleto,
     });
@@ -224,6 +262,71 @@ export async function recuperarAcceso({ codigo, telefono }) {
   }
 
   return reserva;
+}
+
+/**
+ * Aplica el resultado de un pago a la reserva.
+ *
+ * Es idempotente a proposito: Wompi puede reintentar el mismo evento y el
+ * cliente puede volver del checkout mientras el webhook llega. Confirmar dos
+ * veces no debe cambiar nada ni "resucitar" una reserva ya expirada.
+ */
+export async function aplicarResultadoPago({ referencia, estadoPago, pagoRef, payload }) {
+  const reserva = await prisma.reserva.findUnique({
+    where: { codigo: String(referencia).toUpperCase() },
+    include: incluirCompleto,
+  });
+  if (!reserva) throw noEncontrado('Reserva');
+
+  // Ya estaba resuelta: no se toca.
+  if (ESTADOS_CONFIRMADOS.includes(reserva.estado) && reserva.estadoPago === 'PAGADO') {
+    return { reserva, cambio: false };
+  }
+
+  const datos = {
+    estadoPago,
+    metodoPago: 'wompi',
+    pagoRef: pagoRef ?? reserva.pagoRef,
+    pagoPayload: payload ?? reserva.pagoPayload,
+    pagoActualizadoEn: new Date(),
+  };
+
+  if (estadoPago === 'PAGADO') {
+    // El pago entro: se confirma aunque el plazo se haya vencido por segundos,
+    // siempre que el puesto no se lo hayan dado a otra persona.
+    if (reserva.estado === 'EXPIRADA') {
+      const ocupadoPorOtro = await prisma.reserva.findFirst({
+        where: {
+          claseId: reserva.claseId,
+          puestoCodigo: reserva.puestoCodigo,
+          estado: { in: ESTADOS_OCUPAN_PUESTO },
+          id: { not: reserva.id },
+        },
+      });
+      if (ocupadoPorOtro) {
+        // Caso incomodo pero real: pago tarde y el puesto ya no esta. Se deja
+        // constancia del pago para que recepcion pueda devolverle la plata.
+        const actualizada = await prisma.reserva.update({
+          where: { id: reserva.id },
+          data: { ...datos, notasPago: 'Pago recibido despues de expirar; el puesto ya estaba tomado.' },
+          include: incluirCompleto,
+        });
+        return { reserva: actualizada, cambio: true, requiereReembolso: true };
+      }
+    }
+    datos.estado = 'CONFIRMADA';
+    datos.expiraEn = null;
+  } else if (estadoPago === 'RECHAZADO' && reserva.estado === 'PENDIENTE_PAGO') {
+    // Pago rechazado: se libera el puesto de inmediato en vez de esperar el plazo.
+    datos.estado = 'EXPIRADA';
+  }
+
+  const actualizada = await prisma.reserva.update({
+    where: { id: reserva.id },
+    data: datos,
+    include: incluirCompleto,
+  });
+  return { reserva: actualizada, cambio: true };
 }
 
 /** Marca asistencia desde el check-in de recepcion (escaneando el codigo). */

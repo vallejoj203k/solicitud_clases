@@ -27,8 +27,12 @@ enum EstadoClase {
 }
 
 enum EstadoReserva {
+  // Aparta el puesto mientras la persona paga en linea. Si no paga, expira.
+  PENDIENTE_PAGO
   CONFIRMADA
   CANCELADA
+  // El plazo para pagar se vencio y el puesto volvio a quedar libre.
+  EXPIRADA
   ASISTIO
   NO_SHOW
 }
@@ -148,11 +152,19 @@ model Reserva {
   pagoRef           String? // id de la transaccion en la pasarela
   pagoPayload       Json?
   pagoActualizadoEn DateTime?
+  // Anotacion para recepcion cuando el pago necesita atencion humana, p. ej.
+  // un pago que entro despues de que el puesto ya se habia liberado.
+  notasPago         String?
+
+  // Hasta cuando se le guarda el puesto a quien esta pagando. Null en las
+  // reservas que no pasaron por la pasarela.
+  expiraEn    DateTime?
 
   creadoEn    DateTime  @default(now())
   canceladoEn DateTime?
 
   @@index([claseId, estado])
+  @@index([estado, expiraEn])
   @@index([usuarioId, creadoEn])
   @@index([estadoPago])
   @@index([creadoEn])
