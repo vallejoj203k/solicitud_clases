@@ -65,11 +65,16 @@ export default {
           '0%,100%': { transform: 'scale(1)' },
           '50%': { transform: 'scale(1.06)' },
         },
+        surgir: {
+          '0%': { opacity: '0', transform: 'scale(.92) translateY(12px)' },
+          '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
       },
       animation: {
         aparecer: 'aparecer .28s cubic-bezier(.16,1,.3,1) both',
         subirHoja: 'subirHoja .32s cubic-bezier(.16,1,.3,1) both',
         latido: 'latido .4s ease-in-out',
+        surgir: 'surgir .3s cubic-bezier(.16,1,.3,1) both',
       },
     },
   },

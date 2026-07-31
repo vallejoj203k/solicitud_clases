@@ -3,169 +3,494 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client.js';
 import { CabeceraAdmin } from './Layout.jsx';
-import { Aviso, Cargando, Entrada, Insignia, Vacio, cx } from '../../components/ui.jsx';
-import { IconoBuscar, IconoCheck } from '../../components/Iconos.jsx';
+import MapaPuestos from '../../components/MapaPuestos.jsx';
+import {
+  Aviso,
+  BarraDisponibilidad,
+  Cargando,
+  Entrada,
+  Hoja,
+  Insignia,
+  Vacio,
+  cx,
+} from '../../components/ui.jsx';
+import { IconoAtras, IconoBuscar, IconoCheck, IconoReloj } from '../../components/Iconos.jsx';
 import { pesos, hora12, fechaLarga, ETIQUETA_PAGO, ETIQUETA_RESERVA } from '../../lib/formato.js';
 
 /**
  * Pantalla de mostrador.
  *
- * Antes, para hacer check-in había que abrir la clase y buscar a la persona a
- * ojo en la lista. Aquí se busca por código, teléfono o nombre y se resuelve
- * todo desde el resultado: marcar asistencia y registrar el pago.
+ * Dos vistas:
+ *  1. Agenda — las clases de la más cercana a la más lejana. Es lo primero que
+ *     necesita recepción: qué está por empezar.
+ *  2. Salón — al abrir una clase se ve su mapa; tocando un puesto ocupado
+ *     aparece quién lo reservó y se resuelve ahí mismo (asistencia y pago).
+ *
+ * La búsqueda por código/teléfono/nombre sigue arriba para quien llega con su QR.
  */
 export default function AdminRecepcion() {
+  const [claseAbierta, setClaseAbierta] = useState(null);
+
+  if (claseAbierta) {
+    return <VistaSalon claseId={claseAbierta} onVolver={() => setClaseAbierta(null)} />;
+  }
+  return <VistaAgenda onAbrirClase={setClaseAbierta} />;
+}
+
+/* --------------------------------------------------- Acciones de mostrador */
+
+/**
+ * Las dos acciones que recepción resuelve de pie: marcar asistencia y cobrar en
+ * efectivo. Viven en un hook porque se usan desde los dos caminos —la ficha del
+ * puesto y el resultado de búsqueda— y las dos tienen que invalidar lo mismo.
+ */
+function useAccionesMostrador(alActualizar) {
   const queryClient = useQueryClient();
-  const [q, setQ] = useState('');
   const [error, setError] = useState(null);
 
-  const { data: resultados, isFetching } = useQuery({
-    queryKey: ['adminBuscar', q.trim()],
-    queryFn: () => api.admin.buscar(q.trim()),
-    enabled: q.trim().length >= 3,
-    placeholderData: (anterior) => anterior,
-  });
-
   const refrescar = () => {
-    queryClient.invalidateQueries({ queryKey: ['adminBuscar'] });
-    queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+    for (const clave of ['adminMapa', 'adminAgenda', 'adminBuscar', 'adminDashboard']) {
+      queryClient.invalidateQueries({ queryKey: [clave] });
+    }
+  };
+
+  const alTerminar = (actualizada) => {
+    refrescar();
+    alActualizar?.(actualizada);
   };
 
   const asistencia = useMutation({
     mutationFn: ({ id, asistio }) => api.admin.marcarAsistencia(id, asistio),
-    onSuccess: refrescar,
+    onSuccess: alTerminar,
     onError: (e) => setError(e.message),
   });
 
   const pago = useMutation({
     mutationFn: (id) => api.admin.marcarPago(id, { estadoPago: 'PAGADO', metodoPago: 'efectivo' }),
-    onSuccess: refrescar,
+    onSuccess: alTerminar,
     onError: (e) => setError(e.message),
   });
+
+  return {
+    error,
+    limpiarError: () => setError(null),
+    guardando: asistencia.isPending || pago.isPending,
+    marcarAsistencia: (id) => asistencia.mutate({ id, asistio: true }),
+    cobrarEfectivo: (id) => pago.mutate(id),
+  };
+}
+
+/* ------------------------------------------------------------------ Agenda */
+
+function VistaAgenda({ onAbrirClase }) {
+  const [q, setQ] = useState('');
+  const buscando = q.trim().length >= 3;
+
+  const { data: agenda, isLoading } = useQuery({
+    queryKey: ['adminAgenda'],
+    queryFn: () => api.admin.agenda(7),
+    // El mostrador deja esta pantalla abierta todo el día.
+    refetchInterval: 60_000,
+  });
+
+  const { data: resultados, isFetching } = useQuery({
+    queryKey: ['adminBuscar', q.trim()],
+    queryFn: () => api.admin.buscar(q.trim()),
+    enabled: buscando,
+    placeholderData: (anterior) => anterior,
+  });
+
+  // Se agrupa por día para que se entienda dónde termina hoy y empieza mañana.
+  const porDia = {};
+  for (const clase of agenda ?? []) (porDia[clase.fecha] ??= []).push(clase);
 
   return (
     <div>
       <CabeceraAdmin
         titulo="Recepción"
-        descripcion="Busca por código, teléfono o nombre para hacer el check-in."
+        descripcion="Las clases más cercanas primero. Abre una para ver el salón."
       />
 
-      <div className="px-5 md:px-8 pb-10 space-y-4">
+      <div className="px-5 md:px-8 pb-10 space-y-5">
         <div className="relative">
           <IconoBuscar className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-humo-500 pointer-events-none" />
           <Entrada
             value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setError(null);
-            }}
-            placeholder="K7QF2M, 300 123 4567 o Laura"
-            className="pl-12 text-lg"
-            autoFocus
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por código, teléfono o nombre"
+            className="pl-12"
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck="false"
           />
         </div>
 
-        {error && <Aviso>{error}</Aviso>}
+        {buscando ? (
+          <ResultadosBusqueda resultados={resultados} cargando={isFetching && !resultados} />
+        ) : (
+          <>
+            {isLoading && <Cargando texto="Cargando la agenda…" />}
+            {!isLoading && (agenda ?? []).length === 0 && (
+              <Vacio
+                titulo="No hay clases programadas"
+                descripcion="Crea horarios desde la sección Clases."
+              />
+            )}
 
-        {q.trim().length > 0 && q.trim().length < 3 && (
-          <p className="text-sm text-humo-500 px-1">Escribe al menos 3 caracteres.</p>
+            {Object.entries(porDia).map(([fecha, clases]) => (
+              <section key={fecha}>
+                <p className="etiqueta mb-2 first-letter:uppercase">{fechaLarga(fecha)}</p>
+                <ul className="space-y-2">
+                  {clases.map((clase) => (
+                    <li key={clase.id}>
+                      <button
+                        onClick={() => onAbrirClase(clase.id)}
+                        className={cx(
+                          'w-full text-left tarjeta p-4 transition-colors hover:border-carbon-500',
+                          clase.enCurso && 'border-volt-500/50'
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: clase.tipoClase.color }}
+                              />
+                              <p className="font-bold tracking-tight">
+                                {hora12(clase.hora)} · {clase.tipoClase.nombre}
+                              </p>
+                              {clase.enCurso && <Insignia tono="exito">En curso</Insignia>}
+                            </div>
+                            <p className="mt-0.5 text-xs text-humo-500 truncate">
+                              {clase.instructor?.nombre ?? 'Sin instructor'}
+                              {!clase.enCurso && clase.minutosParaEmpezar > 0 && (
+                                <> · empieza en {textoEspera(clase.minutosParaEmpezar)}</>
+                              )}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-lg font-extrabold tabular-nums leading-none">
+                              {clase.ocupados}
+                              <span className="text-humo-500 font-normal">/{clase.capacidad}</span>
+                            </p>
+                            <p className="text-[11px] text-humo-500 mt-0.5">inscritos</p>
+                          </div>
+                        </div>
+                        <BarraDisponibilidad
+                          porcentaje={clase.porcentajeOcupacion}
+                          agotada={clase.agotada}
+                          className="mt-3"
+                        />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </>
         )}
-
-        {isFetching && !resultados && <Cargando texto="Buscando…" />}
-
-        {q.trim().length >= 3 && resultados?.length === 0 && (
-          <Vacio
-            titulo="Sin resultados"
-            descripcion="Revisa el código o prueba con el nombre completo."
-          />
-        )}
-
-        <ul className="space-y-2">
-          {(resultados ?? []).map((r) => (
-            <li
-              key={r.id}
-              className={cx('tarjeta p-4', (r.yaPaso || r.estado === 'CANCELADA') && 'opacity-60')}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold tracking-tight truncate">{r.usuario.nombre}</p>
-                  <p className="text-xs text-humo-500">{r.usuario.telefono}</p>
-                  <p className="mt-1.5 text-sm">
-                    <span
-                      className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
-                      style={{ backgroundColor: r.color }}
-                    />
-                    {r.tipoClase} · {hora12(r.hora)}
-                  </p>
-                  <p className="text-xs text-humo-500 first-letter:uppercase">
-                    {fechaLarga(r.fecha)}
-                    {r.yaPaso && ' · ya pasó'}
-                  </p>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <p className="text-2xl font-extrabold tabular-nums leading-none">
-                    {r.puestoCodigo}
-                  </p>
-                  <p className="text-[11px] text-humo-500 mt-0.5">{r.codigo}</p>
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <Insignia
-                  tono={
-                    r.estado === 'CANCELADA'
-                      ? 'peligro'
-                      : r.estado === 'ASISTIO'
-                        ? 'exito'
-                        : 'neutro'
-                  }
-                >
-                  {ETIQUETA_RESERVA[r.estado]}
-                </Insignia>
-                <Insignia
-                  tono={
-                    r.estadoPago === 'PAGADO' ? 'exito' : r.estadoPago === 'RECHAZADO' ? 'peligro' : 'aviso'
-                  }
-                >
-                  {ETIQUETA_PAGO[r.estadoPago]} · {pesos(r.montoCop)}
-                </Insignia>
-              </div>
-
-              {r.estado !== 'CANCELADA' && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {r.estado !== 'ASISTIO' && (
-                    <button
-                      onClick={() => asistencia.mutate({ id: r.id, asistio: true })}
-                      className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-volt-500 text-carbon-900 hover:bg-volt-400 transition-colors inline-flex items-center gap-1.5"
-                    >
-                      <IconoCheck className="w-4 h-4" />
-                      Marcar asistencia
-                    </button>
-                  )}
-                  {r.estadoPago !== 'PAGADO' && (
-                    <button
-                      onClick={() => pago.mutate(r.id)}
-                      className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-carbon-600 hover:bg-carbon-500 transition-colors"
-                    >
-                      Cobrar en efectivo
-                    </button>
-                  )}
-                  <Link
-                    to={`/admin/clases/${r.claseId}`}
-                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-humo-500 hover:text-humo-100 transition-colors ml-auto"
-                  >
-                    Ver la clase
-                  </Link>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
       </div>
     </div>
+  );
+}
+
+function textoEspera(minutos) {
+  if (minutos < 60) return `${minutos} min`;
+  const horas = Math.floor(minutos / 60);
+  return horas < 24 ? `${horas} h` : `${Math.round(horas / 24)} días`;
+}
+
+/* ------------------------------------------------------------------- Salón */
+
+function VistaSalon({ claseId, onVolver }) {
+  const [puestoAbierto, setPuestoAbierto] = useState(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['adminMapa', claseId],
+    queryFn: () => api.admin.mapaClase(claseId),
+    refetchInterval: 30_000,
+  });
+
+  // La ficha queda abierta después de actuar, así que se actualiza en el acto
+  // en vez de esperar a que vuelva el mapa.
+  const acciones = useAccionesMostrador((actualizada) =>
+    setPuestoAbierto((p) =>
+      p
+        ? {
+            ...p,
+            reserva: {
+              ...p.reserva,
+              estado: actualizada.estado,
+              estadoPago: actualizada.estadoPago,
+            },
+          }
+        : p
+    )
+  );
+
+  if (isLoading) return <Cargando texto="Cargando el salón…" />;
+  if (!data) return <Vacio titulo="Clase no encontrada" />;
+
+  const { clase, cupos, mapa } = data;
+
+  return (
+    <div className="pb-10">
+      <header className="px-5 md:px-8 pt-6 pb-4">
+        <button
+          onClick={onVolver}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-humo-500 hover:text-humo-100"
+        >
+          <IconoAtras className="w-4 h-4" />
+          Todas las clases
+        </button>
+
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: clase.tipoClase.color }}
+              />
+              <h1 className="text-2xl font-extrabold tracking-tightest">
+                {clase.tipoClase.nombre} · {hora12(clase.hora)}
+              </h1>
+            </div>
+            <p className="mt-1 text-sm text-humo-500 first-letter:uppercase">
+              {fechaLarga(clase.fecha)} · {clase.instructor?.nombre ?? 'Sin instructor'}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-extrabold tracking-tightest tabular-nums">
+              {cupos.ocupados}
+              <span className="text-humo-500 font-normal">/{cupos.capacidad}</span>
+            </p>
+            <p className="text-xs text-humo-500">inscritos</p>
+          </div>
+        </div>
+        <BarraDisponibilidad
+          porcentaje={cupos.porcentajeOcupacion}
+          agotada={cupos.agotada}
+          className="mt-4"
+        />
+      </header>
+
+      <div className="px-5 md:px-8 space-y-5">
+        {acciones.error && <Aviso>{acciones.error}</Aviso>}
+
+        <p className="text-sm text-humo-500">
+          Toca un puesto ocupado para ver quién lo reservó.
+        </p>
+
+        <div className="tarjeta p-5 max-w-md">
+          <MapaPuestos
+            mapa={mapa}
+            acento={clase.tipoClase.color}
+            soloLectura
+            alTocarOcupado={(puesto) => {
+              acciones.limpiarError();
+              setPuestoAbierto(puesto);
+            }}
+          />
+        </div>
+      </div>
+
+      {puestoAbierto && (
+        <FichaPuesto
+          puesto={puestoAbierto}
+          acento={clase.tipoClase.color}
+          onCerrar={() => setPuestoAbierto(null)}
+          onAsistio={() => acciones.marcarAsistencia(puestoAbierto.reserva.id)}
+          onCobrar={() => acciones.cobrarEfectivo(puestoAbierto.reserva.id)}
+          guardando={acciones.guardando}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Ficha del puesto. Se abre con animación (sube desde abajo en móvil, crece
+ * desde el centro en escritorio) y el nombre entra escalonado detrás.
+ */
+function FichaPuesto({ puesto, acento, onCerrar, onAsistio, onCobrar, guardando }) {
+  const r = puesto.reserva;
+  if (!r) return null;
+
+  return (
+    <Hoja abierta onCerrar={onCerrar} titulo={`Puesto ${puesto.codigo}`}>
+      <div className="space-y-5">
+        <div className="flex items-center gap-4 animate-aparecer">
+          <span
+            className="w-16 h-16 shrink-0 rounded-2xl flex items-center justify-center text-xl font-extrabold tabular-nums"
+            style={{ backgroundColor: acento, color: '#0F1115' }}
+          >
+            {puesto.codigo}
+          </span>
+          <div className="min-w-0">
+            <p className="etiqueta">Reservado por</p>
+            <p className="text-2xl font-extrabold tracking-tightest truncate">{r.usuario.nombre}</p>
+            <a
+              href={`tel:${r.usuario.telefono}`}
+              className="text-sm text-humo-500 hover:text-humo-100"
+            >
+              {r.usuario.telefono}
+            </a>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Insignia tono={r.estado === 'ASISTIO' ? 'exito' : r.estado === 'PENDIENTE_PAGO' ? 'aviso' : 'neutro'}>
+            {ETIQUETA_RESERVA[r.estado] ?? r.estado}
+          </Insignia>
+          <Insignia
+            tono={r.estadoPago === 'PAGADO' ? 'exito' : r.estadoPago === 'RECHAZADO' ? 'peligro' : 'aviso'}
+          >
+            {ETIQUETA_PAGO[r.estadoPago]} · {pesos(r.montoCop)}
+          </Insignia>
+          <Insignia>{r.codigo}</Insignia>
+        </div>
+
+        {r.estado === 'PENDIENTE_PAGO' && (
+          <Aviso tono="info">
+            Todavía está pagando en línea. El puesto le queda apartado hasta que se confirme.
+          </Aviso>
+        )}
+
+        <div className="space-y-2">
+          {r.estado !== 'ASISTIO' && r.estado !== 'PENDIENTE_PAGO' && (
+            <button
+              disabled={guardando}
+              onClick={onAsistio}
+              className="w-full min-h-[52px] rounded-2xl font-semibold bg-volt-500 text-carbon-900 hover:bg-volt-400 disabled:opacity-60 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              <IconoCheck className="w-5 h-5" />
+              Marcar asistencia
+            </button>
+          )}
+          {r.estadoPago !== 'PAGADO' && r.estado !== 'PENDIENTE_PAGO' && (
+            <button
+              disabled={guardando}
+              onClick={onCobrar}
+              className="w-full min-h-[52px] rounded-2xl font-semibold bg-carbon-600 hover:bg-carbon-500 disabled:opacity-60 transition-colors"
+            >
+              Cobrar {pesos(r.montoCop)} en efectivo
+            </button>
+          )}
+        </div>
+
+        <p className="flex items-center gap-1.5 text-xs text-humo-500">
+          <IconoReloj className="w-3.5 h-3.5" />
+          Reservó el {new Date(r.creadoEn).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}
+        </p>
+      </div>
+    </Hoja>
+  );
+}
+
+/* -------------------------------------------------------------- Búsqueda */
+
+function ResultadosBusqueda({ resultados, cargando }) {
+  // Quien llega con su QR se resuelve aquí mismo, sin abrir la clase.
+  const acciones = useAccionesMostrador();
+
+  if (cargando) return <Cargando texto="Buscando…" />;
+  if ((resultados ?? []).length === 0) {
+    return <Vacio titulo="Sin resultados" descripcion="Revisa el código o prueba con el nombre." />;
+  }
+
+  return (
+    <ul className="space-y-2">
+      {acciones.error && (
+        <li>
+          <Aviso>{acciones.error}</Aviso>
+        </li>
+      )}
+      {resultados.map((r) => (
+        <li key={r.id} className={cx('tarjeta p-4', r.yaPaso && 'opacity-60')}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-bold tracking-tight truncate">{r.usuario.nombre}</p>
+              <p className="text-xs text-humo-500">{r.usuario.telefono}</p>
+              <p className="mt-1.5 text-sm">
+                <span
+                  className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
+                  style={{ backgroundColor: r.color }}
+                />
+                {r.tipoClase} · {hora12(r.hora)}
+              </p>
+              <p className="text-xs text-humo-500 first-letter:uppercase">
+                {fechaLarga(r.fecha)}
+                {r.yaPaso && ' · ya pasó'}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-extrabold tabular-nums leading-none">{r.puestoCodigo}</p>
+              <p className="text-[11px] text-humo-500 mt-0.5">{r.codigo}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <Insignia
+              tono={
+                r.estado === 'CANCELADA'
+                  ? 'peligro'
+                  : r.estado === 'ASISTIO'
+                    ? 'exito'
+                    : r.estado === 'PENDIENTE_PAGO'
+                      ? 'aviso'
+                      : 'neutro'
+              }
+            >
+              {ETIQUETA_RESERVA[r.estado] ?? r.estado}
+            </Insignia>
+            <Insignia
+              tono={
+                r.estadoPago === 'PAGADO'
+                  ? 'exito'
+                  : r.estadoPago === 'RECHAZADO'
+                    ? 'peligro'
+                    : 'aviso'
+              }
+            >
+              {ETIQUETA_PAGO[r.estadoPago]} · {pesos(r.montoCop)}
+            </Insignia>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {/* Una reserva cancelada no se cobra ni se marca; y si está pagando
+                en línea, el cobro lo cierra Wompi, no el mostrador. */}
+            {r.estado !== 'CANCELADA' && r.estado !== 'PENDIENTE_PAGO' && (
+              <>
+                {r.estado !== 'ASISTIO' && (
+                  <button
+                    disabled={acciones.guardando}
+                    onClick={() => acciones.marcarAsistencia(r.id)}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-volt-500 text-carbon-900 hover:bg-volt-400 disabled:opacity-60 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <IconoCheck className="w-4 h-4" />
+                    Marcar asistencia
+                  </button>
+                )}
+                {r.estadoPago !== 'PAGADO' && (
+                  <button
+                    disabled={acciones.guardando}
+                    onClick={() => acciones.cobrarEfectivo(r.id)}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-carbon-600 hover:bg-carbon-500 disabled:opacity-60 transition-colors"
+                  >
+                    Cobrar en efectivo
+                  </button>
+                )}
+              </>
+            )}
+            <Link
+              to={`/admin/clases/${r.claseId}`}
+              className="ml-auto text-xs font-semibold text-humo-500 hover:text-humo-100"
+            >
+              Ver la clase
+            </Link>
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -18,6 +18,8 @@ import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.j
 import {
   dashboard,
   buscarReservas,
+  agendaRecepcion,
+  mapaConOcupantes,
   reservasDeClase,
   reportePagos,
   listarClientes,
@@ -171,6 +173,23 @@ adminRouter.get(
 );
 
 // --- Check-in en recepcion --------------------------------------------------
+/** Clases ordenadas de la mas cercana a la mas lejana. */
+adminRouter.get(
+  '/agenda',
+  asyncHandler(async (req, res) => {
+    const dias = Math.min(Number(req.query.dias ?? 7) || 7, 30);
+    res.json(await agendaRecepcion({ dias }));
+  })
+);
+
+/** Mapa del salon con quien reservo cada puesto. */
+adminRouter.get(
+  '/clases/:id/mapa',
+  asyncHandler(async (req, res) => {
+    res.json(await mapaConOcupantes(req.params.id));
+  })
+);
+
 adminRouter.get(
   '/buscar',
   asyncHandler(async (req, res) => {

@@ -12,6 +12,10 @@ import { cx } from './ui.jsx';
  *   filas: [{ label, nota, offset, puestos: [{ codigo, etiqueta, columna, estado }] }]
  * }
  * estado ∈ "libre" | "ocupado" | "bloqueado"
+ *
+ * `alTocarOcupado` habilita los puestos tomados: se usa en recepción para ver
+ * quién reservó cada uno. Sin esa prop siguen deshabilitados, como en el flujo
+ * del cliente.
  */
 const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de zoom
 // Tope de tamaño: en un salón angosto (3 columnas) los puestos crecerían hasta
@@ -19,23 +23,27 @@ const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de 
 const ANCHO_MAX_PUESTO = 60;
 const ANCHO_PASILLO = 14;
 
-function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
+function Puesto({ puesto, seleccionado, onSeleccionar, acento, alTocarOcupado }) {
   const disponible = puesto.estado === 'libre';
   const conTinte = disponible || puesto.estado === 'libreFijo';
+  const ocupadoTocable = puesto.estado === 'ocupado' && Boolean(alTocarOcupado);
   const etiquetas = {
     libre: 'disponible',
     libreFijo: 'disponible',
-    ocupado: 'ocupado',
+    ocupado: ocupadoTocable ? 'ocupado, toca para ver quién reservó' : 'ocupado',
     bloqueado: 'fuera de servicio',
   };
 
   return (
     <button
       type="button"
-      disabled={!disponible}
+      disabled={!disponible && !ocupadoTocable}
       aria-pressed={seleccionado}
       aria-label={`Puesto ${puesto.codigo}, ${etiquetas[puesto.estado]}`}
-      onClick={() => disponible && onSeleccionar(puesto.codigo)}
+      onClick={() => {
+        if (disponible) onSeleccionar(puesto.codigo);
+        else if (ocupadoTocable) alTocarOcupado(puesto);
+      }}
       style={{
         gridColumn: puesto.columnaGrid,
         ...(seleccionado
@@ -61,7 +69,10 @@ function Puesto({ puesto, seleccionado, onSeleccionar, acento }) {
         !seleccionado && conTinte && 'text-humo-100',
         !seleccionado && disponible && 'hover:brightness-125 active:scale-95',
         puesto.estado === 'libreFijo' && 'cursor-default',
-        puesto.estado === 'ocupado' && 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed',
+        puesto.estado === 'ocupado' &&
+          (ocupadoTocable
+            ? 'bg-carbon-600 border-carbon-500 text-humo-300 cursor-pointer hover:border-humo-500 hover:text-humo-100 active:scale-95'
+            : 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed'),
         puesto.estado === 'bloqueado' &&
           'bg-carbon-900 border-dashed border-carbon-600 text-carbon-500 cursor-not-allowed'
       )}
@@ -78,6 +89,8 @@ export default function MapaPuestos({
   acento = '#C8F751',
   // En el panel de admin el mapa es solo una vista del salón: no se elige nada.
   soloLectura = false,
+  // Si se pasa, los puestos ocupados se pueden tocar (recepción).
+  alTocarOcupado = null,
 }) {
   if (!mapa) return null;
 
@@ -127,6 +140,7 @@ export default function MapaPuestos({
                     seleccionado={seleccionado === puesto.codigo}
                     onSeleccionar={onSeleccionar}
                     acento={acento}
+                    alTocarOcupado={alTocarOcupado}
                   />
                 ))}
               </div>

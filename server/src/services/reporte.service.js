@@ -1,6 +1,8 @@
 import { prisma } from '../config/prisma.js';
 import { inicioDelDia, finDelDia, fechaISOLocal, horaLocal, sumarDias } from '../utils/fechas.js';
-import { serializarClase, calcularCupos, resolverLayout } from './disponibilidad.service.js';
+import { serializarClase, calcularCupos, resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
+import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
+import { noEncontrado } from '../utils/errores.js';
 import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 
 
@@ -198,6 +200,119 @@ export const COLUMNAS_CSV = [
   { clave: 'metodoPago', titulo: 'Método' },
   { clave: 'montoCop', titulo: 'Monto (COP)' },
 ];
+
+/**
+ * Agenda del mostrador: las clases ordenadas de la más cercana a la más lejana.
+ *
+ * Arranca una hora ANTES de ahora a propósito: una clase que ya empezó sigue
+ * siendo la relevante en recepción, porque la gente entra durante los primeros
+ * minutos.
+ */
+export async function agendaRecepcion({ horasAtras = 1, dias = 7 } = {}) {
+  const desde = new Date(Date.now() - horasAtras * 3600_000);
+  const hasta = new Date(Date.now() + dias * 24 * 3600_000);
+
+  const clases = await prisma.clase.findMany({
+    where: { inicioEn: { gte: desde, lte: hasta }, estado: 'ACTIVA' },
+    include: { tipoClase: true, instructor: true },
+    orderBy: { inicioEn: 'asc' },
+  });
+  if (clases.length === 0) return [];
+
+  const conteos = await prisma.reserva.groupBy({
+    by: ['claseId'],
+    where: { claseId: { in: clases.map((c) => c.id) }, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    _count: { _all: true },
+  });
+  const mapaConteo = new Map(conteos.map((c) => [c.claseId, c._count._all]));
+
+  const ahora = Date.now();
+  return clases.map((c) => {
+    const serializada = serializarClase(c, mapaConteo.get(c.id) ?? 0);
+    const inicio = c.inicioEn.getTime();
+    const fin = inicio + c.duracionMin * 60_000;
+    return {
+      ...serializada,
+      enCurso: ahora >= inicio && ahora <= fin,
+      minutosParaEmpezar: Math.round((inicio - ahora) / 60_000),
+    };
+  });
+}
+
+/**
+ * Mapa del salón con el ocupante de cada puesto.
+ *
+ * Es lo que recepción necesita para responder "¿quién está en la bici C2?" sin
+ * leer una lista. Reusa la misma expansión de layout que el mapa del cliente,
+ * pero adjunta la reserva a cada puesto tomado.
+ */
+export async function mapaConOcupantes(claseId) {
+  const clase = await prisma.clase.findUnique({
+    where: { id: claseId },
+    include: { tipoClase: true, instructor: true },
+  });
+  if (!clase) throw noEncontrado('Clase');
+
+  const reservas = await prisma.reserva.findMany({
+    where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    include: { usuario: { select: { id: true, nombre: true, telefono: true } } },
+  });
+
+  const porPuesto = new Map(reservas.map((r) => [r.puestoCodigo, r]));
+  const bloqueados = new Set(clase.puestosBloqueados || []);
+  const layout = resolverLayout(clase);
+
+  const enJuego = puestosEnJuego({
+    layout,
+    ocupados: new Set(porPuesto.keys()),
+    bloqueados,
+    cupoMaximo: clase.cupoMaximo,
+  });
+
+  const filas = layout.filas
+    .map((fila) => ({
+      ...fila,
+      puestos: fila.puestos
+        .filter((p) => enJuego.has(p.codigo))
+        .map((p) => {
+          const r = porPuesto.get(p.codigo);
+          return {
+            ...p,
+            estado: r ? 'ocupado' : bloqueados.has(p.codigo) ? 'bloqueado' : 'libre',
+            reserva: r
+              ? {
+                  id: r.id,
+                  codigo: r.codigo,
+                  estado: r.estado,
+                  estadoPago: r.estadoPago,
+                  metodoPago: r.metodoPago,
+                  montoCop: r.montoCop,
+                  creadoEn: r.creadoEn.toISOString(),
+                  usuario: r.usuario,
+                }
+              : null,
+          };
+        }),
+    }))
+    .filter((fila) => fila.puestos.length > 0);
+
+  const activas = reservas.length;
+  return {
+    clase: serializarClase(clase, activas),
+    cupos: calcularCupos({
+      totalPuestos: layout.total,
+      bloqueados: layout.codigos.filter((c) => bloqueados.has(c)).length,
+      ocupados: activas,
+      cupoMaximo: clase.cupoMaximo,
+    }),
+    mapa: {
+      titulo: layout.titulo,
+      columnas: layout.columnas,
+      pasilloDespuesDeCol: layout.pasilloDespuesDeCol,
+      filas,
+    },
+  };
+}
 
 /**
  * Búsqueda para el mostrador: código de reserva, teléfono o nombre.

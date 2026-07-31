@@ -136,6 +136,8 @@ export const api = {
       );
     },
     buscar: (q) => pedir(`/admin/buscar?q=${encodeURIComponent(q)}`, { tipoToken: 'admin' }),
+    agenda: (dias = 7) => pedir(`/admin/agenda?dias=${dias}`, { tipoToken: 'admin' }),
+    mapaClase: (id) => pedir(`/admin/clases/${id}/mapa`, { tipoToken: 'admin' }),
     clientes: (q) => pedir(`/admin/clientes${q ? `?q=${encodeURIComponent(q)}` : ''}`, { tipoToken: 'admin' }),
     cliente: (id) => pedir(`/admin/clientes/${id}`, { tipoToken: 'admin' }),
     tiposClase: () => pedir('/admin/tipos-clase', { tipoToken: 'admin' }),
