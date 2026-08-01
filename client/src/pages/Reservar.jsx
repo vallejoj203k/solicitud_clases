@@ -84,6 +84,20 @@ export default function Reservar() {
     if (primero) setDia(primero.fecha);
   }, [data, clasesPorDia, dia, claseId]);
 
+  // Los puestos que esta persona ya tiene en esta clase. Sirve para lo que más
+  // confundía: quien empieza el pago, se arrepiente y vuelve al mapa veía su
+  // propio puesto en rojo, sin manera de saber que era suyo ni de soltarlo.
+  const { data: misReservas } = useQuery({
+    queryKey: ['misReservas'],
+    queryFn: api.misReservas,
+    enabled: Boolean(cliente && claseId),
+    staleTime: 5_000,
+  });
+
+  const apartadaPropia = (misReservas ?? []).find(
+    (r) => r.clase.id === claseId && r.estado === 'PENDIENTE_PAGO'
+  );
+
   const disponibilidad = useQuery({
     queryKey: ['disponibilidad', claseId],
     queryFn: () => api.disponibilidad(claseId),
@@ -231,6 +245,11 @@ export default function Reservar() {
           }}
           acento={acento}
           boton={botonContinuar}
+          apartadaPropia={apartadaPropia}
+          onLiberar={() => {
+            queryClient.invalidateQueries({ queryKey: ['misReservas'] });
+            queryClient.invalidateQueries({ queryKey: ['disponibilidad', claseId] });
+          }}
         />
       )}
 
@@ -315,7 +334,53 @@ function PasoHorarios({ isLoading, dias, conteoPorDia, dia, setDia, clases, onEl
   );
 }
 
-function PasoPuestos({ consulta, puesto, setPuesto, acento, boton }) {
+/**
+ * Aviso de que el puesto en rojo es tuyo.
+ *
+ * Es el remate de la queja más común: empiezas a pagar, te arrepientes, vuelves
+ * al mapa y tu propio puesto aparece ocupado sin explicación. Aquí se dice de
+ * quién es y se ofrecen las dos salidas: terminar el pago o soltarlo.
+ */
+function ApartadaPropia({ reserva, onLiberar }) {
+  const [liberando, setLiberando] = useState(false);
+
+  const liberar = async () => {
+    if (!window.confirm(`¿Soltar el puesto ${reserva.puestoCodigo}? Queda libre para todos.`)) return;
+    setLiberando(true);
+    try {
+      await api.cancelarReserva(reserva.codigo);
+      onLiberar();
+    } finally {
+      setLiberando(false);
+    }
+  };
+
+  return (
+    <div className="mb-5 rounded-2xl border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3">
+      <p className="text-sm text-amber-200">
+        Tienes el puesto <span className="font-bold">{reserva.puestoCodigo}</span> apartado en esta
+        clase, sin pagar. Nadie más lo puede tomar mientras tanto.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <Link
+          to={`/reserva/${reserva.codigo}`}
+          className="text-sm font-semibold text-amber-200 underline underline-offset-2"
+        >
+          Terminar el pago
+        </Link>
+        <button
+          onClick={liberar}
+          disabled={liberando}
+          className="text-sm text-humo-500 hover:text-alerta transition-colors disabled:opacity-60"
+        >
+          {liberando ? 'Soltando…' : 'Soltar el puesto'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PasoPuestos({ consulta, puesto, setPuesto, acento, boton, apartadaPropia, onLiberar }) {
   if (consulta.isLoading) return <Cargando texto="Cargando el salón…" />;
   if (consulta.error) return <div className="px-5 pt-6"><Aviso>No pudimos cargar los puestos.</Aviso></div>;
 
@@ -333,6 +398,8 @@ function PasoPuestos({ consulta, puesto, setPuesto, acento, boton }) {
   return (
     <div className="px-5 pt-5 animate-aparecer md:landscape:px-8 md:landscape:flex md:landscape:items-start md:landscape:gap-8">
       <div className="md:landscape:flex-1 md:landscape:min-w-0">
+        {apartadaPropia && <ApartadaPropia reserva={apartadaPropia} onLiberar={onLiberar} />}
+
         {/* En horizontal esta línea se sube al panel lateral. */}
         <div className="flex items-center justify-between gap-3 mb-5 md:landscape:hidden">
           <p className="text-sm text-humo-500">{quedan}</p>

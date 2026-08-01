@@ -303,6 +303,19 @@ Marcar pagada una reserva apartada **siempre** la confirma y le quita el vencimi
 de la cola o del botón de cobro en efectivo. Sin eso, el barrido de vencidas liberaría más
 tarde un puesto ya pagado.
 
+**Cuando se arrepienten.** Un puesto apartado y sin pagar se puede soltar en cualquier
+momento, **sin el plazo de cancelación**: no hay plata que devolver y retenerlo solo le
+quita el cupo a quien sí va a pagar. Lo puede soltar el cliente —desde la pantalla de pago
+o desde el mapa— y también recepción, desde la cola. Y como quien vuelve al mapa veía su
+propio puesto en rojo sin saber que era suyo, ahora aparece un aviso con las dos salidas:
+terminar el pago o soltarlo.
+
+**El aviso en el panel.** La cantidad de pagos por confirmar se consulta desde el layout
+del panel, no desde la pantalla de Recepción, así que el contador se ve en **cualquier**
+sección. Se refresca cada 10 s, también con la pestaña en segundo plano —la tablet del
+mostrador pasa el día abierta y sin que nadie la toque— y comparte clave de caché con la
+pantalla de Recepción, de modo que abrirla no dispara una segunda consulta.
+
 Variables: `TRANSFERENCIA_LLAVE` (obligatoria), `TRANSFERENCIA_TITULAR`,
 `TRANSFERENCIA_ENTIDAD` y `TRANSFERENCIA_QR` (ruta a la imagen dentro de `/images`, que se
 publica sola; por ejemplo `/images/qr.jpg`).

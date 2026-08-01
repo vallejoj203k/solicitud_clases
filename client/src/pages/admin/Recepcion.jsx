@@ -78,16 +78,25 @@ function useAccionesMostrador(alActualizar) {
     onError: (e) => setError(e.message),
   });
 
+  const liberacion = useMutation({
+    mutationFn: (id) => api.admin.cancelarReserva(id),
+    onSuccess: alTerminar,
+    onError: (e) => setError(e.message),
+  });
+
   return {
     error,
     limpiarError: () => setError(null),
-    guardando: asistencia.isPending || pago.isPending,
+    guardando: asistencia.isPending || pago.isPending || liberacion.isPending,
     marcarAsistencia: (id) => asistencia.mutate({ id, asistio: true }),
     cobrarEfectivo: (id) => pago.mutate({ id, metodoPago: 'efectivo' }),
     // Confirmar una transferencia hace lo mismo que cobrar en efectivo, pero
     // además saca el puesto de "apartado" y lo deja reservado en firme: de eso
     // se encarga el servidor.
     confirmarTransferencia: (id) => pago.mutate({ id, metodoPago: 'transferencia' }),
+    // Cuando la persona dice en el mostrador que al final no va a pagar, el
+    // puesto no tiene por qué esperar a que se venza el plazo.
+    liberar: (id) => liberacion.mutate(id),
   };
 }
 
@@ -282,6 +291,16 @@ function PagosPorConfirmar() {
               >
                 <IconoCheck className="w-4 h-4" />
                 Confirmar pago
+              </button>
+              <button
+                disabled={acciones.guardando}
+                onClick={() => {
+                  if (window.confirm(`¿Liberar el puesto ${p.puestoCodigo} de ${p.usuario.nombre}?`))
+                    acciones.liberar(p.id);
+                }}
+                className="px-3 py-2.5 rounded-xl text-sm font-semibold text-humo-500 hover:text-alerta disabled:opacity-60 transition-colors"
+              >
+                Liberar
               </button>
               <span className="text-xs text-humo-500">
                 avisó {textoDesde(p.avisoPagoEn)}

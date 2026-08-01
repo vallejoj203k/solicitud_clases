@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api, descargar } from '../api/client.js';
@@ -242,6 +242,48 @@ export default function Reserva() {
 }
 
 /**
+ * Soltar un puesto que se apartó y no se va a pagar.
+ *
+ * Sin esto, quien empieza el pago y se arrepiente deja el puesto bloqueado
+ * hasta que se venza el plazo: ni él lo puede volver a tomar ni nadie más. Un
+ * apartado sin pagar se libera siempre, aunque la clase esté por empezar —no
+ * hay plata que devolver y retenerlo solo le quita el cupo a quien sí va a
+ * pagar.
+ */
+function LiberarPuesto({ codigo }) {
+  const navegar = useNavigate();
+  const queryClient = useQueryClient();
+  const [liberando, setLiberando] = useState(false);
+
+  const liberar = async () => {
+    if (!window.confirm('¿Soltar el puesto? Vuelve a quedar libre para todos.')) return;
+    setLiberando(true);
+    try {
+      await api.cancelarReserva(codigo);
+      queryClient.invalidateQueries();
+      navegar('/', { replace: true });
+    } catch {
+      setLiberando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <Link to="/mis-reservas" className="block text-center text-sm text-humo-500 hover:text-humo-100">
+        Ver mis reservas
+      </Link>
+      <button
+        onClick={liberar}
+        disabled={liberando}
+        className="w-full py-2 text-center text-sm text-humo-500 hover:text-alerta transition-colors disabled:opacity-60"
+      >
+        {liberando ? 'Soltando…' : 'No voy a pagar ahora, soltar el puesto'}
+      </button>
+    </div>
+  );
+}
+
+/**
  * Cobro por transferencia a la llave del gimnasio.
  *
  * No hay pasarela que avise, así que el trato es explícito: aquí están los
@@ -366,12 +408,7 @@ function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
           </Boton>
         )}
 
-        <Link
-          to="/mis-reservas"
-          className="mt-4 block text-center text-sm text-humo-500 hover:text-humo-100"
-        >
-          Ver mis reservas
-        </Link>
+        <LiberarPuesto codigo={reserva.codigo} />
       </div>
 
       <p className="mt-6 text-xs text-humo-500 text-center">
@@ -436,9 +473,7 @@ function EsperandoPago({ reserva, acento, notas }) {
         <Boton className="w-full" cargando={reintentando} onClick={volverAPagar}>
           Volver a la pasarela de pago
         </Boton>
-        <Link to="/mis-reservas" className="block text-sm text-humo-500 hover:text-humo-100">
-          Ver mis reservas
-        </Link>
+        <LiberarPuesto codigo={reserva.codigo} />
       </div>
 
       <p className="mt-8 text-xs text-humo-500">

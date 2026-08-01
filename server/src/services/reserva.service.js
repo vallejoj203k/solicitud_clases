@@ -216,8 +216,14 @@ export async function cancelarReserva({ reservaId, codigo, usuarioId, porAdmin =
     // El cliente cancela solo hasta N horas antes; despues el puesto ya no se
     // alcanza a revender y la cancelacion pasa por recepcion. El admin no tiene
     // este limite.
+    //
+    // Un puesto APARTADO y sin pagar se suelta siempre, sin importar el plazo:
+    // no hay nada que devolver y retenerlo solo le quita el cupo a alguien que
+    // si va a pagar. Es lo que pasa cuando alguien empieza el pago y se
+    // arrepiente.
+    const soloApartado = reserva.estado === 'PENDIENTE_PAGO' && reserva.estadoPago !== 'PAGADO';
     const limite = reserva.clase.inicioEn.getTime() - env.horasLimiteCancelacion * 3600_000;
-    if (Date.now() > limite) {
+    if (!soloApartado && Date.now() > limite) {
       const h = env.horasLimiteCancelacion;
       throw new AppError(
         reserva.clase.inicioEn.getTime() <= Date.now()

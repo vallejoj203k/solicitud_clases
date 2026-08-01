@@ -14,7 +14,8 @@ import {
 
 const SECCIONES = [
   { a: '/admin', texto: 'Resumen', Icono: IconoPanel, exacto: true },
-  { a: '/admin/recepcion', texto: 'Recepción', Icono: IconoBuscar },
+  // `avisa: true` -> lleva el contador de pagos por confirmar.
+  { a: '/admin/recepcion', texto: 'Recepción', Icono: IconoBuscar, avisa: true },
   { a: '/admin/clases', texto: 'Clases', Icono: IconoCalendario },
   { a: '/admin/pagos', texto: 'Pagos', Icono: IconoDinero },
   { a: '/admin/clientes', texto: 'Clientes', Icono: IconoUsuario },
@@ -34,6 +35,23 @@ export default function AdminLayout() {
     enabled: hayToken,
     retry: false,
   });
+
+  // Pagos por confirmar, consultados desde el layout para que el aviso se vea
+  // en CUALQUIER pantalla del panel, no solo en Recepción. Comparte clave de
+  // caché con esa pantalla, así que abrirla no dispara una segunda consulta.
+  const { data: porConfirmar } = useQuery({
+    queryKey: ['adminPagosPorConfirmar'],
+    queryFn: api.admin.pagosPorConfirmar,
+    enabled: hayToken,
+    retry: false,
+    refetchInterval: 10_000,
+    // Sigue contando aunque la pestaña esté en segundo plano: la tablet del
+    // mostrador pasa el día con esta app abierta y sin tocar.
+    refetchIntervalInBackground: true,
+  });
+
+  // Solo cuentan los que ya avisaron: son los que tienen a alguien esperando.
+  const avisos = (porConfirmar ?? []).filter((p) => p.avisoPagoEn).length;
 
   if (!hayToken) return <Navigate to="/admin/login" replace />;
   if (isLoading) return <Cargando texto="Verificando sesión…" />;
@@ -58,11 +76,11 @@ export default function AdminLayout() {
           <span className="font-extrabold tracking-tightest">Panel</span>
         </div>
         <nav className="mt-4 space-y-1">
-          {SECCIONES.map(({ a, texto, Icono, exacto }) => (
+          {SECCIONES.map((seccion) => (
             <NavLink
-              key={a}
-              to={a}
-              end={exacto}
+              key={seccion.a}
+              to={seccion.a}
+              end={seccion.exacto}
               className={({ isActive }) =>
                 cx(
                   'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors',
@@ -70,8 +88,9 @@ export default function AdminLayout() {
                 )
               }
             >
-              <Icono className="w-5 h-5" />
-              {texto}
+              <seccion.Icono className="w-5 h-5" />
+              {seccion.texto}
+              {seccion.avisa && avisos > 0 && <Contador n={avisos} className="ml-auto" />}
             </NavLink>
           ))}
         </nav>
@@ -90,25 +109,49 @@ export default function AdminLayout() {
       {/* Barra inferior en móvil: navegación al alcance del pulgar. */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-carbon-800/95 backdrop-blur border-t border-carbon-700 pb-segura">
         <div className="grid grid-cols-5">
-          {SECCIONES.map(({ a, texto, Icono, exacto }) => (
+          {SECCIONES.map((seccion) => (
             <NavLink
-              key={a}
-              to={a}
-              end={exacto}
+              key={seccion.a}
+              to={seccion.a}
+              end={seccion.exacto}
               className={({ isActive }) =>
                 cx(
-                  'flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors',
+                  'relative flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors',
                   isActive ? 'text-volt-500' : 'text-humo-500'
                 )
               }
             >
-              <Icono className="w-5 h-5" />
-              {texto}
+              <span className="relative">
+                <seccion.Icono className="w-5 h-5" />
+                {seccion.avisa && avisos > 0 && (
+                  <Contador n={avisos} className="absolute -top-2 -right-3" />
+                )}
+              </span>
+              {seccion.texto}
             </NavLink>
           ))}
         </div>
       </nav>
     </div>
+  );
+}
+
+/**
+ * Contador de avisos. Late al aparecer para que se note desde el otro lado del
+ * mostrador sin quedarse animando para siempre.
+ */
+function Contador({ n, className = '' }) {
+  return (
+    <span
+      aria-label={`${n} pago${n === 1 ? '' : 's'} por confirmar`}
+      className={cx(
+        'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full',
+        'bg-volt-500 text-carbon-900 text-[11px] font-extrabold tabular-nums animate-latido',
+        className
+      )}
+    >
+      {n > 9 ? '9+' : n}
+    </span>
   );
 }
 
