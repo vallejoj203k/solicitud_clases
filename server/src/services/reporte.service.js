@@ -208,6 +208,52 @@ export const COLUMNAS_CSV = [
  * siendo la relevante en recepción, porque la gente entra durante los primeros
  * minutos.
  */
+/**
+ * Cola de pagos por confirmar del mostrador.
+ *
+ * En el cobro por transferencia no hay pasarela que avise: el cliente dice "ya
+ * transferi" y alguien coteja contra la notificacion del banco. Aparecen
+ * primero los que ya avisaron -y de esos, el que lleva mas rato esperando-,
+ * porque son los que tienen a alguien parado en el mostrador.
+ *
+ * Se listan tambien los que todavia no avisan: sirven para ver quien esta a
+ * punto de perder el puesto, y a veces la persona transfiere sin tocar el
+ * boton.
+ */
+export async function pagosPorConfirmar() {
+  const reservas = await prisma.reserva.findMany({
+    where: { estado: 'PENDIENTE_PAGO', expiraEn: { gt: new Date() } },
+    include: {
+      clase: { include: { tipoClase: true } },
+      usuario: { select: { nombre: true, telefono: true } },
+    },
+    orderBy: [{ avisoPagoEn: 'asc' }, { creadoEn: 'asc' }],
+  });
+
+  const ahora = Date.now();
+  return reservas.map((r) => ({
+    id: r.id,
+    codigo: r.codigo,
+    puestoCodigo: r.puestoCodigo,
+    montoCop: r.montoCop,
+    creadoEn: r.creadoEn.toISOString(),
+    avisoPagoEn: r.avisoPagoEn?.toISOString() ?? null,
+    // Minutos que le quedan al puesto apartado, para que recepcion sepa a quien
+    // atender primero.
+    minutosRestantes: r.expiraEn
+      ? Math.max(0, Math.round((r.expiraEn.getTime() - ahora) / 60000))
+      : null,
+    usuario: r.usuario,
+    clase: {
+      id: r.claseId,
+      fecha: fechaISOLocal(r.clase.inicioEn),
+      hora: horaLocal(r.clase.inicioEn),
+      tipoClase: r.clase.tipoClase.nombre,
+      color: r.clase.tipoClase.color,
+    },
+  }));
+}
+
 export async function agendaRecepcion({ horasAtras = 1, dias = 7 } = {}) {
   const desde = new Date(Date.now() - horasAtras * 3600_000);
   const hasta = new Date(Date.now() + dias * 24 * 3600_000);

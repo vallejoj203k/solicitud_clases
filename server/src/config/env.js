@@ -80,15 +80,30 @@ export const env = {
     remitente: process.env.SMTP_FROM || 'Reservas <no-reply@gimnasio.com>',
   },
 
-  // Pagos en linea. `modo`:
-  //   "manual" -> se cobra en recepcion y el admin marca el pago (comportamiento previo)
-  //   "wompi"  -> el cliente paga antes de que se confirme el cupo
-  // Si se pide "wompi" pero faltan las llaves, se cae a "manual" para no dejar
-  // la app sin poder reservar.
+  // Como se cobra. `modo`:
+  //   "manual"        -> la reserva nace confirmada y se cobra en recepcion
+  //   "wompi"         -> el cliente paga en la pasarela antes de confirmarse
+  //   "transferencia" -> el cliente transfiere a la llave del gimnasio y
+  //                      recepcion confirma; el puesto queda apartado mientras
+  //                      tanto, igual que con la pasarela
+  // Si se pide un modo pero falta su configuracion, se cae a "manual" para no
+  // dejar la app sin poder reservar.
   pagos: {
-    modo: process.env.PAGO_MODO === 'wompi' ? 'wompi' : 'manual',
+    modo: ['wompi', 'transferencia'].includes(process.env.PAGO_MODO)
+      ? process.env.PAGO_MODO
+      : 'manual',
     // Minutos que se le guarda el puesto a quien esta pagando.
     minutosParaPagar: Number(process.env.MINUTOS_PARA_PAGAR ?? 15),
+  },
+
+  // Datos que se le muestran al cliente para transferir. La llave es lo unico
+  // obligatorio: sin ella el modo "transferencia" no se activa.
+  transferencia: {
+    llave: process.env.TRANSFERENCIA_LLAVE || null,
+    titular: process.env.TRANSFERENCIA_TITULAR || null,
+    entidad: process.env.TRANSFERENCIA_ENTIDAD || null,
+    // Ruta a la imagen del QR dentro de /public, p. ej. "/images/qr.jpg".
+    qr: process.env.TRANSFERENCIA_QR || null,
   },
 
   wompi: {

@@ -16,10 +16,13 @@ import {
 } from '../services/clase.service.js';
 import { actualizarEstadoPago } from '../services/pago.service.js';
 import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
+import { enviarConfirmacionReserva } from '../services/notificaciones.service.js';
+import { generarIcs } from '../utils/ics.js';
 import {
   dashboard,
   buscarReservas,
   agendaRecepcion,
+  pagosPorConfirmar,
   mapaConOcupantes,
   reservasDeClase,
   reportePagos,
@@ -126,7 +129,27 @@ adminRouter.patch(
   '/reservas/:id/pago',
   asyncHandler(async (req, res) => {
     const datos = pagoSchema.parse(req.body);
-    res.json(await actualizarEstadoPago(req.params.id, datos));
+    const { reserva, confirmada } = await actualizarEstadoPago(req.params.id, datos);
+
+    // Si el pago convirtio un puesto apartado en reserva confirmada, el cliente
+    // merece el mismo correo que recibe quien paga por la pasarela. Un correo
+    // que falla nunca tumba la confirmacion.
+    if (confirmada) {
+      enviarConfirmacionReserva(reserva, generarIcs(reserva)).catch(() => {});
+    }
+
+    res.json(reserva);
+  })
+);
+
+/**
+ * Cola del mostrador: quienes dijeron "ya transferi" y esperan que alguien
+ * coteje contra la notificacion del banco.
+ */
+adminRouter.get(
+  '/pagos-por-confirmar',
+  asyncHandler(async (_req, res) => {
+    res.json(await pagosPorConfirmar());
   })
 );
 

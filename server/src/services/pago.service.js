@@ -25,20 +25,34 @@ export async function actualizarEstadoPago(reservaId, { estadoPago, metodoPago, 
     throw new AppError(`Método de pago no reconocido: ${metodoPago}`, 422, 'METODO_INVALIDO');
   }
 
-  return prisma.reserva.update({
+  const reserva = await prisma.reserva.findUnique({ where: { id: reservaId } });
+  if (!reserva) throw new AppError('No encontramos la reserva.', 404, 'NO_ENCONTRADO');
+
+  // Una reserva APARTADA que se marca pagada tiene que quedar CONFIRMADA y sin
+  // fecha de vencimiento. Si solo se cambiara el estado del pago, el barrido de
+  // vencidas la liberaria mas tarde pese a estar paga: el cliente perderia el
+  // puesto que ya compro.
+  const confirmandoApartada = reserva.estado === 'PENDIENTE_PAGO' && estadoPago === 'PAGADO';
+
+  const actualizada = await prisma.reserva.update({
     where: { id: reservaId },
     data: {
       estadoPago,
       ...(metodoPago ? { metodoPago } : {}),
       ...(pagoRef !== undefined ? { pagoRef } : {}),
       ...(montoCop !== undefined ? { montoCop } : {}),
+      ...(confirmandoApartada ? { estado: 'CONFIRMADA', expiraEn: null, avisoPagoEn: null } : {}),
       pagoActualizadoEn: new Date(),
     },
     include: {
       clase: { include: { tipoClase: true, instructor: true } },
-      usuario: { select: { id: true, nombre: true, telefono: true } },
+      // `email` va aqui porque el correo de confirmacion lee el destinatario de
+      // esta misma consulta.
+      usuario: { select: { id: true, nombre: true, telefono: true, email: true } },
     },
   });
+
+  return { reserva: actualizada, confirmada: confirmandoApartada };
 }
 
 /** Punto de extension para una pasarela (Wompi / Stripe). Aun no implementado. */

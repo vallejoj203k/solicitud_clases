@@ -153,6 +153,7 @@ pagosRouter.get(
       codigo: reserva.codigo,
       estado: reserva.estado,
       estadoPago: reserva.estadoPago,
+      avisoPagoEn: reserva.avisoPagoEn?.toISOString() ?? null,
       expiraEn: reserva.expiraEn?.toISOString() ?? null,
       notasPago: reserva.notasPago,
     });
