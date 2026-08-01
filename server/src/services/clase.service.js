@@ -2,7 +2,13 @@ import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { expandirLayout } from '../utils/layout.js';
 import { ESTADOS_OCUPAN_PUESTO, ESTADOS_CONFIRMADOS } from '../config/estados.js';
-import { desdeFechaHoraLocal, sumarDias, fechaISOLocal } from '../utils/fechas.js';
+import {
+  desdeFechaHoraLocal,
+  sumarDias,
+  fechaISOLocal,
+  inicioDelDia,
+  finDelDia,
+} from '../utils/fechas.js';
 
 const incluir = { tipoClase: true, instructor: true };
 
@@ -173,10 +179,9 @@ export async function cancelarClase(id) {
 /**
  * Cambia el precio de una disciplina.
  *
- * Hay dos precios y se confundían con facilidad: el de la DISCIPLINA es el que
- * se anuncia en la pantalla principal y el que hereda cada clase nueva; el de la
- * CLASE es el que realmente se cobra. Editar una clase no movía el anuncio, así
- * que "subir el precio" parecía no funcionar.
+ * Hay dos precios y se confundían con facilidad: el de la DISCIPLINA es la
+ * plantilla con la que nace cada clase nueva; el de la CLASE es el que
+ * realmente se cobra y el único que ve el cliente.
  *
  * Con `aplicarAProximas` el precio nuevo baja también a las clases futuras que
  * todavía tenían el precio viejo. Las que tengan un precio propio (una promo,
@@ -210,6 +215,79 @@ export async function actualizarPrecioTipo(id, { precioCop, aplicarAProximas = f
 
     return { tipo: actualizado, clasesActualizadas: count, clasesConPrecioPropio };
   });
+}
+
+/**
+ * Borrado por rango: limpiar de una vez un lote semanal creado de más.
+ *
+ * Aplica la misma regla que el borrado de una sola clase -no se toca lo que
+ * tenga reservas confirmadas o pagos- pero en vez de fallar por la primera que
+ * la incumple, separa el rango en dos grupos y deja decidir:
+ *   - las que se pueden borrar se borran;
+ *   - las que tienen historial se pueden cancelar (`cancelarResto`), que las
+ *     saca de la vista del cliente sin perder el registro.
+ *
+ * `simular` devuelve solo las cuentas: la pantalla las muestra ANTES de tocar
+ * nada, porque borrar treinta clases no es una acción que deba sorprender.
+ */
+export async function eliminarClasesEnLote({
+  desde,
+  hasta,
+  tipoSlug,
+  cancelarResto = false,
+  simular = false,
+}) {
+  const clases = await prisma.clase.findMany({
+    where: {
+      inicioEn: { gte: inicioDelDia(desde), lt: finDelDia(hasta) },
+      ...(tipoSlug ? { tipoClase: { slug: tipoSlug } } : {}),
+    },
+    select: { id: true },
+  });
+
+  const vacio = { total: 0, eliminables: 0, conHistorial: 0, eliminadas: 0, canceladas: 0 };
+  if (clases.length === 0) return vacio;
+
+  const ids = clases.map((c) => c.id);
+  const conHistorial = await prisma.reserva.findMany({
+    where: {
+      claseId: { in: ids },
+      OR: [{ estado: { in: ESTADOS_CONFIRMADOS } }, { estadoPago: 'PAGADO' }],
+    },
+    select: { claseId: true },
+    distinct: ['claseId'],
+  });
+
+  const intocables = new Set(conHistorial.map((r) => r.claseId));
+  const borrables = ids.filter((id) => !intocables.has(id));
+
+  const resumen = {
+    total: ids.length,
+    eliminables: borrables.length,
+    conHistorial: intocables.size,
+    eliminadas: 0,
+    canceladas: 0,
+  };
+  if (simular) return resumen;
+
+  if (borrables.length) {
+    const { count } = await prisma.clase.deleteMany({ where: { id: { in: borrables } } });
+    resumen.eliminadas = count;
+  }
+
+  if (cancelarResto && intocables.size) {
+    const restantes = [...intocables];
+    await prisma.$transaction([
+      prisma.clase.updateMany({ where: { id: { in: restantes } }, data: { estado: 'CANCELADA' } }),
+      prisma.reserva.updateMany({
+        where: { claseId: { in: restantes }, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+        data: { estado: 'CANCELADA', canceladoEn: new Date() },
+      }),
+    ]);
+    resumen.canceladas = restantes.length;
+  }
+
+  return resumen;
 }
 
 /** Borrado definitivo. Solo se permite si la clase no tiene reservas. */

@@ -1,8 +1,19 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client.js';
 import SalonClase from '../../components/SalonClase.jsx';
-import { BarraDisponibilidad, Cargando, Hoja, Insignia, cx } from '../../components/ui.jsx';
+import {
+  Aviso,
+  BarraDisponibilidad,
+  Boton,
+  Campo,
+  Cargando,
+  Entrada,
+  Hoja,
+  Insignia,
+  Seleccion,
+  cx,
+} from '../../components/ui.jsx';
 import { IconoAtras, IconoFlecha } from '../../components/Iconos.jsx';
 import { hora12, fechaLarga, hoyISO } from '../../lib/formato.js';
 
@@ -48,6 +59,7 @@ export default function CalendarioClases() {
   const [mes, setMes] = useState(Number(hoy.slice(5, 7)) - 1);
   const [diaAbierto, setDiaAbierto] = useState(null);
   const [claseSalon, setClaseSalon] = useState(null);
+  const [borrandoRango, setBorrandoRango] = useState(false);
 
   const semanas = semanasDelMes(anio, mes);
   const desde = semanas[0][0].fecha;
@@ -92,13 +104,21 @@ export default function CalendarioClases() {
           <IconoAtras className="w-5 h-5" />
         </button>
         <p className="font-bold tracking-tight first-letter:uppercase">{nombreMes}</p>
-        <button
-          onClick={() => mover(1)}
-          aria-label="Mes siguiente"
-          className="p-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
-        >
-          <IconoFlecha className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setBorrandoRango(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-alerta transition-colors"
+          >
+            Borrar rango
+          </button>
+          <button
+            onClick={() => mover(1)}
+            aria-label="Mes siguiente"
+            className="p-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
+          >
+            <IconoFlecha className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {isLoading && <Cargando />}
@@ -126,6 +146,14 @@ export default function CalendarioClases() {
           </div>
         ))}
       </div>
+
+      {borrandoRango && (
+        <HojaBorrarRango
+          desdeSugerido={semanas[0].find((d) => d.delMes).fecha}
+          hastaSugerido={[...semanas.flat()].filter((d) => d.delMes).at(-1).fecha}
+          onCerrar={() => setBorrandoRango(false)}
+        />
+      )}
 
       {diaAbierto && (
         <HojaDelDia
@@ -302,6 +330,178 @@ function HojaDelDia({ fecha, clases, onCerrar, onAbrirClase }) {
           </p>
         </div>
       )}
+    </Hoja>
+  );
+}
+
+/**
+ * Borrado por rango.
+ *
+ * Un lote semanal puede dejar treinta clases y borrarlas de a una es absurdo.
+ * Antes de tocar nada se pide al servidor una simulación y se muestra en
+ * números qué va a pasar: borrar en bloque no debe sorprender a nadie.
+ *
+ * Las clases con reservas confirmadas o pagos no se borran nunca; se ofrece
+ * cancelarlas, que las saca de la vista del cliente sin perder el registro.
+ */
+function HojaBorrarRango({ desdeSugerido, hastaSugerido, onCerrar }) {
+  const queryClient = useQueryClient();
+  const { data: tipos } = useQuery({ queryKey: ['adminTipos'], queryFn: api.admin.tiposClase });
+
+  const [desde, setDesde] = useState(desdeSugerido);
+  const [hasta, setHasta] = useState(hastaSugerido);
+  const [tipoSlug, setTipoSlug] = useState('');
+  const [cancelarResto, setCancelarResto] = useState(false);
+  const [previo, setPrevio] = useState(null);
+  const [resultado, setResultado] = useState(null);
+  const [error, setError] = useState(null);
+
+  const datos = () => ({ desde, hasta, tipoSlug: tipoSlug || undefined });
+
+  const revisar = useMutation({
+    mutationFn: () => api.admin.eliminarClasesEnLote({ ...datos(), simular: true }),
+    onSuccess: setPrevio,
+    onError: (e) => setError(e.message),
+  });
+
+  const borrar = useMutation({
+    mutationFn: () => api.admin.eliminarClasesEnLote({ ...datos(), cancelarResto }),
+    onSuccess: (r) => {
+      setResultado(r);
+      queryClient.invalidateQueries({ queryKey: ['adminClases'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['adminAgenda'] });
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  if (resultado) {
+    return (
+      <Hoja abierta onCerrar={onCerrar} titulo="Listo">
+        <div className="space-y-4">
+          <p className="text-sm">
+            Se {resultado.eliminadas === 1 ? 'borró' : 'borraron'}{' '}
+            <span className="font-extrabold">{resultado.eliminadas}</span> clase
+            {resultado.eliminadas === 1 ? '' : 's'}.
+            {resultado.canceladas > 0 && (
+              <> Y se cancelaron {resultado.canceladas} que tenían reservas.</>
+            )}
+          </p>
+          {resultado.canceladas === 0 && resultado.conHistorial > 0 && (
+            <Aviso tono="info">
+              {resultado.conHistorial} quedaron intactas porque tienen reservas confirmadas o
+              pagos registrados.
+            </Aviso>
+          )}
+          <Boton className="w-full" onClick={onCerrar}>
+            Cerrar
+          </Boton>
+        </div>
+      </Hoja>
+    );
+  }
+
+  return (
+    <Hoja abierta onCerrar={onCerrar} titulo="Borrar clases de un rango">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Desde">
+            <Entrada type="date" value={desde} onChange={(e) => { setDesde(e.target.value); setPrevio(null); }} />
+          </Campo>
+          <Campo etiqueta="Hasta">
+            <Entrada type="date" value={hasta} onChange={(e) => { setHasta(e.target.value); setPrevio(null); }} />
+          </Campo>
+        </div>
+
+        <Campo etiqueta="Disciplina">
+          <Seleccion
+            value={tipoSlug}
+            onChange={(e) => {
+              setTipoSlug(e.target.value);
+              setPrevio(null);
+            }}
+          >
+            <option value="">Todas</option>
+            {(tipos ?? []).map((t) => (
+              <option key={t.slug} value={t.slug}>
+                {t.nombre}
+              </option>
+            ))}
+          </Seleccion>
+        </Campo>
+
+        {error && <Aviso>{error}</Aviso>}
+
+        {!previo ? (
+          <Boton
+            className="w-full"
+            cargando={revisar.isPending}
+            onClick={() => {
+              setError(null);
+              revisar.mutate();
+            }}
+          >
+            Revisar qué se borraría
+          </Boton>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-carbon-600 bg-carbon-700/50 p-4 space-y-1.5 text-sm">
+              <p>
+                En ese rango hay <span className="font-bold">{previo.total}</span> clase
+                {previo.total === 1 ? '' : 's'}.
+              </p>
+              <p className="text-humo-300">
+                Se pueden borrar <span className="font-extrabold text-alerta">{previo.eliminables}</span>.
+              </p>
+              {previo.conHistorial > 0 && (
+                <p className="text-humo-500">
+                  {previo.conHistorial} tienen reservas confirmadas o pagos, así que no se borran.
+                </p>
+              )}
+            </div>
+
+            {previo.conHistorial > 0 && (
+              <label className="flex items-start gap-3 cursor-pointer rounded-2xl border border-carbon-600 p-4">
+                <input
+                  type="checkbox"
+                  checked={cancelarResto}
+                  onChange={(e) => setCancelarResto(e.target.checked)}
+                  className="w-5 h-5 mt-0.5 rounded accent-volt-500"
+                />
+                <span className="text-sm">
+                  <span className="font-semibold">Cancelar también esas {previo.conHistorial}</span>
+                  <span className="block text-xs text-humo-500 mt-0.5">
+                    Dejan de verse para los clientes y sus reservas quedan canceladas, pero el
+                    historial de pagos se conserva.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            <div className="flex gap-2">
+              <Boton variante="contorno" className="flex-1" onClick={onCerrar}>
+                Cancelar
+              </Boton>
+              <Boton
+                variante="peligro"
+                className="flex-1"
+                cargando={borrar.isPending}
+                disabled={previo.eliminables === 0 && !cancelarResto}
+                onClick={() => {
+                  setError(null);
+                  borrar.mutate();
+                }}
+              >
+                {/* La etiqueta dice exactamente lo que va a pasar: con un
+                    "Borrar 0" apagado nadie entiende qué le falta. */}
+                {previo.eliminables > 0
+                  ? `Borrar ${previo.eliminables}${cancelarResto ? ` y cancelar ${previo.conHistorial}` : ''}`
+                  : `Cancelar ${previo.conHistorial}`}
+              </Boton>
+            </div>
+          </div>
+        )}
+      </div>
     </Hoja>
   );
 }

@@ -86,8 +86,19 @@ async function contarOcupacion(claseIds) {
  * Lista clases activas en un rango. `desde`/`hasta` son fechas locales "YYYY-MM-DD".
  * Si no se pasa `desde`, arranca en "ahora" para no mostrar clases ya empezadas.
  */
-export async function listarClases({ tipoSlug, desde, hasta, incluirPasadas = false, limite } = {}) {
-  const where = { estado: 'ACTIVA' };
+export async function listarClases({
+  tipoSlug,
+  desde,
+  hasta,
+  incluirPasadas = false,
+  // El cliente solo ve las activas. El panel las ve todas: una clase cancelada
+  // que desaparece de la lista no se puede ni revisar ni borrar, y hasta ahora
+  // el boton "Eliminar" -que solo se ofrecia para las canceladas- era
+  // inalcanzable por esto.
+  incluirCanceladas = false,
+  limite,
+} = {}) {
+  const where = incluirCanceladas ? {} : { estado: 'ACTIVA' };
   if (tipoSlug) where.tipoClase = { slug: tipoSlug };
 
   const filtroFecha = {};

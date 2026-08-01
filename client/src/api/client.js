@@ -109,6 +109,8 @@ export const api = {
     actualizarClase: (id, datos) =>
       pedir(`/admin/clases/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     cancelarClase: (id) => pedir(`/admin/clases/${id}/cancelar`, { metodo: 'POST', tipoToken: 'admin' }),
+    eliminarClasesEnLote: (datos) =>
+      pedir('/admin/clases/eliminar-lote', { metodo: 'POST', cuerpo: datos, tipoToken: 'admin' }),
     eliminarClase: (id) => pedir(`/admin/clases/${id}`, { metodo: 'DELETE', tipoToken: 'admin' }),
     reservasDeClase: (id) => pedir(`/admin/clases/${id}/reservas`, { tipoToken: 'admin' }),
     marcarPago: (id, datos) =>
