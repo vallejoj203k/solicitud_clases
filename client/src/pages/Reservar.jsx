@@ -24,6 +24,10 @@ import { IconoAtras, IconoCheck, IconoReloj, IconoUsuario } from '../components/
  * Flujo de reserva completo en una sola pantalla, con dos pasos visibles
  * (horario → puesto) y la confirmación como hoja inferior. Desde la pantalla
  * principal son 3 toques; entrando por la disciplina, 4.
+ *
+ * TABLET HORIZONTAL (`md:landscape:`): los horarios se reparten en rejilla y el
+ * salón se pone a la izquierda con el resumen y el botón fijos a la derecha, en
+ * vez de la barra inferior. Así el mapa entero y el botón se ven a la vez.
  */
 export default function Reservar() {
   const { slug } = useParams();
@@ -142,8 +146,25 @@ export default function Reservar() {
   const acento = claseActual?.tipoClase.color ?? '#C8F751';
   const enPasoPuesto = Boolean(claseId);
 
+  // El mismo botón se usa en la barra inferior (vertical) y en el panel lateral
+  // (tablet horizontal); se arma una sola vez para que no se desincronicen.
+  const botonContinuar = (
+    <Boton
+      className="w-full"
+      disabled={!puesto}
+      onClick={() => {
+        setErrorReserva(null);
+        setConfirmando(true);
+      }}
+      style={puesto ? { backgroundColor: acento } : undefined}
+    >
+      {puesto ? `Continuar con el puesto ${puesto}` : 'Elige tu puesto'}
+      {puesto && <IconoCheck />}
+    </Boton>
+  );
+
   return (
-    <div className="relative min-h-dvh pb-40">
+    <div className="relative min-h-dvh pb-40 md:landscape:pb-10">
       {/* La foto sale de la disciplina de la URL, así aparece de una vez aunque
           los datos de la clase todavía estén cargando. */}
       <FondoDisciplina slug={slug} />
@@ -200,6 +221,7 @@ export default function Reservar() {
             setErrorReserva(null);
           }}
           acento={acento}
+          boton={botonContinuar}
         />
       )}
 
@@ -209,23 +231,11 @@ export default function Reservar() {
         </div>
       )}
 
-      {/* CTA fijo en la zona del pulgar. */}
+      {/* CTA fijo en la zona del pulgar. En tablet horizontal el botón vive en
+          el panel lateral, así que esta barra se retira. */}
       {enPasoPuesto && claseActual && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-carbon-900 via-carbon-900/95 to-transparent px-5 pt-8 pb-segura">
-          <div className="mx-auto max-w-lg">
-            <Boton
-              className="w-full"
-              disabled={!puesto}
-              onClick={() => {
-                setErrorReserva(null);
-                setConfirmando(true);
-              }}
-              style={puesto ? { backgroundColor: acento } : undefined}
-            >
-              {puesto ? `Continuar con el puesto ${puesto}` : 'Elige tu puesto'}
-              {puesto && <IconoCheck />}
-            </Boton>
-          </div>
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-carbon-900 via-carbon-900/95 to-transparent px-5 pt-8 pb-segura md:landscape:hidden">
+          <div className="mx-auto max-w-lg">{botonContinuar}</div>
         </div>
       )}
 
@@ -272,10 +282,12 @@ function Pasos({ actual, acento }) {
 
 function PasoHorarios({ isLoading, dias, conteoPorDia, dia, setDia, clases, onElegir }) {
   return (
-    <div className="px-5 pt-4 animate-aparecer">
+    <div className="px-5 pt-4 animate-aparecer md:landscape:px-8">
       <CarruselDias dias={dias} seleccionado={dia} onSeleccionar={setDia} conteoPorDia={conteoPorDia} />
 
-      <div className="mt-6 space-y-3">
+      {/* En tablet horizontal caben dos columnas de horarios: se ven más de una
+          vez y no hay que desplazar la lista. */}
+      <div className="mt-6 space-y-3 md:landscape:grid md:landscape:grid-cols-2 md:landscape:gap-3 md:landscape:space-y-0 lg:landscape:grid-cols-3">
         {isLoading && <Cargando />}
         {!isLoading && clases.length === 0 && (
           <Vacio
@@ -291,30 +303,52 @@ function PasoHorarios({ isLoading, dias, conteoPorDia, dia, setDia, clases, onEl
   );
 }
 
-function PasoPuestos({ consulta, puesto, setPuesto, acento }) {
+function PasoPuestos({ consulta, puesto, setPuesto, acento, boton }) {
   if (consulta.isLoading) return <Cargando texto="Cargando el salón…" />;
   if (consulta.error) return <div className="px-5 pt-6"><Aviso>No pudimos cargar los puestos.</Aviso></div>;
 
   const { clase, mapa } = consulta.data;
+  const quedan =
+    clase.disponibles > 0 ? (
+      <>
+        Quedan <span className="font-bold text-humo-100">{clase.disponibles}</span> de{' '}
+        {clase.capacidad} puestos
+      </>
+    ) : (
+      'Esta clase está llena'
+    );
 
   return (
-    <div className="px-5 pt-5 animate-aparecer">
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <p className="text-sm text-humo-500">
-          {clase.disponibles > 0 ? (
-            <>
-              Quedan <span className="font-bold text-humo-100">{clase.disponibles}</span> de {clase.capacidad} puestos
-            </>
-          ) : (
-            'Esta clase está llena'
-          )}
-        </p>
-        <span className="text-sm font-semibold" style={{ color: acento }}>
-          {pesos(clase.precioCop)}
-        </span>
+    <div className="px-5 pt-5 animate-aparecer md:landscape:px-8 md:landscape:flex md:landscape:items-start md:landscape:gap-8">
+      <div className="md:landscape:flex-1 md:landscape:min-w-0">
+        {/* En horizontal esta línea se sube al panel lateral. */}
+        <div className="flex items-center justify-between gap-3 mb-5 md:landscape:hidden">
+          <p className="text-sm text-humo-500">{quedan}</p>
+          <span className="text-sm font-semibold" style={{ color: acento }}>
+            {pesos(clase.precioCop)}
+          </span>
+        </div>
+
+        {/* El salón no se estira a lo ancho de la tablet: se centra. */}
+        <div className="md:landscape:mx-auto md:landscape:max-w-[640px]">
+          <MapaPuestos mapa={mapa} seleccionado={puesto} onSeleccionar={setPuesto} />
+        </div>
       </div>
 
-      <MapaPuestos mapa={mapa} seleccionado={puesto} onSeleccionar={setPuesto} acento={acento} />
+      <aside className="hidden md:landscape:flex md:landscape:w-[300px] md:landscape:shrink-0 md:landscape:flex-col md:landscape:gap-4 tarjeta p-5">
+        <div>
+          <p className="etiqueta">Tu puesto</p>
+          <p className="mt-1 text-5xl font-extrabold tracking-tightest tabular-nums leading-none">
+            {puesto ?? <span className="text-carbon-500">—</span>}
+          </p>
+        </div>
+        <p className="text-sm text-humo-500">{quedan}</p>
+        <div className="flex items-center justify-between border-t border-carbon-600 pt-4">
+          <span className="etiqueta">Total</span>
+          <span className="text-2xl font-extrabold tracking-tightest">{pesos(clase.precioCop)}</span>
+        </div>
+        {boton}
+      </aside>
     </div>
   );
 }

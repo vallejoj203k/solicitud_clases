@@ -522,6 +522,12 @@ Paleta **Volt**: base carbón (`#0F1115`) con acento lima eléctrico (`#C8F751`)
 Running y cian (`#4CE0E0`) para Spinning. El color de cada disciplina viene de
 `TipoClase.color` en la base de datos, así que se cambia sin tocar código.
 
+**Semáforo del salón.** Los puestos no usan el color de la disciplina: **verde = libre,
+rojo = ocupado**, y el puesto elegido es verde relleno (mismo color, lleno en vez de
+contorneado). Es la convención que cualquiera entiende sin leer la leyenda. El tinte se
+pinta como capa sobre un fondo opaco, no como color translúcido: detrás hay una foto y los
+números tienen que leerse igual.
+
 Decisiones pensadas para el uso con una mano:
 
 - Objetivos táctiles de 44–52 px; los puestos del mapa nunca bajan de 38 px y no necesitan
@@ -533,3 +539,20 @@ Decisiones pensadas para el uso con una mano:
 - La barra de ocupación se llena y cambia de color (lima → ámbar → rojo) a la vez: largo y
   color dicen lo mismo.
 - Se respeta `prefers-reduced-motion`.
+
+### Tablet horizontal
+
+El gimnasio la usa apoyada en el mostrador, así que en horizontal (variante
+`md:landscape:`, desde 768 px de ancho) las pantallas se reorganizan **para que nada exija
+desplazar la página**:
+
+| Pantalla | En horizontal |
+|---|---|
+| Principal | Running y Spinning en dos columnas que se estiran hasta llenar la ventana; los próximos horarios en rejilla, sin arrastrar |
+| Horarios | 2–3 columnas de tarjetas bajo el carrusel de días |
+| Puestos | Salón a la izquierda; puesto elegido, total y botón en un panel fijo a la derecha, en vez de la barra inferior |
+| Recepción | Datos de la clase en una columna y el mapa del salón en la otra |
+
+Los puestos crecen de 60 a 78 px (`--ancho-puesto` en `index.css`): con la tablet apoyada
+se tocan con el brazo estirado, no con el pulgar. Verificado sin scroll —ni vertical ni
+horizontal— en 1024×768 y 1280×800.
