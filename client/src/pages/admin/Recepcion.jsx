@@ -49,6 +49,11 @@ function VistaAgenda({ onAbrirClase }) {
     refetchInterval: 60_000,
   });
 
+  const clases = agenda?.clases ?? [];
+  // Cuando no hay nada en la próxima semana, el servidor manda las siguientes
+  // que existan: hay que decir por qué se están viendo clases lejanas.
+  const soloLejanas = agenda && !agenda.hayEnVentana && clases.length > 0;
+
   const { data: resultados, isFetching } = useQuery({
     queryKey: ['adminBuscar', q.trim()],
     queryFn: () => api.admin.buscar(q.trim()),
@@ -58,7 +63,7 @@ function VistaAgenda({ onAbrirClase }) {
 
   // Se agrupa por día para que se entienda dónde termina hoy y empieza mañana.
   const porDia = {};
-  for (const clase of agenda ?? []) (porDia[clase.fecha] ??= []).push(clase);
+  for (const clase of clases) (porDia[clase.fecha] ??= []).push(clase);
 
   return (
     <div>
@@ -88,11 +93,18 @@ function VistaAgenda({ onAbrirClase }) {
             <PagosPorConfirmar />
 
             {isLoading && <Cargando texto="Cargando la agenda…" />}
-            {!isLoading && (agenda ?? []).length === 0 && (
+            {!isLoading && clases.length === 0 && (
               <Vacio
                 titulo="No hay clases programadas"
                 descripcion="Crea horarios desde la sección Clases."
               />
+            )}
+
+            {soloLejanas && (
+              <Aviso tono="info">
+                No hay clases en los próximos {agenda.dias} días. Estas son las siguientes que
+                tienes programadas.
+              </Aviso>
             )}
 
             {Object.entries(porDia).map(([fecha, clases]) => (

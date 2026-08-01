@@ -267,16 +267,38 @@ export async function pagosPorConfirmar() {
   }));
 }
 
-export async function agendaRecepcion({ horasAtras = 1, dias = 7 } = {}) {
+/**
+ * Agenda del mostrador.
+ *
+ * Mira los próximos `dias`, que es lo que le importa a recepción. Pero si en esa
+ * ventana no hay nada, NO responde "no hay clases": busca las siguientes que
+ * existan y las devuelve marcando `hayEnVentana: false`. Decir "no hay clases
+ * programadas" mientras el calendario y la app del cliente muestran clases
+ * dentro de dos semanas hace pensar que los datos están rotos.
+ */
+export async function agendaRecepcion({ horasAtras = 1, dias = 7, siguientes = 8 } = {}) {
   const desde = new Date(Date.now() - horasAtras * 3600_000);
   const hasta = new Date(Date.now() + dias * 24 * 3600_000);
+  const enAdelante = { inicioEn: { gte: desde }, estado: 'ACTIVA' };
 
-  const clases = await prisma.clase.findMany({
-    where: { inicioEn: { gte: desde, lte: hasta }, estado: 'ACTIVA' },
+  let hayEnVentana = true;
+  let clases = await prisma.clase.findMany({
+    where: { ...enAdelante, inicioEn: { gte: desde, lte: hasta } },
     include: { tipoClase: true, instructor: true },
     orderBy: { inicioEn: 'asc' },
   });
-  if (clases.length === 0) return [];
+
+  if (clases.length === 0) {
+    hayEnVentana = false;
+    clases = await prisma.clase.findMany({
+      where: enAdelante,
+      include: { tipoClase: true, instructor: true },
+      orderBy: { inicioEn: 'asc' },
+      take: siguientes,
+    });
+  }
+
+  if (clases.length === 0) return { clases: [], hayEnVentana: true, dias };
 
   const conteos = await prisma.reserva.groupBy({
     by: ['claseId'],
@@ -286,16 +308,20 @@ export async function agendaRecepcion({ horasAtras = 1, dias = 7 } = {}) {
   const mapaConteo = new Map(conteos.map((c) => [c.claseId, c._count._all]));
 
   const ahora = Date.now();
-  return clases.map((c) => {
-    const serializada = serializarClase(c, mapaConteo.get(c.id) ?? 0);
-    const inicio = c.inicioEn.getTime();
-    const fin = inicio + c.duracionMin * 60_000;
-    return {
-      ...serializada,
-      enCurso: ahora >= inicio && ahora <= fin,
-      minutosParaEmpezar: Math.round((inicio - ahora) / 60_000),
-    };
-  });
+  return {
+    hayEnVentana,
+    dias,
+    clases: clases.map((c) => {
+      const serializada = serializarClase(c, mapaConteo.get(c.id) ?? 0);
+      const inicio = c.inicioEn.getTime();
+      const fin = inicio + c.duracionMin * 60_000;
+      return {
+        ...serializada,
+        enCurso: ahora >= inicio && ahora <= fin,
+        minutosParaEmpezar: Math.round((inicio - ahora) / 60_000),
+      };
+    }),
+  };
 }
 
 /**
