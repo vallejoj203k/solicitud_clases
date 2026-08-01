@@ -39,7 +39,7 @@ export default function Home() {
             Reserva tu
             {/* En horizontal cabe en un renglón y así el título no roba altura. */}
             <br className="md:landscape:hidden" />{' '}
-            <span className="text-volt-500">puesto</span> hoy
+            <span className="text-volt-500">cupo</span> hoy
           </h1>
         </div>
         <div className="flex items-center gap-1 shrink-0">
