@@ -18,7 +18,7 @@ import { cx } from './ui.jsx';
  * del cliente.
  */
 const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de zoom
-// Tope de tamaño: en un salón angosto (3 columnas) los puestos crecerían hasta
+// Tope de tamaño: en un salón angosto (pocas columnas) los puestos crecerían hasta
 // ocupar toda la pantalla y las últimas filas quedarían fuera de vista. El valor
 // sale de `--ancho-puesto` (index.css), que sube en tablet horizontal.
 const ANCHO_MAX_PUESTO = 'var(--ancho-puesto, 60px)';

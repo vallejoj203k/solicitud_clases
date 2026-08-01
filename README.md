@@ -120,11 +120,18 @@ ejemplo), se puede añadir al JSON del layout sin migrar datos.
 }
 ```
 
-Los salones actuales: **Spinning** 18 bicicletas en 3 columnas × 6 filas (`A1`…`F3`) y
-**Running** 6 trotadoras en 2 columnas × 3 filas (`1`…`6`). Se definen en
+Los salones actuales: **Spinning** 18 bicicletas en 6 columnas × 3 filas (`A1`…`C6`) y
+**Running** 6 trotadoras en 3 columnas × 2 filas (`1`…`6`). Se definen en
 `server/src/config/catalogoInicial.js`; cambiarlos en una base que ya existe requiere una
-migración de datos (ver `migrations/*_salon_real`), porque el bootstrap de arranque solo
-inserta lo que falta y nunca sobrescribe.
+migración de datos (ver `migrations/*_salon_real` y `*_salon_transpuesto`), porque el
+bootstrap de arranque solo inserta lo que falta y nunca sobrescribe.
+
+Cuando el cambio altera el **conjunto de códigos** —como al trasponer el salón de
+Spinning, donde `A1`…`F3` pasa a ser `A1`…`C6`— la migración tiene que mover las reservas
+o la mitad quedarían apuntando a un puesto inexistente. La transposición se hace en dos
+pasos con un prefijo temporal: el índice único parcial de puesto activo se evalúa fila a
+fila, y un intercambio directo (`A2`→`B1` mientras `B1`→`A2`) chocaría consigo mismo a
+mitad de camino.
 
 Al crear una clase, el campo **Cupo** se rellena solo con el tamaño del salón (18 o 6) y
 se puede bajar; no se puede subir por encima del salón (`422 CUPO_EXCEDE_LAYOUT`).
