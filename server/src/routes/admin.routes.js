@@ -10,6 +10,7 @@ import {
   crearClase,
   crearClasesEnLote,
   actualizarClase,
+  actualizarPrecioTipo,
   cancelarClase,
   eliminarClase,
 } from '../services/clase.service.js';
@@ -227,6 +228,22 @@ adminRouter.get(
         layoutExpandido: expandirLayout(t.layoutPuestos),
       }))
     );
+  })
+);
+
+/**
+ * Precio de la disciplina: el que se anuncia en la pantalla principal y el que
+ * hereda cada clase nueva.
+ */
+const precioTipoSchema = z.object({
+  precioCop: z.number().int().min(0).max(100_000_000),
+  aplicarAProximas: z.boolean().optional(),
+});
+
+adminRouter.patch(
+  '/tipos-clase/:id',
+  asyncHandler(async (req, res) => {
+    res.json(await actualizarPrecioTipo(req.params.id, precioTipoSchema.parse(req.body)));
   })
 );
 

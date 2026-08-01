@@ -141,6 +141,8 @@ export const api = {
     clientes: (q) => pedir(`/admin/clientes${q ? `?q=${encodeURIComponent(q)}` : ''}`, { tipoToken: 'admin' }),
     cliente: (id) => pedir(`/admin/clientes/${id}`, { tipoToken: 'admin' }),
     tiposClase: () => pedir('/admin/tipos-clase', { tipoToken: 'admin' }),
+    actualizarPrecioTipo: (id, datos) =>
+      pedir(`/admin/tipos-clase/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     instructores: () => pedir('/admin/instructores', { tipoToken: 'admin' }),
     crearInstructor: (nombre) =>
       pedir('/admin/instructores', { metodo: 'POST', cuerpo: { nombre }, tipoToken: 'admin' }),

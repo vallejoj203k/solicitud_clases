@@ -61,6 +61,10 @@ export function serializarClase(clase, ocupados) {
       icono: clase.tipoClase.icono,
     },
     cupoMaximo: clase.cupoMaximo,
+    // Va aqui para que el formulario de edicion pueda precargarlo: sin esto el
+    // campo salia vacio y guardar una clase le borraba los puestos fuera de
+    // servicio. No revela nada: el mapa ya los muestra como bloqueados.
+    puestosBloqueados: bloqueados,
     ...cupos,
   };
 }

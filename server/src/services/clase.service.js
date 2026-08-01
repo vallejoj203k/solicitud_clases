@@ -170,6 +170,48 @@ export async function cancelarClase(id) {
   });
 }
 
+/**
+ * Cambia el precio de una disciplina.
+ *
+ * Hay dos precios y se confundían con facilidad: el de la DISCIPLINA es el que
+ * se anuncia en la pantalla principal y el que hereda cada clase nueva; el de la
+ * CLASE es el que realmente se cobra. Editar una clase no movía el anuncio, así
+ * que "subir el precio" parecía no funcionar.
+ *
+ * Con `aplicarAProximas` el precio nuevo baja también a las clases futuras que
+ * todavía tenían el precio viejo. Las que tengan un precio propio (una promo,
+ * por ejemplo) NO se tocan: se cuentan y se informan, para que el cambio no
+ * borre en silencio una decisión deliberada.
+ */
+export async function actualizarPrecioTipo(id, { precioCop, aplicarAProximas = false }) {
+  const tipo = await prisma.tipoClase.findUnique({ where: { id } });
+  if (!tipo) throw noEncontrado('Disciplina');
+
+  const precioAnterior = tipo.precioCop;
+
+  return prisma.$transaction(async (tx) => {
+    const actualizado = await tx.tipoClase.update({ where: { id }, data: { precioCop } });
+
+    if (!aplicarAProximas) {
+      return { tipo: actualizado, clasesActualizadas: 0, clasesConPrecioPropio: 0 };
+    }
+
+    // Solo hacia adelante: el precio de una clase que ya pasó es parte del
+    // historial de pagos y no se reescribe.
+    const proximas = { tipoClaseId: id, estado: 'ACTIVA', inicioEn: { gte: new Date() } };
+
+    const { count } = await tx.clase.updateMany({
+      where: { ...proximas, precioCop: precioAnterior },
+      data: { precioCop },
+    });
+    const clasesConPrecioPropio = await tx.clase.count({
+      where: { ...proximas, precioCop: { not: precioCop } },
+    });
+
+    return { tipo: actualizado, clasesActualizadas: count, clasesConPrecioPropio };
+  });
+}
+
 /** Borrado definitivo. Solo se permite si la clase no tiene reservas. */
 export async function eliminarClase(id) {
   const reservas = await prisma.reserva.count({ where: { claseId: id } });

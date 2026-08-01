@@ -185,6 +185,15 @@ teléfono, código, estado y pago— y desde ahí se marca asistencia y se cobra
 Arriba sigue la búsqueda por código, teléfono o nombre, con las mismas dos acciones, para
 quien llega con su QR.
 
+**Precios.** Hay dos y conviene no confundirlos. El de la **disciplina**
+(`TipoClase.precioCop`) es el que se anuncia en la pantalla principal y el que hereda cada
+clase nueva; se cambia en `/admin/clases`, en la tarjeta «Precio por disciplina». El de la
+**clase** (`Clase.precioCop`) es el que se cobra de verdad, y se edita en el formulario de
+esa clase. Al subir el precio de una disciplina se ofrece aplicarlo a las clases ya
+programadas: solo alcanza a las futuras que aún tenían el precio anterior, nunca a las que
+ya pasaron —su precio es parte del historial de pagos— ni a las que tengan un precio propio,
+que se cuentan aparte para que una promoción no desaparezca sin avisar.
+
 **Plazo de cancelación.** El cliente cancela por su cuenta hasta `HORAS_LIMITE_CANCELACION`
 horas antes (2 por defecto); después la app se lo dice y no le ofrece el botón. El
 administrador puede cancelar siempre.

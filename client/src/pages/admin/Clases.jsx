@@ -109,6 +109,8 @@ export default function AdminClases() {
           </div>
         </div>
 
+        <PreciosPorDisciplina tipos={tipos ?? []} alGuardar={refrescar} />
+
         {error && <Aviso>{error}</Aviso>}
         {isLoading && <Cargando />}
 
@@ -203,6 +205,160 @@ export default function AdminClases() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Precio de cada disciplina: el que se anuncia en la pantalla principal y el que
+ * hereda cada clase nueva. Es distinto del precio de una clase suelta, que se
+ * edita en su formulario, y esa diferencia no se veía por ningún lado.
+ */
+function PreciosPorDisciplina({ tipos, alGuardar }) {
+  const [editando, setEditando] = useState(null);
+
+  if (tipos.length === 0) return null;
+
+  return (
+    <>
+      <div className="tarjeta p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="etiqueta">Precio por disciplina</p>
+          <p className="text-[11px] text-humo-500">El que ve el cliente en la pantalla principal</p>
+        </div>
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {tipos.map((t) => (
+            <li key={t.id}>
+              <button
+                onClick={() => setEditando(t)}
+                className="flex items-center gap-2 rounded-xl border border-carbon-600 bg-carbon-700 px-3 py-2 text-sm hover:border-carbon-500 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
+                <span className="font-semibold">{t.nombre}</span>
+                <span className="font-extrabold tabular-nums">{pesos(t.precioCop)}</span>
+                <span className="text-[11px] text-humo-500">Cambiar</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {editando && (
+        <FormularioPrecioTipo
+          key={editando.id}
+          tipo={editando}
+          onCerrar={() => setEditando(null)}
+          onGuardado={() => {
+            setEditando(null);
+            alGuardar();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function FormularioPrecioTipo({ tipo, onCerrar, onGuardado }) {
+  const queryClient = useQueryClient();
+  const [precio, setPrecio] = useState(String(tipo.precioCop));
+  const [aplicarAProximas, setAplicarAProximas] = useState(true);
+  const [error, setError] = useState(null);
+  const [resultado, setResultado] = useState(null);
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.admin.actualizarPrecioTipo(tipo.id, {
+        precioCop: Number(precio),
+        aplicarAProximas,
+      }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['adminTipos'] });
+      setResultado(r);
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  // Tras guardar se muestra qué pasó con las clases ya programadas: es la parte
+  // que no es obvia y la que decide si hay que ir a ajustar alguna a mano.
+  if (resultado) {
+    return (
+      <Hoja abierta onCerrar={onGuardado} titulo="Precio actualizado">
+        <div className="space-y-4">
+          <p className="text-sm">
+            {tipo.nombre} queda en{' '}
+            <span className="font-extrabold">{pesos(resultado.tipo.precioCop)}</span> en la pantalla
+            principal y en las clases que crees de ahora en adelante.
+          </p>
+          {aplicarAProximas && (
+            <p className="text-sm text-humo-300">
+              {resultado.clasesActualizadas === 0
+                ? 'No había clases próximas con el precio anterior.'
+                : `Se actualizaron ${resultado.clasesActualizadas} clase(s) ya programadas.`}
+              {resultado.clasesConPrecioPropio > 0 && (
+                <>
+                  {' '}
+                  {resultado.clasesConPrecioPropio} tenían un precio propio y quedaron como estaban;
+                  cámbialas una por una si también deben subir.
+                </>
+              )}
+            </p>
+          )}
+          <Boton className="w-full" onClick={onGuardado}>
+            Listo
+          </Boton>
+        </div>
+      </Hoja>
+    );
+  }
+
+  return (
+    <Hoja abierta onCerrar={onCerrar} titulo={`Precio de ${tipo.nombre}`}>
+      <div className="space-y-3">
+        <Campo etiqueta="Precio" ayuda="Es el que se anuncia y el que heredan las clases nuevas.">
+          <Entrada
+            type="number"
+            min="0"
+            step="1000"
+            value={precio}
+            onChange={(e) => setPrecio(e.target.value)}
+          />
+        </Campo>
+
+        <label className="flex items-start gap-3 cursor-pointer rounded-2xl border border-carbon-600 bg-carbon-700/50 p-4">
+          <input
+            type="checkbox"
+            checked={aplicarAProximas}
+            onChange={(e) => setAplicarAProximas(e.target.checked)}
+            className="w-5 h-5 mt-0.5 rounded accent-volt-500"
+          />
+          <span className="text-sm">
+            <span className="font-semibold">Aplicar a las clases ya programadas</span>
+            <span className="block text-xs text-humo-500 mt-0.5">
+              Solo las futuras que aún tengan el precio anterior. Las que pasaron y las que tengan un
+              precio propio no se tocan.
+            </span>
+          </span>
+        </label>
+
+        {error && <Aviso>{error}</Aviso>}
+
+        <div className="flex gap-2 pt-1">
+          <Boton variante="contorno" className="flex-1" onClick={onCerrar}>
+            Cancelar
+          </Boton>
+          <Boton
+            className="flex-1"
+            cargando={guardar.isPending}
+            disabled={precio === '' || Number(precio) < 0}
+            onClick={() => {
+              setError(null);
+              guardar.mutate();
+            }}
+          >
+            Guardar
+          </Boton>
+        </div>
+      </div>
+    </Hoja>
   );
 }
 
@@ -370,7 +526,7 @@ function FormularioClase({ clase, tipos, instructores, onCerrar, onGuardado }) {
               onChange={(e) => setForm((f) => ({ ...f, duracionMin: e.target.value }))}
             />
           </Campo>
-          <Campo etiqueta="Precio">
+          <Campo etiqueta="Precio" ayuda="Solo esta clase">
             <Entrada
               type="number"
               min="0"
@@ -428,7 +584,7 @@ function valoresIniciales(clase, tipos) {
       duracionMin: clase.duracionMin,
       cupoMaximo: clase.cupoMaximo,
       precioCop: clase.precioCop,
-      puestosBloqueados: '',
+      puestosBloqueados: (clase.puestosBloqueados ?? []).join(', '),
       notas: clase.notas ?? '',
     };
   }
