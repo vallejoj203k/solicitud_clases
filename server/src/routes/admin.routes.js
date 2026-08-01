@@ -13,6 +13,7 @@ import {
   actualizarPrecioTipo,
   cancelarClase,
   eliminarClase,
+  eliminarClasesEnLote,
 } from '../services/clase.service.js';
 import { actualizarEstadoPago } from '../services/pago.service.js';
 import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
@@ -63,6 +64,7 @@ adminRouter.get(
       desde: desde || undefined,
       hasta: hasta || undefined,
       incluirPasadas: incluirPasadas === 'true',
+      incluirCanceladas: true,
     });
     res.json(clases);
   })
@@ -96,6 +98,29 @@ adminRouter.patch(
   asyncHandler(async (req, res) => {
     const parcial = claseSchema.partial().extend({ estado: z.enum(['ACTIVA', 'CANCELADA']).optional() });
     res.json(await actualizarClase(req.params.id, parcial.parse(req.body)));
+  })
+);
+
+/**
+ * Borrado por rango. `simular: true` solo cuenta, para que la pantalla enseñe
+ * qué va a pasar antes de que el administrador confirme.
+ */
+const borradoEnLoteSchema = z.object({
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  tipoSlug: z.string().min(1).optional(),
+  cancelarResto: z.boolean().optional(),
+  simular: z.boolean().optional(),
+});
+
+adminRouter.post(
+  '/clases/eliminar-lote',
+  asyncHandler(async (req, res) => {
+    const datos = borradoEnLoteSchema.parse(req.body);
+    if (datos.hasta < datos.desde) {
+      throw new AppError('El rango termina antes de empezar.', 422, 'RANGO_INVALIDO');
+    }
+    res.json(await eliminarClasesEnLote(datos));
   })
 );
 

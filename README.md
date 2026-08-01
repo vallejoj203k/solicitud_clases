@@ -227,6 +227,17 @@ sale quién lo reservó y se puede marcar asistencia o cobrar ahí mismo. Esa vi
 `components/SalonClase.jsx` justamente para que las dos pantallas compartan código. La
 pestaña **Lista** es la de siempre: crear, editar, cancelar y borrar.
 
+**Borrar un rango.** Un lote semanal deja treinta clases y borrarlas de a una es absurdo,
+así que el calendario tiene «Borrar rango»: fechas, disciplina opcional y una **simulación**
+que dice en números qué va a pasar antes de tocar nada (`simular: true`). Las que tengan
+reservas confirmadas o pagos no se borran nunca; se ofrece cancelarlas, que las saca de la
+vista del cliente sin perder el registro.
+
+**Las canceladas se ven en el panel, no en la app.** `listarClases` filtra por `ACTIVA`
+salvo que se le pase `incluirCanceladas`, que solo hace la ruta del admin. Antes el panel
+tampoco las veía, y como el botón «Eliminar» solo aparecía para las canceladas, borrar una
+clase era imposible: al cancelarla desaparecía de la lista.
+
 **Borrar una clase.** Lo que impide borrarla es el **historial**, no que existan filas:
 se niega si tiene reservas confirmadas o con pago registrado (`409 CLASE_CON_HISTORIAL`) y
 en ese caso lo correcto es cancelarla, que deja de verse para los clientes. Las canceladas,
