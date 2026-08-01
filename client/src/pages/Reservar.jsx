@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client.js';
 import { guardarCliente, guardarToken, leerCliente } from '../lib/sesion.js';
-import { hoyISO, sumarDiasISO, hora12, fechaLarga, pesos } from '../lib/formato.js';
-import CarruselDias from '../components/CarruselDias.jsx';
+import { hoyISO, hora12, fechaLarga, pesos } from '../lib/formato.js';
+import CalendarioDias, { semanasDelMes } from '../components/CalendarioDias.jsx';
 import TarjetaHorario from '../components/TarjetaHorario.jsx';
 import MapaPuestos from '../components/MapaPuestos.jsx';
 import FondoDisciplina from '../components/FondoDisciplina.jsx';
@@ -52,13 +52,21 @@ export default function Reservar() {
   const [aceptaDatos, setAceptaDatos] = useState(false);
   const [nombreInvitado, setNombreInvitado] = useState('');
 
-  const desde = hoyISO();
-  const hasta = sumarDiasISO(desde, 6);
+  // Mes que muestra el calendario. Arranca en el actual y no deja retroceder
+  // más allá: no se reserva en el pasado.
+  const hoy = hoyISO();
+  const [anio, setAnio] = useState(Number(hoy.slice(0, 4)));
+  const [mes, setMes] = useState(Number(hoy.slice(5, 7)) - 1);
+  const esMesActual = anio === Number(hoy.slice(0, 4)) && mes === Number(hoy.slice(5, 7)) - 1;
+
+  const semanas = semanasDelMes(anio, mes);
+  const desde = semanas[0][0].fecha;
+  const hasta = semanas.at(-1).at(-1).fecha;
 
   const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['clases', slug, desde],
+    queryKey: ['clases', slug, desde, hasta],
     queryFn: () => api.clases({ tipo: slug, desde, hasta }),
     staleTime: 20_000,
   });
@@ -76,12 +84,13 @@ export default function Reservar() {
     [clasesPorDia]
   );
 
-  // Si el día de hoy ya no tiene clases, saltamos al primero que sí tenga.
+  // Si el día elegido no tiene clases -al entrar, o al cambiar de mes- se salta
+  // al primero del mes que sí tenga. Ahorra un toque en el caso normal.
   useEffect(() => {
     if (!data || claseId) return;
     if ((clasesPorDia[dia] ?? []).length > 0) return;
-    const primero = data.dias.find((d) => (clasesPorDia[d.fecha] ?? []).length > 0);
-    if (primero) setDia(primero.fecha);
+    const primero = Object.keys(clasesPorDia).sort()[0];
+    if (primero) setDia(primero);
   }, [data, clasesPorDia, dia, claseId]);
 
   // Reservas sin pagar de esta persona en esta clase, para recordarle que dejó
@@ -165,7 +174,11 @@ export default function Reservar() {
   };
 
   const claseActual = disponibilidad.data?.clase;
-  const acento = claseActual?.tipoClase.color ?? '#C8F751';
+  // En el paso del calendario todavía no hay clase elegida, así que el color de
+  // la disciplina sale de las clases cargadas; si no, el calendario de Spinning
+  // se pintaría del lima de Running.
+  const acento =
+    claseActual?.tipoClase.color ?? data?.clases?.[0]?.tipoClase?.color ?? '#C8F751';
   const enPasoPuesto = Boolean(claseId);
 
   // El mismo botón se usa en la barra inferior (vertical) y en el panel lateral
@@ -227,11 +240,21 @@ export default function Reservar() {
       {!enPasoPuesto ? (
         <PasoHorarios
           isLoading={isLoading}
-          dias={data?.dias ?? []}
+          anio={anio}
+          mes={mes}
+          esMesActual={esMesActual}
+          onMover={(n) => {
+            const d = new Date(Date.UTC(anio, mes + n, 1));
+            setAnio(d.getUTCFullYear());
+            setMes(d.getUTCMonth());
+          }}
           conteoPorDia={conteoPorDia}
           dia={dia}
           setDia={setDia}
+          hoy={hoy}
+          acento={acento}
           clases={clasesPorDia[dia] ?? []}
+          hayEnElMes={Object.keys(clasesPorDia).length > 0}
           onElegir={elegirClase}
         />
       ) : (
@@ -310,24 +333,56 @@ function Pasos({ actual, acento }) {
   );
 }
 
-function PasoHorarios({ isLoading, dias, conteoPorDia, dia, setDia, clases, onElegir }) {
+function PasoHorarios({
+  isLoading,
+  anio,
+  mes,
+  esMesActual,
+  onMover,
+  conteoPorDia,
+  dia,
+  setDia,
+  hoy,
+  acento,
+  clases,
+  hayEnElMes,
+  onElegir,
+}) {
   return (
     <div className="px-5 pt-4 animate-aparecer md:landscape:px-8">
-      <CarruselDias dias={dias} seleccionado={dia} onSeleccionar={setDia} conteoPorDia={conteoPorDia} />
+      {/* En tablet horizontal el calendario se queda a un lado y los horarios
+          ocupan el resto, para no dejar media pantalla vacía. */}
+      <div className="md:landscape:flex md:landscape:items-start md:landscape:gap-6">
+        <div className="md:landscape:w-[340px] md:landscape:shrink-0">
+          <CalendarioDias
+            anio={anio}
+            mes={mes}
+            onMover={onMover}
+            puedeRetroceder={!esMesActual}
+            conteoPorDia={conteoPorDia}
+            seleccionado={dia}
+            onSeleccionar={setDia}
+            hoy={hoy}
+            acento={acento}
+          />
+        </div>
 
-      {/* En tablet horizontal caben dos columnas de horarios: se ven más de una
-          vez y no hay que desplazar la lista. */}
-      <div className="mt-6 space-y-3 md:landscape:grid md:landscape:grid-cols-2 md:landscape:gap-3 md:landscape:space-y-0 lg:landscape:grid-cols-3">
+      <div className="mt-6 space-y-3 md:landscape:mt-0 md:landscape:flex-1 md:landscape:min-w-0 md:landscape:grid md:landscape:grid-cols-1 md:landscape:gap-3 md:landscape:space-y-0 lg:landscape:grid-cols-2">
         {isLoading && <Cargando />}
         {!isLoading && clases.length === 0 && (
           <Vacio
-            titulo="No hay clases este día"
-            descripcion="Elige otra fecha en el calendario de arriba."
+            titulo={hayEnElMes ? 'No hay clases este día' : 'No hay clases este mes'}
+            descripcion={
+              hayEnElMes
+                ? 'Los días con clase están marcados en el calendario.'
+                : 'Pasa al mes siguiente con la flecha del calendario.'
+            }
           />
         )}
         {clases.map((clase) => (
           <TarjetaHorario key={clase.id} clase={clase} onSeleccionar={onElegir} />
         ))}
+      </div>
       </div>
     </div>
   );

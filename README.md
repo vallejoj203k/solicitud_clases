@@ -4,8 +4,8 @@ App web full-stack para reservar puesto en clases de gimnasio. Mobile-first: des
 pantalla principal una reserva son **3 toques** (horario → puesto → confirmar), y entrando
 por la disciplina, 4.
 
-- **Cliente**: sin registro ni contraseña. Elige horario, elige puesto en un mapa tipo
-  cine/avión, deja nombre y teléfono la primera vez y listo. Recibe un código + QR para el
+- **Cliente**: sin registro ni contraseña. Elige disciplina, día en un calendario, horario,
+  puesto en un mapa tipo cine/avión, deja nombre y teléfono la primera vez y listo. Recibe un código + QR para el
   check-in en recepción y puede agregar la clase a su calendario (`.ics`).
 - **Administrador**: entra con contraseña desde el candado de la pantalla principal.
   Resumen del día, gestión de horarios, lista de inscritos por clase, registro manual de
@@ -218,6 +218,15 @@ ventana no hay ninguna, Recepción muestra las siguientes que existan con un avi
 explica. Antes respondía «No hay clases programadas» mientras el calendario y la app del
 cliente mostraban clases de dentro de dos semanas, y eso parecía que los datos estuvieran
 rotos cuando solo eran dos horizontes distintos.
+
+**Calendario del cliente.** Tras elegir disciplina, `/reservar/:slug` muestra un calendario
+del mes en vez del carrusel de siete días: con la programación repartida en varias semanas,
+el carrusel obligaba a arrastrar a ciegas para descubrir si había clase el jueves siguiente.
+Los días sin clase no se pueden tocar, los que sí llevan un punto del color de la disciplina
+y al entrar se preselecciona el primer día con cupo, así que en el caso normal no cuesta un
+toque de más. La rejilla se arma con aritmética en UTC —construirla con fechas locales corre
+un día en cuanto el navegador está en otra zona horaria que el gimnasio— y vive en
+`components/CalendarioDias.jsx`.
 
 **Calendario de clases.** `/admin/clases` abre en un calendario del mes con las clases de
 cada día —en escritorio con sus horas, en el teléfono con un punto por disciplina y el
@@ -663,7 +672,7 @@ desplazar la página**:
 | Pantalla | En horizontal |
 |---|---|
 | Principal | Running y Spinning en dos columnas que se estiran hasta llenar la ventana; los próximos horarios en rejilla, sin arrastrar |
-| Horarios | 2–3 columnas de tarjetas bajo el carrusel de días |
+| Horarios | El calendario a la izquierda y las clases del día a la derecha |
 | Puestos | Salón a la izquierda; puesto elegido, total y botón en un panel fijo a la derecha, en vez de la barra inferior |
 | Recepción | Datos de la clase en una columna y el mapa del salón en la otra |
 
