@@ -18,6 +18,7 @@ import {
   cx,
 } from '../../components/ui.jsx';
 import { IconoMas } from '../../components/Iconos.jsx';
+import CalendarioClases from './Calendario.jsx';
 import { hoyISO, sumarDiasISO, hora12, fechaLarga, pesos } from '../../lib/formato.js';
 
 const DIAS = [
@@ -35,6 +36,7 @@ export default function AdminClases() {
   const [rango, setRango] = useState({ desde: hoyISO(), hasta: sumarDiasISO(hoyISO(), 13) });
   const [tipo, setTipo] = useState('');
   const [editando, setEditando] = useState(null); // null | "nueva" | clase
+  const [vista, setVista] = useState('calendario');
   const [error, setError] = useState(null);
 
   const { data: tipos } = useQuery({ queryKey: ['adminTipos'], queryFn: api.admin.tiposClase });
@@ -82,6 +84,23 @@ export default function AdminClases() {
       />
 
       <div className="px-5 md:px-8 pb-10 space-y-5">
+        {/* Dos maneras de mirar lo mismo: el calendario para ver el mes y entrar
+            a un día, la lista para crear, editar y borrar. */}
+        <div className="flex gap-2">
+          <Chip activo={vista === 'calendario'} onClick={() => setVista('calendario')}>
+            Calendario
+          </Chip>
+          <Chip activo={vista === 'lista'} onClick={() => setVista('lista')}>
+            Lista
+          </Chip>
+        </div>
+
+        <PreciosPorDisciplina tipos={tipos ?? []} alGuardar={refrescar} />
+
+        {vista === 'calendario' && <CalendarioClases />}
+
+        {vista === 'lista' && (
+        <>
         <div className="flex flex-wrap items-end gap-3">
           <Campo etiqueta="Desde" className="w-[152px]">
             <Entrada
@@ -108,8 +127,6 @@ export default function AdminClases() {
             ))}
           </div>
         </div>
-
-        <PreciosPorDisciplina tipos={tipos ?? []} alGuardar={refrescar} />
 
         {error && <Aviso>{error}</Aviso>}
         {isLoading && <Cargando />}
@@ -191,6 +208,8 @@ export default function AdminClases() {
             </ul>
           </section>
         ))}
+        </>
+        )}
       </div>
 
       {/* Se monta solo al abrir: así los valores por defecto se calculan cuando

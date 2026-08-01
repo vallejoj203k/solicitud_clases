@@ -213,6 +213,14 @@ sin eso recepción vería el mismo nombre repetido y no sabría a quién está r
 nombre es opcional y aparece en la ficha del puesto, en la lista de inscritos, en la
 búsqueda y en el CSV, en la columna «Quién asiste».
 
+**Calendario de clases.** `/admin/clases` abre en un calendario del mes con las clases de
+cada día —en escritorio con sus horas, en el teléfono con un punto por disciplina y el
+conteo—. Al tocar un día se elige disciplina (si ese día solo hay una, se salta el paso) y
+después la clase, que abre el **mismo salón que usa Recepción**: tocando un puesto ocupado
+sale quién lo reservó y se puede marcar asistencia o cobrar ahí mismo. Esa vista vive en
+`components/SalonClase.jsx` justamente para que las dos pantallas compartan código. La
+pestaña **Lista** es la de siempre: crear, editar, cancelar y borrar.
+
 **Borrar una clase.** Lo que impide borrarla es el **historial**, no que existan filas:
 se niega si tiene reservas confirmadas o con pago registrado (`409 CLASE_CON_HISTORIAL`) y
 en ese caso lo correcto es cancelarla, que deja de verse para los clientes. Las canceladas,
