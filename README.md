@@ -213,6 +213,12 @@ sin eso recepción vería el mismo nombre repetido y no sabría a quién está r
 nombre es opcional y aparece en la ficha del puesto, en la lista de inscritos, en la
 búsqueda y en el CSV, en la columna «Quién asiste».
 
+**Borrar una clase.** Lo que impide borrarla es el **historial**, no que existan filas:
+se niega si tiene reservas confirmadas o con pago registrado (`409 CLASE_CON_HISTORIAL`) y
+en ese caso lo correcto es cancelarla, que deja de verse para los clientes. Las canceladas,
+expiradas y las que nunca se pagaron se van con la clase. Una clase activa **sin inscritos**
+—la típica creada a la hora equivocada— se borra directo, sin tener que cancelarla primero.
+
 **Plazo de cancelación.** El cliente cancela por su cuenta hasta `HORAS_LIMITE_CANCELACION`
 horas antes (2 por defecto); después la app se lo dice y no le ofrece el botón. El
 administrador puede cancelar siempre.

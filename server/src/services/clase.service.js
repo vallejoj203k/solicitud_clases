@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { expandirLayout } from '../utils/layout.js';
-import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
+import { ESTADOS_OCUPAN_PUESTO, ESTADOS_CONFIRMADOS } from '../config/estados.js';
 import { desdeFechaHoraLocal, sumarDias, fechaISOLocal } from '../utils/fechas.js';
 
 const incluir = { tipoClase: true, instructor: true };
@@ -214,14 +214,32 @@ export async function actualizarPrecioTipo(id, { precioCop, aplicarAProximas = f
 
 /** Borrado definitivo. Solo se permite si la clase no tiene reservas. */
 export async function eliminarClase(id) {
-  const reservas = await prisma.reserva.count({ where: { claseId: id } });
-  if (reservas > 0) {
+  // Lo que impide borrar es el HISTORIAL, no la existencia de filas: una
+  // reserva confirmada o con plata de por medio no se puede evaporar.
+  //
+  // Contar todas las reservas dejaba la clase en un callejón sin salida: al
+  // cancelarla, las suyas quedan en CANCELADA -siguen siendo filas- y el
+  // borrado respondía "cancélala en vez de eliminarla" a alguien que acababa de
+  // cancelarla. Las canceladas, expiradas y las que nunca se pagaron no son
+  // historial: se van con la clase (la relación es onDelete: Cascade).
+  const historial = await prisma.reserva.count({
+    where: {
+      claseId: id,
+      OR: [{ estado: { in: ESTADOS_CONFIRMADOS } }, { estadoPago: 'PAGADO' }],
+    },
+  });
+
+  if (historial > 0) {
     throw new AppError(
-      'Esta clase tiene reservas. Cancélala en vez de eliminarla para conservar el historial.',
+      `Esta clase tiene ${historial} reserva${historial === 1 ? '' : 's'} confirmada${
+        historial === 1 ? '' : 's'
+      } o con pago registrado, así que no se puede borrar sin perder ese historial. Cancélala: deja de verse para los clientes y las reservas quedan canceladas.`,
       409,
-      'CLASE_CON_RESERVAS'
+      'CLASE_CON_HISTORIAL',
+      { reservas: historial }
     );
   }
+
   await prisma.clase.delete({ where: { id } });
   return { ok: true };
 }
