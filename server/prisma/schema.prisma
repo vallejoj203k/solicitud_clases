@@ -160,11 +160,17 @@ model Reserva {
   // reservas que no pasaron por la pasarela.
   expiraEn    DateTime?
 
+  // Cuando el cliente dijo "ya transferi". Solo aplica al cobro por
+  // transferencia, donde no hay pasarela que avise: es lo que pone la reserva
+  // en la cola de recepcion para que alguien coteje y confirme.
+  avisoPagoEn DateTime?
+
   creadoEn    DateTime  @default(now())
   canceladoEn DateTime?
 
   @@index([claseId, estado])
   @@index([estado, expiraEn])
+  @@index([estado, avisoPagoEn])
   @@index([usuarioId, creadoEn])
   @@index([estadoPago])
   @@index([creadoEn])

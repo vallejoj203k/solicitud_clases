@@ -476,9 +476,13 @@ function HojaConfirmacion({
           <span className="text-xl font-extrabold tracking-tightest">{pesos(clase.precioCop)}</span>
         </div>
         <p className="text-xs text-humo-500 -mt-2 px-1">
-          {config?.pagoEnLinea
-            ? `Te llevamos a pagar. Te guardamos el puesto ${config.minutosParaPagar} minutos mientras completas el pago.`
-            : 'Pagas en recepción antes de la clase (efectivo o transferencia).'}
+          {
+            {
+              wompi: `Te llevamos a pagar. Te guardamos el puesto ${config?.minutosParaPagar} minutos mientras completas el pago.`,
+              transferencia: `Te mostramos a dónde transferir. Te guardamos el puesto ${config?.minutosParaPagar} minutos mientras el gimnasio verifica el pago.`,
+              manual: 'Pagas en recepción antes de la clase (efectivo o transferencia).',
+            }[config?.modoPago ?? 'manual']
+          }
         </p>
 
         {error && <Aviso>{error.message}</Aviso>}
@@ -490,7 +494,8 @@ function HojaConfirmacion({
           onClick={onConfirmar}
           style={datosCompletos && !cargando ? { backgroundColor: acento } : undefined}
         >
-          {config?.pagoEnLinea ? 'Ir a pagar' : 'Confirmar reserva'}
+          {{ wompi: 'Ir a pagar', transferencia: 'Continuar al pago' }[config?.modoPago] ??
+            'Confirmar reserva'}
         </Boton>
       </div>
     </Hoja>

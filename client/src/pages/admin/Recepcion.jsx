@@ -49,7 +49,13 @@ function useAccionesMostrador(alActualizar) {
   const [error, setError] = useState(null);
 
   const refrescar = () => {
-    for (const clave of ['adminMapa', 'adminAgenda', 'adminBuscar', 'adminDashboard']) {
+    for (const clave of [
+      'adminMapa',
+      'adminAgenda',
+      'adminBuscar',
+      'adminDashboard',
+      'adminPagosPorConfirmar',
+    ]) {
       queryClient.invalidateQueries({ queryKey: [clave] });
     }
   };
@@ -66,7 +72,8 @@ function useAccionesMostrador(alActualizar) {
   });
 
   const pago = useMutation({
-    mutationFn: (id) => api.admin.marcarPago(id, { estadoPago: 'PAGADO', metodoPago: 'efectivo' }),
+    mutationFn: ({ id, metodoPago }) =>
+      api.admin.marcarPago(id, { estadoPago: 'PAGADO', metodoPago }),
     onSuccess: alTerminar,
     onError: (e) => setError(e.message),
   });
@@ -76,7 +83,11 @@ function useAccionesMostrador(alActualizar) {
     limpiarError: () => setError(null),
     guardando: asistencia.isPending || pago.isPending,
     marcarAsistencia: (id) => asistencia.mutate({ id, asistio: true }),
-    cobrarEfectivo: (id) => pago.mutate(id),
+    cobrarEfectivo: (id) => pago.mutate({ id, metodoPago: 'efectivo' }),
+    // Confirmar una transferencia hace lo mismo que cobrar en efectivo, pero
+    // además saca el puesto de "apartado" y lo deja reservado en firme: de eso
+    // se encarga el servidor.
+    confirmarTransferencia: (id) => pago.mutate({ id, metodoPago: 'transferencia' }),
   };
 }
 
@@ -129,6 +140,8 @@ function VistaAgenda({ onAbrirClase }) {
           <ResultadosBusqueda resultados={resultados} cargando={isFetching && !resultados} />
         ) : (
           <>
+            <PagosPorConfirmar />
+
             {isLoading && <Cargando texto="Cargando la agenda…" />}
             {!isLoading && (agenda ?? []).length === 0 && (
               <Vacio
@@ -193,6 +206,98 @@ function VistaAgenda({ onAbrirClase }) {
       </div>
     </div>
   );
+}
+
+/* --------------------------------------------------- Pagos por confirmar */
+
+/**
+ * Cola del cobro por transferencia: quienes ya transfirieron y esperan que
+ * alguien coteje contra la notificación del banco.
+ *
+ * La regla del mostrador es cotejar contra la notificación que le llega al
+ * celular del gimnasio, NO contra la captura que muestre el cliente: por eso la
+ * tarjeta pone el monto y el código de la reserva en grande, que es lo que hay
+ * que buscar en el movimiento.
+ *
+ * Si no hay nadie esperando, la sección no se dibuja: en modo pasarela o cobro
+ * en recepción esta cola siempre está vacía y no debe estorbar.
+ */
+function PagosPorConfirmar() {
+  const { data } = useQuery({
+    queryKey: ['adminPagosPorConfirmar'],
+    queryFn: api.admin.pagosPorConfirmar,
+    // El cliente transfiere estando de pie en el mostrador: se refresca seguido.
+    refetchInterval: 15_000,
+  });
+
+  const acciones = useAccionesMostrador();
+  const avisaron = (data ?? []).filter((p) => p.avisoPagoEn);
+
+  if (avisaron.length === 0) return null;
+
+  return (
+    <section className="rounded-3xl border border-volt-500/40 bg-volt-500/[0.06] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="etiqueta text-volt-500">Pagos por confirmar</p>
+        <span className="text-xs text-humo-500">Coteja con la notificación del banco</span>
+      </div>
+
+      {acciones.error && (
+        <div className="mt-3">
+          <Aviso>{acciones.error}</Aviso>
+        </div>
+      )}
+
+      <ul className="mt-3 space-y-2">
+        {avisaron.map((p) => (
+          <li key={p.id} className="tarjeta p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-bold tracking-tight truncate">{p.usuario.nombre}</p>
+                <p className="text-xs text-humo-500">{p.usuario.telefono}</p>
+                <p className="mt-1.5 text-sm">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
+                    style={{ backgroundColor: p.clase.color }}
+                  />
+                  {p.clase.tipoClase} · {hora12(p.clase.hora)} · Puesto {p.puestoCodigo}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-xl font-extrabold tabular-nums leading-none">
+                  {pesos(p.montoCop)}
+                </p>
+                <p className="mt-1 text-[11px] tracking-[0.16em] font-bold">{p.codigo}</p>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                disabled={acciones.guardando}
+                onClick={() => acciones.confirmarTransferencia(p.id)}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold bg-volt-500 text-carbon-900 hover:bg-volt-400 disabled:opacity-60 transition-colors inline-flex items-center gap-1.5"
+              >
+                <IconoCheck className="w-4 h-4" />
+                Confirmar pago
+              </button>
+              <span className="text-xs text-humo-500">
+                avisó {textoDesde(p.avisoPagoEn)}
+                {p.minutosRestantes !== null && ` · vence en ${p.minutosRestantes} min`}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** "hace 2 min" a partir de una fecha ISO. */
+function textoDesde(iso) {
+  const minutos = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutos < 1) return 'hace un momento';
+  if (minutos < 60) return `hace ${minutos} min`;
+  return `hace ${Math.floor(minutos / 60)} h`;
 }
 
 function textoEspera(minutos) {

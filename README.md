@@ -224,11 +224,16 @@ propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 
 ## Pagos
 
-Dos modos, según `PAGO_MODO`:
+Tres modos, según `PAGO_MODO`:
 
 - **`manual`** (por defecto): el cliente reserva y paga en recepción; el administrador
   marca el pago desde el panel.
-- **`wompi`**: el cliente paga antes de que su cupo quede confirmado.
+- **`wompi`**: el cliente paga en la pasarela antes de que su cupo quede confirmado.
+- **`transferencia`**: el cliente transfiere a la llave del gimnasio y recepción confirma.
+  Comisión 0 % y le sirve a cualquier banco de Bre-B, a cambio de un toque manual.
+
+Si el modo elegido no tiene con qué operar —faltan las llaves de Wompi, o falta
+`TRANSFERENCIA_LLAVE`— se cae a `manual` en vez de dejar la app sin poder reservar.
 
 ### El puesto se aparta, no se vende, mientras se paga
 
@@ -265,6 +270,33 @@ tarifa distinta**: la tarjeta lleva un costo fijo por transacción y el Botón B
 Nequi no. En clases baratas ese fijo es la mayor parte de la comisión, así que el reporte
 de pagos y el CSV muestran el medio y permiten calcular lo que se lleva la pasarela. Un
 medio nuevo que Wompi agregue no rompe nada: cae en «En línea».
+
+### Cobro por transferencia (llave Bre-B)
+
+Con `PAGO_MODO=transferencia` el puesto se aparta igual que con la pasarela —mismo estado
+`PENDIENTE_PAGO`, mismo `expiraEn`, mismo barrido que lo libera— pero **nadie avisa que el
+pago entró**: Bre-B le notifica al celular del gimnasio, no al servidor. Así que la
+confirmación es humana:
+
+1. El cliente ve la llave, el QR, el **monto exacto** y el **código de la reserva** para
+   poner en la descripción. La llave se copia de un toque.
+2. Toca **«Ya transferí»**. Eso no confirma nada: sella `avisoPagoEn` y lo pone en la cola
+   del mostrador. Es idempotente —tocarlo dos veces conserva la hora del primer aviso, que
+   es la que ordena la cola.
+3. En Recepción aparece **«Pagos por confirmar»** con nombre, monto y código. Recepción
+   coteja **contra la notificación del banco, no contra la captura que muestre el cliente**,
+   y confirma de un toque.
+4. Confirmar deja la reserva `CONFIRMADA`, borra `expiraEn` y dispara el correo con el
+   `.ics`. La pantalla del cliente se actualiza sola, sin recargar.
+5. Si nadie confirma a tiempo, el puesto se libera como cualquier otro apartado.
+
+Marcar pagada una reserva apartada **siempre** la confirma y le quita el vencimiento, venga
+de la cola o del botón de cobro en efectivo. Sin eso, el barrido de vencidas liberaría más
+tarde un puesto ya pagado.
+
+Variables: `TRANSFERENCIA_LLAVE` (obligatoria), `TRANSFERENCIA_TITULAR`,
+`TRANSFERENCIA_ENTIDAD` y `TRANSFERENCIA_QR` (ruta a la imagen dentro de `/images`, que se
+publica sola; por ejemplo `/images/qr.jpg`).
 
 ### Poner Wompi en marcha
 

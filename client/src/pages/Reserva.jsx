@@ -28,6 +28,8 @@ export default function Reserva() {
     queryFn: () => api.reserva(codigo),
   });
 
+  const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
+
   const esperandoPago = reserva?.estado === 'PENDIENTE_PAGO';
 
   const { data: estadoPago } = useQuery({
@@ -78,8 +80,19 @@ export default function Reserva() {
   const cancelada = reserva.estado === 'CANCELADA';
   const expirada = reserva.estado === 'EXPIRADA';
 
-  // Todavía en la pasarela o esperando la confirmación de Wompi.
+  // El puesto está apartado mientras se paga. Cómo se paga depende del modo:
+  // por pasarela lo resuelve Wompi, por transferencia lo confirma recepción.
   if (reserva.estado === 'PENDIENTE_PAGO') {
+    if (config?.modoPago === 'transferencia') {
+      return (
+        <EsperandoTransferencia
+          reserva={reserva}
+          acento={acento}
+          datos={config.transferencia}
+          avisado={Boolean(estadoPago?.avisoPagoEn ?? reserva.avisoPagoEn)}
+        />
+      );
+    }
     return <EsperandoPago reserva={reserva} acento={acento} notas={estadoPago?.notasPago} />;
   }
 
@@ -205,6 +218,147 @@ export default function Reserva() {
           Volver al inicio
         </Link>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Cobro por transferencia a la llave del gimnasio.
+ *
+ * No hay pasarela que avise, así que el trato es explícito: aquí están los
+ * datos, el puesto queda apartado unos minutos, y cuando la persona dice que ya
+ * transfirió, recepción coteja contra la notificación del banco y confirma. La
+ * pantalla se sigue refrescando sola, así que la confirmación aparece sin que
+ * haya que recargar nada.
+ */
+function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
+  const [avisando, setAvisando] = useState(false);
+  const [yaAviso, setYaAviso] = useState(avisado);
+  const [error, setError] = useState(null);
+  const [copiado, setCopiado] = useState(false);
+
+  const minutos = reserva.expiraEn
+    ? Math.max(0, Math.round((new Date(reserva.expiraEn).getTime() - Date.now()) / 60000))
+    : null;
+
+  const copiarLlave = async () => {
+    try {
+      await navigator.clipboard.writeText(datos.llave);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // Sin permiso de portapapeles no pasa nada: la llave está a la vista.
+    }
+  };
+
+  const avisar = async () => {
+    setAvisando(true);
+    setError(null);
+    try {
+      await api.avisarPago(reserva.codigo);
+      setYaAviso(true);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAvisando(false);
+    }
+  };
+
+  return (
+    <div className="min-h-dvh px-5 py-10 max-w-sm mx-auto">
+      <div className="text-center">
+        <p className="etiqueta">Puesto apartado</p>
+        <h1 className="mt-1 text-2xl font-extrabold tracking-tightest">
+          {yaAviso ? 'Estamos verificando tu pago' : 'Transfiere para confirmar'}
+        </h1>
+        <p className="mt-2 text-sm text-humo-500">
+          Te guardamos el puesto{' '}
+          <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span>
+          {minutos !== null && minutos > 0 ? ` por ${minutos} minuto${minutos === 1 ? '' : 's'} más` : ''}.
+        </p>
+      </div>
+
+      <div className="tarjeta mt-6 p-5 space-y-4">
+        <div className="text-center">
+          <p className="etiqueta">Monto exacto</p>
+          <p className="text-3xl font-extrabold tracking-tightest">{pesos(reserva.montoCop)}</p>
+        </div>
+
+        {datos.qr && (
+          <img
+            src={datos.qr}
+            alt="Código QR para transferir"
+            className="mx-auto w-44 h-44 rounded-2xl bg-white p-2 object-contain"
+          />
+        )}
+
+        <div>
+          <p className="etiqueta mb-1.5">Llave</p>
+          <button
+            onClick={copiarLlave}
+            className="w-full flex items-center justify-between gap-3 rounded-2xl bg-carbon-700 border border-carbon-600 px-4 py-3 text-left hover:border-carbon-500 transition-colors"
+          >
+            <span className="font-bold tracking-tight truncate">{datos.llave}</span>
+            <span className="text-xs font-semibold shrink-0" style={{ color: acento }}>
+              {copiado ? '¡Copiada!' : 'Copiar'}
+            </span>
+          </button>
+          {(datos.titular || datos.entidad) && (
+            <p className="mt-1.5 text-xs text-humo-500">
+              {[datos.titular, datos.entidad].filter(Boolean).join(' · ')}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <p className="etiqueta mb-1.5">Pon esto en la descripción</p>
+          <p className="rounded-2xl bg-carbon-700 border border-carbon-600 px-4 py-3 font-extrabold tracking-[0.2em] text-center">
+            {reserva.codigo}
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4">
+          <Aviso>{error}</Aviso>
+        </div>
+      )}
+
+      <div className="mt-6">
+        {yaAviso ? (
+          <div className="rounded-2xl border border-carbon-600 bg-carbon-700/50 p-4 flex items-start gap-3">
+            <span
+              className="mt-0.5 w-5 h-5 shrink-0 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: acento, borderTopColor: 'transparent' }}
+            />
+            <p className="text-sm text-humo-300">
+              Recepción está verificando tu transferencia. Esta pantalla se actualiza sola; no
+              tienes que hacer nada más.
+            </p>
+          </div>
+        ) : (
+          <Boton
+            className="w-full"
+            cargando={avisando}
+            onClick={avisar}
+            style={{ backgroundColor: acento }}
+          >
+            Ya transferí
+          </Boton>
+        )}
+
+        <Link
+          to="/mis-reservas"
+          className="mt-4 block text-center text-sm text-humo-500 hover:text-humo-100"
+        >
+          Ver mis reservas
+        </Link>
+      </div>
+
+      <p className="mt-6 text-xs text-humo-500 text-center">
+        Si el tiempo se vence antes de que verifiquemos el pago, el puesto vuelve a quedar libre
+        y en recepción te ayudan.
+      </p>
     </div>
   );
 }

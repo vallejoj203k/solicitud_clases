@@ -20,6 +20,20 @@ import { AppError } from '../utils/errores.js';
 
 export const publicRouter = Router();
 
+/**
+ * Modo de cobro efectivo: el configurado, pero solo si tiene con qué operar.
+ * Si falta la llave o las credenciales se cae a "manual" y se cobra en
+ * recepción, que es preferible a dejar la app sin poder reservar.
+ */
+export function modoDeCobro() {
+  if (env.pagos.modo === 'wompi' && wompiConfigurado()) return 'wompi';
+  if (env.pagos.modo === 'transferencia' && env.transferencia.llave) return 'transferencia';
+  return 'manual';
+}
+
+/** ¿Hay que pagar antes de que el puesto quede firme? */
+const cobroPrevio = () => modoDeCobro() !== 'manual';
+
 /** Forma con la que viaja una reserva al frontend. */
 function serializarReserva(r) {
   return {
@@ -30,6 +44,9 @@ function serializarReserva(r) {
     estadoPago: r.estadoPago,
     montoCop: r.montoCop,
     expiraEn: r.expiraEn?.toISOString() ?? null,
+    // Para que la pantalla de espera sepa si ya se avisó del pago y no vuelva a
+    // ofrecer el botón.
+    avisoPagoEn: r.avisoPagoEn?.toISOString() ?? null,
     creadoEn: r.creadoEn.toISOString(),
     cliente: r.usuario ? { id: r.usuario.id, nombre: r.usuario.nombre, telefono: r.usuario.telefono } : null,
     clase: {
@@ -134,21 +151,25 @@ publicRouter.post(
       );
     }
 
-    // Solo se cobra en línea si está activado Y hay llaves; si falta algo se
+    // El puesto queda apartado -no confirmado- cuando hay que pagar antes, sea
+    // por pasarela o por transferencia. Si falta la configuración del modo se
     // sigue cobrando en recepción en vez de dejar la app sin reservar.
-    const pagoEnLinea = env.pagos.modo === 'wompi' && wompiConfigurado();
-    const reserva = await crearReserva({ ...datos, usuarioId, pagoEnLinea });
+    const reserva = await crearReserva({ ...datos, usuarioId, pagoEnLinea: cobroPrevio() });
 
-    // Con pago en línea el cupo todavía no es firme: la confirmación se envía
-    // cuando Wompi avise que el pago entró.
+    // Con pago previo el cupo todavía no es firme: la confirmación se envía
+    // cuando el pago entre (Wompi) o cuando recepción lo verifique.
     let checkout = null;
     if (reserva.estado === 'PENDIENTE_PAGO') {
-      checkout = construirCheckout({
-        referencia: reserva.codigo,
-        montoCop: reserva.montoCop,
-        correo: reserva.usuario.email ?? undefined,
-        urlRetorno: `${env.appUrl}/reserva/${reserva.codigo}`,
-      }).url;
+      // Por transferencia no hay a dónde mandar al cliente: los datos para
+      // pagar viajan en /configuracion y se muestran en la misma app.
+      if (env.pagos.modo === 'wompi') {
+        checkout = construirCheckout({
+          referencia: reserva.codigo,
+          montoCop: reserva.montoCop,
+          correo: reserva.usuario.email ?? undefined,
+          urlRetorno: `${env.appUrl}/reserva/${reserva.codigo}`,
+        }).url;
+      }
     } else {
       // El correo es un extra: si falla, la reserva ya quedó hecha igual.
       enviarConfirmacionReserva(reserva, generarIcs(reserva)).catch(() => {});
@@ -176,6 +197,43 @@ publicRouter.get(
   asyncHandler(async (req, res) => {
     const reserva = await obtenerPorCodigo(req.params.codigo);
     res.json(serializarReserva(reserva));
+  })
+);
+
+/**
+ * "Ya transferí": pone la reserva en la cola de recepción.
+ *
+ * No confirma nada -de eso se encarga quien mira la notificación del banco-,
+ * solo avisa que hay alguien esperando. Es idempotente: tocar el botón dos
+ * veces conserva la hora del primer aviso, que es la que ordena la cola.
+ */
+publicRouter.post(
+  '/reservas/:codigo/aviso-pago',
+  asyncHandler(async (req, res) => {
+    const reserva = await obtenerPorCodigo(req.params.codigo);
+
+    if (reserva.estado !== 'PENDIENTE_PAGO') {
+      throw new AppError(
+        reserva.estadoPago === 'PAGADO'
+          ? 'Esta reserva ya está confirmada.'
+          : 'Esta reserva ya no está esperando pago.',
+        409,
+        'NO_ESPERA_PAGO'
+      );
+    }
+    if (reserva.expiraEn && reserva.expiraEn.getTime() < Date.now()) {
+      throw new AppError('Se venció el tiempo para pagar y el puesto quedó libre.', 409, 'PAGO_EXPIRADO');
+    }
+
+    const actualizada = reserva.avisoPagoEn
+      ? reserva
+      : await prisma.reserva.update({
+          where: { id: reserva.id },
+          data: { avisoPagoEn: new Date() },
+          include: { clase: { include: { tipoClase: true, instructor: true } }, usuario: true },
+        });
+
+    res.json({ avisoPagoEn: actualizada.avisoPagoEn?.toISOString() ?? null });
   })
 );
 
@@ -240,10 +298,15 @@ publicRouter.post(
 
 /** Datos que el frontend necesita mostrar (plazos, datos del gimnasio). */
 publicRouter.get('/configuracion', (_req, res) => {
+  const modo = modoDeCobro();
   res.json({
     horasLimiteCancelacion: env.horasLimiteCancelacion,
-    pagoEnLinea: env.pagos.modo === 'wompi' && wompiConfigurado(),
+    modoPago: modo,
+    // Se conserva por compatibilidad con lo que ya lee el cliente.
+    pagoEnLinea: modo === 'wompi',
     minutosParaPagar: env.pagos.minutosParaPagar,
+    // Datos para transferir. Solo se publican cuando ese es el modo activo.
+    transferencia: modo === 'transferencia' ? env.transferencia : null,
     gimnasio: env.gimnasio,
   });
 });

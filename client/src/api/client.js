@@ -87,6 +87,7 @@ export const api = {
   estadoPago: (codigo, idTransaccion) =>
     pedir(`/reservas/${codigo}/estado-pago${idTransaccion ? `?id=${encodeURIComponent(idTransaccion)}` : ''}`),
   checkout: (codigo) => pedir(`/reservas/${codigo}/checkout`),
+  avisarPago: (codigo) => pedir(`/reservas/${codigo}/aviso-pago`, { metodo: 'POST' }),
 
   // --- Admin ---------------------------------------------------------------
   admin: {
@@ -136,6 +137,7 @@ export const api = {
       );
     },
     buscar: (q) => pedir(`/admin/buscar?q=${encodeURIComponent(q)}`, { tipoToken: 'admin' }),
+    pagosPorConfirmar: () => pedir('/admin/pagos-por-confirmar', { tipoToken: 'admin' }),
     agenda: (dias = 7) => pedir(`/admin/agenda?dias=${dias}`, { tipoToken: 'admin' }),
     mapaClase: (id) => pedir(`/admin/clases/${id}/mapa`, { tipoToken: 'admin' }),
     clientes: (q) => pedir(`/admin/clientes${q ? `?q=${encodeURIComponent(q)}` : ''}`, { tipoToken: 'admin' }),
