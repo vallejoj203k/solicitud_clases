@@ -120,11 +120,18 @@ ejemplo), se puede añadir al JSON del layout sin migrar datos.
 }
 ```
 
-Los salones actuales: **Spinning** 18 bicicletas en 3 columnas × 6 filas (`A1`…`F3`) y
-**Running** 6 trotadoras en 2 columnas × 3 filas (`1`…`6`). Se definen en
+Los salones actuales: **Spinning** 18 bicicletas en 6 columnas × 3 filas (`A1`…`C6`) y
+**Running** 6 trotadoras en 3 columnas × 2 filas (`1`…`6`). Se definen en
 `server/src/config/catalogoInicial.js`; cambiarlos en una base que ya existe requiere una
-migración de datos (ver `migrations/*_salon_real`), porque el bootstrap de arranque solo
-inserta lo que falta y nunca sobrescribe.
+migración de datos (ver `migrations/*_salon_real` y `*_salon_transpuesto`), porque el
+bootstrap de arranque solo inserta lo que falta y nunca sobrescribe.
+
+Cuando el cambio altera el **conjunto de códigos** —como al trasponer el salón de
+Spinning, donde `A1`…`F3` pasa a ser `A1`…`C6`— la migración tiene que mover las reservas
+o la mitad quedarían apuntando a un puesto inexistente. La transposición se hace en dos
+pasos con un prefijo temporal: el índice único parcial de puesto activo se evalúa fila a
+fila, y un intercambio directo (`A2`→`B1` mientras `B1`→`A2`) chocaría consigo mismo a
+mitad de camino.
 
 Al crear una clase, el campo **Cupo** se rellena solo con el tamaño del salón (18 o 6) y
 se puede bajar; no se puede subir por encima del salón (`422 CUPO_EXCEDE_LAYOUT`).
@@ -186,10 +193,13 @@ Arriba sigue la búsqueda por código, teléfono o nombre, con las mismas dos ac
 quien llega con su QR.
 
 **Precios.** Hay dos y conviene no confundirlos. El de la **disciplina**
-(`TipoClase.precioCop`) es el que se anuncia en la pantalla principal y el que hereda cada
-clase nueva; se cambia en `/admin/clases`, en la tarjeta «Precio por disciplina». El de la
-**clase** (`Clase.precioCop`) es el que se cobra de verdad, y se edita en el formulario de
-esa clase. Al subir el precio de una disciplina se ofrece aplicarlo a las clases ya
+(`TipoClase.precioCop`) es la plantilla: el precio con el que nace cada clase nueva. Se
+cambia en `/admin/clases`, en la tarjeta «Precio por disciplina», y el cliente nunca lo ve.
+El de la **clase** (`Clase.precioCop`) es el que se cobra de verdad, se edita en el
+formulario de esa clase y es el único que se le muestra al cliente: al abrir la clase,
+junto al mapa de puestos, y otra vez en la confirmación. La pantalla principal **no anuncia
+ningún precio**, precisamente porque cada clase puede tener el suyo y un número solo en la
+portada terminaba contradiciendo lo que después se cobraba. Al subir el precio de una disciplina se ofrece aplicarlo a las clases ya
 programadas: solo alcanza a las futuras que aún tenían el precio anterior, nunca a las que
 ya pasaron —su precio es parte del historial de pagos— ni a las que tengan un precio propio,
 que se cuentan aparte para que una promoción no desaparezca sin avisar.

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import { Cargando, Aviso, BarraDisponibilidad, cx } from '../components/ui.jsx';
 import { ICONOS_DISCIPLINA, IconoFlecha, IconoCandado, IconoCalendario } from '../components/Iconos.jsx';
-import { hora12, pesos } from '../lib/formato.js';
+import { hora12 } from '../lib/formato.js';
 import { leerCliente } from '../lib/sesion.js';
 
 /**
@@ -128,13 +128,10 @@ function TarjetaDisciplina({ tipo, onIrAPuestos }) {
           }}
         />
 
-        <span
-          className="absolute top-4 right-4 px-2.5 py-1 rounded-full text-[11px] font-bold backdrop-blur-sm"
-          style={{ backgroundColor: `${acento}E6`, color: '#0F1115' }}
-        >
-          {pesos(tipo.precioCop)}
-        </span>
-
+        {/* Aquí iba el precio de la disciplina, pero cada clase puede tener el
+            suyo: anunciar uno solo terminaba contradiciendo lo que después se
+            cobraba. El precio real se muestra al abrir la clase, junto al mapa
+            de puestos, y otra vez en la confirmación. */}
         <div className="absolute inset-x-0 bottom-0 p-5 flex items-end justify-between gap-4">
           <div className="min-w-0">
             <div

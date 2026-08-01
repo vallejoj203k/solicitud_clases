@@ -209,9 +209,12 @@ export default function AdminClases() {
 }
 
 /**
- * Precio de cada disciplina: el que se anuncia en la pantalla principal y el que
- * hereda cada clase nueva. Es distinto del precio de una clase suelta, que se
- * edita en su formulario, y esa diferencia no se veía por ningún lado.
+ * Precio de cada disciplina: el que hereda cada clase nueva. Es distinto del
+ * precio de una clase suelta, que se edita en su formulario, y esa diferencia no
+ * se veía por ningún lado.
+ *
+ * El cliente nunca ve este número: en la pantalla principal no se anuncia
+ * ningún precio, justamente porque cada clase puede tener el suyo.
  */
 function PreciosPorDisciplina({ tipos, alGuardar }) {
   const [editando, setEditando] = useState(null);
@@ -223,7 +226,7 @@ function PreciosPorDisciplina({ tipos, alGuardar }) {
       <div className="tarjeta p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="etiqueta">Precio por disciplina</p>
-          <p className="text-[11px] text-humo-500">El que ve el cliente en la pantalla principal</p>
+          <p className="text-[11px] text-humo-500">Con el que nacen las clases nuevas</p>
         </div>
         <ul className="mt-3 flex flex-wrap gap-2">
           {tipos.map((t) => (
@@ -285,8 +288,8 @@ function FormularioPrecioTipo({ tipo, onCerrar, onGuardado }) {
         <div className="space-y-4">
           <p className="text-sm">
             {tipo.nombre} queda en{' '}
-            <span className="font-extrabold">{pesos(resultado.tipo.precioCop)}</span> en la pantalla
-            principal y en las clases que crees de ahora en adelante.
+            <span className="font-extrabold">{pesos(resultado.tipo.precioCop)}</span> en las clases
+            que crees de ahora en adelante.
           </p>
           {aplicarAProximas && (
             <p className="text-sm text-humo-300">
@@ -313,7 +316,7 @@ function FormularioPrecioTipo({ tipo, onCerrar, onGuardado }) {
   return (
     <Hoja abierta onCerrar={onCerrar} titulo={`Precio de ${tipo.nombre}`}>
       <div className="space-y-3">
-        <Campo etiqueta="Precio" ayuda="Es el que se anuncia y el que heredan las clases nuevas.">
+        <Campo etiqueta="Precio" ayuda="Es el que heredan las clases nuevas de esta disciplina.">
           <Entrada
             type="number"
             min="0"
