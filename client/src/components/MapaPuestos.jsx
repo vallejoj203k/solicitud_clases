@@ -19,14 +19,27 @@ import { cx } from './ui.jsx';
  */
 const ANCHO_MIN_PUESTO = 38; // px — suficiente para el dedo sin necesidad de zoom
 // Tope de tamaño: en un salón angosto (3 columnas) los puestos crecerían hasta
-// ocupar toda la pantalla y las últimas filas quedarían fuera de vista.
-const ANCHO_MAX_PUESTO = 60;
+// ocupar toda la pantalla y las últimas filas quedarían fuera de vista. El valor
+// sale de `--ancho-puesto` (index.css), que sube en tablet horizontal.
+const ANCHO_MAX_PUESTO = 'var(--ancho-puesto, 60px)';
 const ANCHO_PASILLO = 14;
 
-function Puesto({ puesto, seleccionado, onSeleccionar, acento, alTocarOcupado }) {
+// Semáforo del salón. El tinte va como capa sobre un fondo OPACO, no como color
+// translúcido: detrás puede haber una foto y los números tienen que leerse igual.
+const VERDE = '#33D67F';
+const ROJO = '#FF5A4C';
+const FONDO = '#1C2028';
+const tinte = (color, alfa) => ({
+  borderColor: `${color}${alfa}`,
+  backgroundColor: FONDO,
+  backgroundImage: `linear-gradient(0deg, ${color}2B, ${color}2B)`,
+});
+
+function Puesto({ puesto, seleccionado, onSeleccionar, alTocarOcupado }) {
   const disponible = puesto.estado === 'libre';
-  const conTinte = disponible || puesto.estado === 'libreFijo';
-  const ocupadoTocable = puesto.estado === 'ocupado' && Boolean(alTocarOcupado);
+  const libre = disponible || puesto.estado === 'libreFijo';
+  const ocupado = puesto.estado === 'ocupado';
+  const ocupadoTocable = ocupado && Boolean(alTocarOcupado);
   const etiquetas = {
     libre: 'disponible',
     libreFijo: 'disponible',
@@ -46,33 +59,28 @@ function Puesto({ puesto, seleccionado, onSeleccionar, acento, alTocarOcupado })
       }}
       style={{
         gridColumn: puesto.columnaGrid,
+        // El elegido se pinta en verde sólido: mismo color que "libre" pero
+        // relleno, para que se lea como "este puesto ya es tuyo".
         ...(seleccionado
-          ? { backgroundColor: acento, borderColor: acento }
-          : // Los puestos libres llevan un tinte del color de la disciplina para
-            // que salten a la vista frente a los ocupados, que quedan apagados.
-            // El tinte va como capa sobre un fondo OPACO, no como color
-            // translúcido: detrás puede haber una foto y los números tienen que
-            // leerse igual.
-            conTinte
-            ? {
-                borderColor: `${acento}80`,
-                backgroundColor: '#1C2028',
-                backgroundImage: `linear-gradient(0deg, ${acento}1F, ${acento}1F)`,
-              }
-            : {}),
+          ? { backgroundColor: VERDE, borderColor: VERDE }
+          : libre
+            ? tinte(VERDE, '99')
+            : ocupado
+              ? tinte(ROJO, ocupadoTocable ? '99' : '66')
+              : {}),
       }}
       className={cx(
         'relative aspect-square rounded-xl border text-[13px] font-bold tabular-nums',
         'flex items-center justify-center transition-all duration-150 select-none',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-carbon-800 focus-visible:ring-volt-500',
-        seleccionado && 'text-carbon-900 scale-105 shadow-alzado animate-latido z-10',
-        !seleccionado && conTinte && 'text-humo-100',
+        seleccionado && 'text-carbon-900 scale-105 shadow-alzado animate-latido z-10 ring-2 ring-white/70',
+        !seleccionado && libre && 'text-puesto-libre',
         !seleccionado && disponible && 'hover:brightness-125 active:scale-95',
         puesto.estado === 'libreFijo' && 'cursor-default',
-        puesto.estado === 'ocupado' &&
+        ocupado &&
           (ocupadoTocable
-            ? 'bg-carbon-600 border-carbon-500 text-humo-300 cursor-pointer hover:border-humo-500 hover:text-humo-100 active:scale-95'
-            : 'bg-carbon-800 border-carbon-700 text-carbon-500 cursor-not-allowed'),
+            ? 'text-puesto-ocupado cursor-pointer hover:brightness-125 active:scale-95'
+            : 'text-puesto-ocupado/80 cursor-not-allowed'),
         puesto.estado === 'bloqueado' &&
           'bg-carbon-900 border-dashed border-carbon-600 text-carbon-500 cursor-not-allowed'
       )}
@@ -86,7 +94,6 @@ export default function MapaPuestos({
   mapa,
   seleccionado = null,
   onSeleccionar = () => {},
-  acento = '#C8F751',
   // En el panel de admin el mapa es solo una vista del salón: no se elige nada.
   soloLectura = false,
   // Si se pasa, los puestos ocupados se pueden tocar (recepción).
@@ -102,7 +109,7 @@ export default function MapaPuestos({
   // entre filas aunque tengan distinta cantidad de puestos.
   const anchos = [];
   for (let c = 1; c <= columnas; c += 1) {
-    anchos.push(`minmax(${ANCHO_MIN_PUESTO}px, ${ANCHO_MAX_PUESTO}px)`);
+    anchos.push(`minmax(${ANCHO_MIN_PUESTO}px, ${ANCHO_MAX_PUESTO})`);
     if (hayPasillo && c === pasilloDespuesDeCol) anchos.push(`${ANCHO_PASILLO}px`);
   }
   const gridTemplateColumns = anchos.join(' ');
@@ -139,33 +146,28 @@ export default function MapaPuestos({
                     }}
                     seleccionado={seleccionado === puesto.codigo}
                     onSeleccionar={onSeleccionar}
-                    acento={acento}
                     alTocarOcupado={alTocarOcupado}
                   />
                 ))}
               </div>
+              {/* Contrapeso de la etiqueta de fila: sin él la cuadrícula queda
+                  descentrada respecto al rótulo del salón. */}
+              <span className="w-6 shrink-0" aria-hidden="true" />
             </div>
           ))}
         </div>
       </div>
 
-      <Leyenda acento={acento} soloLectura={soloLectura} />
+      <Leyenda soloLectura={soloLectura} />
     </div>
   );
 }
 
-function Leyenda({ acento, soloLectura }) {
+function Leyenda({ soloLectura }) {
   const items = [
-    {
-      texto: 'Disponible',
-      estilo: {
-        borderColor: `${acento}80`,
-        backgroundColor: '#1C2028',
-        backgroundImage: `linear-gradient(0deg, ${acento}1F, ${acento}1F)`,
-      },
-    },
-    ...(soloLectura ? [] : [{ texto: 'Tu puesto', estilo: { backgroundColor: acento, borderColor: acento } }]),
-    { texto: 'Ocupado', clase: 'bg-carbon-800 border-carbon-700' },
+    { texto: 'Disponible', estilo: tinte(VERDE, '99') },
+    ...(soloLectura ? [] : [{ texto: 'Tu puesto', estilo: { backgroundColor: VERDE, borderColor: VERDE } }]),
+    { texto: 'Ocupado', estilo: tinte(ROJO, '66') },
     { texto: 'Fuera de servicio', clase: 'bg-carbon-900 border-dashed border-carbon-600' },
   ];
   return (

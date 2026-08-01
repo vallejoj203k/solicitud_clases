@@ -235,8 +235,10 @@ function VistaSalon({ claseId, onVolver }) {
   const { clase, cupos, mapa } = data;
 
   return (
-    <div className="pb-10">
-      <header className="px-5 md:px-8 pt-6 pb-4">
+    // En tablet horizontal los datos de la clase se van a una columna y el salón
+    // a la otra: así el mapa completo cabe en la pantalla sin desplazar.
+    <div className="pb-10 md:landscape:pb-6 md:landscape:flex md:landscape:items-start md:landscape:gap-6 md:landscape:px-8 md:landscape:pt-4">
+      <header className="px-5 md:px-8 pt-6 pb-4 md:landscape:px-0 md:landscape:pt-0 md:landscape:w-[280px] md:landscape:shrink-0">
         <button
           onClick={onVolver}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-humo-500 hover:text-humo-100"
@@ -245,7 +247,7 @@ function VistaSalon({ claseId, onVolver }) {
           Todas las clases
         </button>
 
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="mt-3 flex flex-wrap items-start justify-between gap-3 md:landscape:block">
           <div>
             <div className="flex items-center gap-2">
               <span
@@ -260,7 +262,7 @@ function VistaSalon({ claseId, onVolver }) {
               {fechaLarga(clase.fecha)} · {clase.instructor?.nombre ?? 'Sin instructor'}
             </p>
           </div>
-          <div className="text-right">
+          <div className="text-right md:landscape:text-left md:landscape:mt-4">
             <p className="text-2xl font-extrabold tracking-tightest tabular-nums">
               {cupos.ocupados}
               <span className="text-humo-500 font-normal">/{cupos.capacidad}</span>
@@ -275,17 +277,16 @@ function VistaSalon({ claseId, onVolver }) {
         />
       </header>
 
-      <div className="px-5 md:px-8 space-y-5">
+      <div className="px-5 md:px-8 space-y-5 md:landscape:px-0 md:landscape:flex-1 md:landscape:min-w-0 md:landscape:space-y-3">
         {acciones.error && <Aviso>{acciones.error}</Aviso>}
 
         <p className="text-sm text-humo-500">
           Toca un puesto ocupado para ver quién lo reservó.
         </p>
 
-        <div className="tarjeta p-5 max-w-md">
+        <div className="tarjeta p-5 max-w-md md:landscape:max-w-none md:landscape:py-4">
           <MapaPuestos
             mapa={mapa}
-            acento={clase.tipoClase.color}
             soloLectura
             alTocarOcupado={(puesto) => {
               acciones.limpiarError();

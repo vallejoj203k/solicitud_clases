@@ -5,6 +5,16 @@
 @layer base {
   :root {
     color-scheme: dark;
+    /* Tamaño máximo de cada puesto del mapa. En la tablet de recepción, que se
+       usa apoyada y en horizontal, hay sitio de sobra y los puestos se tocan
+       con el dedo estirado: crecen. */
+    --ancho-puesto: 60px;
+  }
+
+  @media (orientation: landscape) and (min-width: 768px) {
+    :root {
+      --ancho-puesto: 78px;
+    }
   }
 
   html {

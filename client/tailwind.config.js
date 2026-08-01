@@ -29,6 +29,13 @@ export default {
           500: '#8A93A3', // texto secundario
         },
         alerta: '#FF6B57',
+        // Semáforo del salón: verde = puesto libre, rojo = puesto tomado. Es la
+        // convención que ya entiende cualquiera y no depende de la disciplina,
+        // así que no se mezcla con los acentos (lima/aqua) de la paleta.
+        puesto: {
+          libre: '#33D67F',
+          ocupado: '#FF5A4C',
+        },
       },
       fontFamily: {
         sans: [
