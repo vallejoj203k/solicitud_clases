@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import { AppError } from '../utils/errores.js';
+import { quienTieneElPuesto } from './reserva.service.js';
 
 /**
  * Capa de pagos.
@@ -28,11 +29,30 @@ export async function actualizarEstadoPago(reservaId, { estadoPago, metodoPago, 
   const reserva = await prisma.reserva.findUnique({ where: { id: reservaId } });
   if (!reserva) throw new AppError('No encontramos la reserva.', 404, 'NO_ENCONTRADO');
 
-  // Una reserva APARTADA que se marca pagada tiene que quedar CONFIRMADA y sin
+  // Una reserva sin pagar que se marca pagada tiene que quedar CONFIRMADA y sin
   // fecha de vencimiento. Si solo se cambiara el estado del pago, el barrido de
   // vencidas la liberaria mas tarde pese a estar paga: el cliente perderia el
   // puesto que ya compro.
   const confirmandoApartada = reserva.estado === 'PENDIENTE_PAGO' && estadoPago === 'PAGADO';
+
+  // Como una reserva sin pagar no aparta el puesto, entre que esta persona
+  // reservo y ahora otra pudo haberlo confirmado. Recepcion tiene que enterarse
+  // ANTES de dar por buena la plata que acaba de recibir.
+  if (confirmandoApartada) {
+    const otro = await quienTieneElPuesto({
+      claseId: reserva.claseId,
+      puestoCodigo: reserva.puestoCodigo,
+      exceptoReservaId: reserva.id,
+    });
+    if (otro) {
+      throw new AppError(
+        `El puesto ${reserva.puestoCodigo} ya lo confirmó ${otro.usuario.nombre}. Ese puesto se lo lleva quien pague primero: cámbiale el puesto a esta persona o devuélvele el pago.`,
+        409,
+        'PUESTO_YA_CONFIRMADO',
+        { puestoCodigo: reserva.puestoCodigo, tomadoPor: otro.usuario.nombre }
+      );
+    }
+  }
 
   const actualizada = await prisma.reserva.update({
     where: { id: reservaId },

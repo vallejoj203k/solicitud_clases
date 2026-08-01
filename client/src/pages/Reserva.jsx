@@ -81,8 +81,8 @@ export default function Reserva() {
   const expirada = reserva.estado === 'EXPIRADA';
   const yaEmpezo = new Date(reserva.clase.inicioEn).getTime() <= Date.now();
 
-  // El puesto está apartado mientras se paga. Cómo se paga depende del modo:
-  // por pasarela lo resuelve Wompi, por transferencia lo confirma recepción.
+  // Reserva creada pero sin pagar. El puesto NO está apartado: se confirma
+  // cuando entre el pago (pasarela) o cuando recepción lo verifique.
   if (reserva.estado === 'PENDIENTE_PAGO') {
     if (config?.modoPago === 'transferencia') {
       return (
@@ -100,10 +100,10 @@ export default function Reserva() {
   if (expirada) {
     return (
       <Vacio
-        titulo={reserva.estadoPago === 'RECHAZADO' ? 'El pago no se completó' : 'Se venció el tiempo para pagar'}
+        titulo={reserva.estadoPago === 'RECHAZADO' ? 'El pago no se completó' : 'Esta reserva se venció'}
         descripcion={
           reserva.notasPago ||
-          'Tu puesto volvió a quedar libre. Puedes intentarlo de nuevo, el cupo se asigna a quien pague primero.'
+          'No alcanzamos a verificar el pago. Puedes reservar de nuevo: el puesto se lo lleva quien pague primero.'
         }
         accion={
           <Link to="/">
@@ -242,13 +242,12 @@ export default function Reserva() {
 }
 
 /**
- * Soltar un puesto que se apartó y no se va a pagar.
+ * Descartar una reserva que no se va a pagar.
  *
- * Sin esto, quien empieza el pago y se arrepiente deja el puesto bloqueado
- * hasta que se venza el plazo: ni él lo puede volver a tomar ni nadie más. Un
- * apartado sin pagar se libera siempre, aunque la clase esté por empezar —no
- * hay plata que devolver y retenerlo solo le quita el cupo a quien sí va a
- * pagar.
+ * El puesto no está apartado, así que esto no libera nada: sirve para que la
+ * persona se quite el pendiente de encima y para que no quede colgada en la
+ * cola de recepción. Se puede en cualquier momento, sin el plazo de
+ * cancelación: no hay nada que devolver.
  */
 function LiberarPuesto({ codigo }) {
   const navegar = useNavigate();
@@ -256,7 +255,7 @@ function LiberarPuesto({ codigo }) {
   const [liberando, setLiberando] = useState(false);
 
   const liberar = async () => {
-    if (!window.confirm('¿Soltar el puesto? Vuelve a quedar libre para todos.')) return;
+    if (!window.confirm('¿Cancelar esta reserva sin pagar?')) return;
     setLiberando(true);
     try {
       await api.cancelarReserva(codigo);
@@ -277,7 +276,7 @@ function LiberarPuesto({ codigo }) {
         disabled={liberando}
         className="w-full py-2 text-center text-sm text-humo-500 hover:text-alerta transition-colors disabled:opacity-60"
       >
-        {liberando ? 'Soltando…' : 'No voy a pagar ahora, soltar el puesto'}
+        {liberando ? 'Cancelando…' : 'No voy a pagar, cancelar esta reserva'}
       </button>
     </div>
   );
@@ -287,8 +286,9 @@ function LiberarPuesto({ codigo }) {
  * Cobro por transferencia a la llave del gimnasio.
  *
  * No hay pasarela que avise, así que el trato es explícito: aquí están los
- * datos, el puesto queda apartado unos minutos, y cuando la persona dice que ya
- * transfirió, recepción coteja contra la notificación del banco y confirma. La
+ * datos, y cuando la persona dice que ya transfirió, recepción coteja contra la
+ * notificación del banco y confirma. El puesto se lo lleva quien confirme
+ * primero, así que la pantalla lo dice sin rodeos. La
  * pantalla se sigue refrescando sola, así que la confirmación aparece sin que
  * haya que recargar nada.
  */
@@ -328,14 +328,16 @@ function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
   return (
     <div className="min-h-dvh px-5 py-10 max-w-sm mx-auto">
       <div className="text-center">
-        <p className="etiqueta">Puesto apartado</p>
+        <p className="etiqueta">Falta tu pago</p>
         <h1 className="mt-1 text-2xl font-extrabold tracking-tightest">
           {yaAviso ? 'Estamos verificando tu pago' : 'Transfiere para confirmar'}
         </h1>
+        {/* El puesto NO queda apartado: se lo lleva quien pague primero. Decirlo
+            claro es lo único honesto y además es lo que hace que transfieran ya. */}
         <p className="mt-2 text-sm text-humo-500">
-          Te guardamos el puesto{' '}
-          <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span>
-          {minutos !== null && minutos > 0 ? ` por ${minutos} minuto${minutos === 1 ? '' : 's'} más` : ''}.
+          El puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span> queda
+          tuyo cuando confirmemos el pago. Hasta entonces sigue disponible para otros
+          {minutos !== null && minutos > 0 ? `, así que no te demores` : ''}.
         </p>
       </div>
 
@@ -412,8 +414,8 @@ function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
       </div>
 
       <p className="mt-6 text-xs text-humo-500 text-center">
-        Si el tiempo se vence antes de que verifiquemos el pago, el puesto vuelve a quedar libre
-        y en recepción te ayudan.
+        Si alguien alcanza a confirmar ese puesto antes que tú, en recepción te lo cambian o te
+        devuelven el pago.
       </p>
     </div>
   );
@@ -422,9 +424,9 @@ function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
 /**
  * Pantalla intermedia mientras Wompi resuelve el pago.
  *
- * El puesto ya está apartado, así que nadie más lo puede tomar; lo único que
- * falta es la confirmación. Se ofrece volver a la pasarela por si el cliente
- * cerró la ventana sin pagar.
+ * El puesto se confirma cuando entra el pago, no antes: si alguien más lo
+ * confirma mientras tanto, recepción reubica o devuelve. Se ofrece volver a la
+ * pasarela por si el cliente cerró la ventana sin pagar.
  */
 function EsperandoPago({ reserva, acento, notas }) {
   const [reintentando, setReintentando] = useState(false);
@@ -456,11 +458,8 @@ function EsperandoPago({ reserva, acento, notas }) {
 
       <h1 className="mt-5 text-2xl font-extrabold tracking-tightest">Confirmando tu pago…</h1>
       <p className="mt-2 text-sm text-humo-500">
-        Te guardamos el puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span>
-        {minutosRestantes !== null && minutosRestantes > 0
-          ? ` por ${minutosRestantes} minuto${minutosRestantes === 1 ? '' : 's'} más`
-          : ''}
-        . Esta pantalla se actualiza sola.
+        El puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span> queda tuyo
+        en cuanto entre el pago. Esta pantalla se actualiza sola.
       </p>
 
       {notas && (

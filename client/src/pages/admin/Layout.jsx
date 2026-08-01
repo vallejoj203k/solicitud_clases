@@ -50,8 +50,9 @@ export default function AdminLayout() {
     refetchIntervalInBackground: true,
   });
 
-  // Solo cuentan los que ya avisaron: son los que tienen a alguien esperando.
-  const avisos = (porConfirmar ?? []).filter((p) => p.avisoPagoEn).length;
+  // Cuentan los que ya avisaron -tienen a alguien esperando- y los que quedaron
+  // en conflicto, que necesitan una decisión: devolver o reubicar.
+  const avisos = (porConfirmar ?? []).filter((p) => p.avisoPagoEn || p.notasPago).length;
 
   if (!hayToken) return <Navigate to="/admin/login" replace />;
   if (isLoading) return <Cargando texto="Verificando sesión…" />;
