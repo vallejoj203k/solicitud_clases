@@ -136,8 +136,11 @@ export default function AdminClaseDetalle() {
                         {r.puestoCodigo}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold truncate">{r.usuario.nombre}</p>
+                        <p className="font-semibold truncate">
+                          {r.nombreInvitado ?? r.usuario.nombre}
+                        </p>
                         <p className="text-xs text-humo-500">
+                          {r.nombreInvitado && `reservó ${r.usuario.nombre} · `}
                           {r.usuario.telefono} · {r.codigo}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">

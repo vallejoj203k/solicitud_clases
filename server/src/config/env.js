@@ -70,6 +70,11 @@ export const env = {
   // Pasado ese punto tiene que hablar con recepcion; el admin siempre puede.
   horasLimiteCancelacion: Number(process.env.HORAS_LIMITE_CANCELACION ?? 2),
 
+  // Cuantos puestos puede tomar una misma persona en una misma clase. Mas de
+  // uno porque una pareja va junta y paga uno solo; con tope para que nadie
+  // acapare el salon. Cada puesto es una reserva con su propio codigo.
+  maxPuestosPorPersona: Math.max(1, Number(process.env.MAX_PUESTOS_POR_PERSONA ?? 4)),
+
   // Correo saliente. Si no esta configurado, las notificaciones se desactivan
   // solas y el resto de la app sigue funcionando igual.
   smtp: {

@@ -36,6 +36,9 @@ export default function Reservar() {
   const queryClient = useQueryClient();
 
   const claseIdUrl = params.get('clase');
+  // Se llega con ?otro=1 desde "Reservar otro puesto en esta clase": el puesto
+  // es para un acompañante, así que se pide su nombre.
+  const paraAcompanante = params.get('otro') === '1';
   const [dia, setDia] = useState(hoyISO());
   const [claseId, setClaseId] = useState(claseIdUrl);
   const [puesto, setPuesto] = useState(null);
@@ -47,6 +50,7 @@ export default function Reservar() {
   const [telefono, setTelefono] = useState(cliente?.telefono ?? '');
   const [email, setEmail] = useState('');
   const [aceptaDatos, setAceptaDatos] = useState(false);
+  const [nombreInvitado, setNombreInvitado] = useState('');
 
   const desde = hoyISO();
   const hasta = sumarDiasISO(desde, 6);
@@ -80,6 +84,20 @@ export default function Reservar() {
     if (primero) setDia(primero.fecha);
   }, [data, clasesPorDia, dia, claseId]);
 
+  // Los puestos que esta persona ya tiene en esta clase. Sirve para lo que más
+  // confundía: quien empieza el pago, se arrepiente y vuelve al mapa veía su
+  // propio puesto en rojo, sin manera de saber que era suyo ni de soltarlo.
+  const { data: misReservas } = useQuery({
+    queryKey: ['misReservas'],
+    queryFn: api.misReservas,
+    enabled: Boolean(cliente && claseId),
+    staleTime: 5_000,
+  });
+
+  const apartadaPropia = (misReservas ?? []).find(
+    (r) => r.clase.id === claseId && r.estado === 'PENDIENTE_PAGO'
+  );
+
   const disponibilidad = useQuery({
     queryKey: ['disponibilidad', claseId],
     queryFn: () => api.disponibilidad(claseId),
@@ -94,6 +112,7 @@ export default function Reservar() {
       api.crearReserva({
         claseId,
         puestoCodigo: puesto,
+        nombreInvitado: nombreInvitado.trim() || undefined,
         ...(cliente
           ? {}
           : {
@@ -107,6 +126,10 @@ export default function Reservar() {
       guardarToken('cliente', token);
       guardarCliente(perfil);
       queryClient.invalidateQueries({ queryKey: ['inicio'] });
+      // El mapa acaba de cambiar: sin esto, quien vuelve enseguida a tomar otro
+      // puesto para su acompañante vería el suyo todavía libre y chocaría contra
+      // un 409 al confirmarlo.
+      queryClient.invalidateQueries({ queryKey: ['disponibilidad', claseId] });
 
       // Con pago en línea el puesto quedó apartado, no confirmado: se manda a
       // la pasarela. Wompi devuelve a /reserva/:codigo cuando termina.
@@ -222,6 +245,11 @@ export default function Reservar() {
           }}
           acento={acento}
           boton={botonContinuar}
+          apartadaPropia={apartadaPropia}
+          onLiberar={() => {
+            queryClient.invalidateQueries({ queryKey: ['misReservas'] });
+            queryClient.invalidateQueries({ queryKey: ['disponibilidad', claseId] });
+          }}
         />
       )}
 
@@ -253,6 +281,9 @@ export default function Reservar() {
         setEmail={setEmail}
         aceptaDatos={aceptaDatos}
         setAceptaDatos={setAceptaDatos}
+        paraAcompanante={paraAcompanante}
+        nombreInvitado={nombreInvitado}
+        setNombreInvitado={setNombreInvitado}
         config={config}
         error={errorReserva}
         cargando={reservar.isPending}
@@ -303,7 +334,53 @@ function PasoHorarios({ isLoading, dias, conteoPorDia, dia, setDia, clases, onEl
   );
 }
 
-function PasoPuestos({ consulta, puesto, setPuesto, acento, boton }) {
+/**
+ * Aviso de que el puesto en rojo es tuyo.
+ *
+ * Es el remate de la queja más común: empiezas a pagar, te arrepientes, vuelves
+ * al mapa y tu propio puesto aparece ocupado sin explicación. Aquí se dice de
+ * quién es y se ofrecen las dos salidas: terminar el pago o soltarlo.
+ */
+function ApartadaPropia({ reserva, onLiberar }) {
+  const [liberando, setLiberando] = useState(false);
+
+  const liberar = async () => {
+    if (!window.confirm(`¿Soltar el puesto ${reserva.puestoCodigo}? Queda libre para todos.`)) return;
+    setLiberando(true);
+    try {
+      await api.cancelarReserva(reserva.codigo);
+      onLiberar();
+    } finally {
+      setLiberando(false);
+    }
+  };
+
+  return (
+    <div className="mb-5 rounded-2xl border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3">
+      <p className="text-sm text-amber-200">
+        Tienes el puesto <span className="font-bold">{reserva.puestoCodigo}</span> apartado en esta
+        clase, sin pagar. Nadie más lo puede tomar mientras tanto.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <Link
+          to={`/reserva/${reserva.codigo}`}
+          className="text-sm font-semibold text-amber-200 underline underline-offset-2"
+        >
+          Terminar el pago
+        </Link>
+        <button
+          onClick={liberar}
+          disabled={liberando}
+          className="text-sm text-humo-500 hover:text-alerta transition-colors disabled:opacity-60"
+        >
+          {liberando ? 'Soltando…' : 'Soltar el puesto'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PasoPuestos({ consulta, puesto, setPuesto, acento, boton, apartadaPropia, onLiberar }) {
   if (consulta.isLoading) return <Cargando texto="Cargando el salón…" />;
   if (consulta.error) return <div className="px-5 pt-6"><Aviso>No pudimos cargar los puestos.</Aviso></div>;
 
@@ -321,6 +398,8 @@ function PasoPuestos({ consulta, puesto, setPuesto, acento, boton }) {
   return (
     <div className="px-5 pt-5 animate-aparecer md:landscape:px-8 md:landscape:flex md:landscape:items-start md:landscape:gap-8">
       <div className="md:landscape:flex-1 md:landscape:min-w-0">
+        {apartadaPropia && <ApartadaPropia reserva={apartadaPropia} onLiberar={onLiberar} />}
+
         {/* En horizontal esta línea se sube al panel lateral. */}
         <div className="flex items-center justify-between gap-3 mb-5 md:landscape:hidden">
           <p className="text-sm text-humo-500">{quedan}</p>
@@ -367,6 +446,9 @@ function HojaConfirmacion({
   setEmail,
   aceptaDatos,
   setAceptaDatos,
+  paraAcompanante,
+  nombreInvitado,
+  setNombreInvitado,
   config,
   error,
   cargando,
@@ -404,13 +486,34 @@ function HojaConfirmacion({
 
         {/* El formulario solo aparece la primera vez. Después el dispositivo ya
             tiene la sesión del cliente y se salta este bloque completo. */}
+        {/* Puestos para acompañantes: quien reserva y paga es el mismo, pero
+            recepción necesita saber a quién está recibiendo en cada puesto. El
+            nombre es opcional: si no lo ponen, el puesto queda a nombre de quien
+            reservó. */}
+        {paraAcompanante && (
+          <Campo
+            etiqueta="¿Para quién es este puesto?"
+            ayuda="Opcional. Sirve para que en recepción sepan a quién esperan."
+          >
+            <Entrada
+              autoFocus
+              value={nombreInvitado}
+              onChange={(e) => setNombreInvitado(e.target.value)}
+              placeholder="Nombre de tu acompañante"
+              autoComplete="off"
+            />
+          </Campo>
+        )}
+
         {cliente ? (
           <div className="flex items-center gap-3 rounded-2xl bg-carbon-700/60 border border-carbon-600 px-4 py-3">
             <span className="p-2 rounded-xl bg-carbon-600 text-humo-300">
               <IconoUsuario className="w-4 h-4" />
             </span>
             <div className="min-w-0">
-              <p className="font-semibold truncate">{cliente.nombre}</p>
+              <p className="font-semibold truncate">
+                {paraAcompanante ? `Reserva y paga: ${cliente.nombre}` : cliente.nombre}
+              </p>
               <p className="text-xs text-humo-500">{cliente.telefono}</p>
             </div>
           </div>

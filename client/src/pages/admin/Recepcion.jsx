@@ -78,16 +78,25 @@ function useAccionesMostrador(alActualizar) {
     onError: (e) => setError(e.message),
   });
 
+  const liberacion = useMutation({
+    mutationFn: (id) => api.admin.cancelarReserva(id),
+    onSuccess: alTerminar,
+    onError: (e) => setError(e.message),
+  });
+
   return {
     error,
     limpiarError: () => setError(null),
-    guardando: asistencia.isPending || pago.isPending,
+    guardando: asistencia.isPending || pago.isPending || liberacion.isPending,
     marcarAsistencia: (id) => asistencia.mutate({ id, asistio: true }),
     cobrarEfectivo: (id) => pago.mutate({ id, metodoPago: 'efectivo' }),
     // Confirmar una transferencia hace lo mismo que cobrar en efectivo, pero
     // además saca el puesto de "apartado" y lo deja reservado en firme: de eso
     // se encarga el servidor.
     confirmarTransferencia: (id) => pago.mutate({ id, metodoPago: 'transferencia' }),
+    // Cuando la persona dice en el mostrador que al final no va a pagar, el
+    // puesto no tiene por qué esperar a que se venza el plazo.
+    liberar: (id) => liberacion.mutate(id),
   };
 }
 
@@ -254,7 +263,10 @@ function PagosPorConfirmar() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-bold tracking-tight truncate">{p.usuario.nombre}</p>
-                <p className="text-xs text-humo-500">{p.usuario.telefono}</p>
+                <p className="text-xs text-humo-500">
+                  {p.usuario.telefono}
+                  {p.nombreInvitado && ` · puesto para ${p.nombreInvitado}`}
+                </p>
                 <p className="mt-1.5 text-sm">
                   <span
                     className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
@@ -279,6 +291,16 @@ function PagosPorConfirmar() {
               >
                 <IconoCheck className="w-4 h-4" />
                 Confirmar pago
+              </button>
+              <button
+                disabled={acciones.guardando}
+                onClick={() => {
+                  if (window.confirm(`¿Liberar el puesto ${p.puestoCodigo} de ${p.usuario.nombre}?`))
+                    acciones.liberar(p.id);
+                }}
+                className="px-3 py-2.5 rounded-xl text-sm font-semibold text-humo-500 hover:text-alerta disabled:opacity-60 transition-colors"
+              >
+                Liberar
               </button>
               <span className="text-xs text-humo-500">
                 avisó {textoDesde(p.avisoPagoEn)}
@@ -434,8 +456,15 @@ function FichaPuesto({ puesto, acento, onCerrar, onAsistio, onCobrar, guardando 
             {puesto.codigo}
           </span>
           <div className="min-w-0">
-            <p className="etiqueta">Reservado por</p>
-            <p className="text-2xl font-extrabold tracking-tightest truncate">{r.usuario.nombre}</p>
+            <p className="etiqueta">{r.nombreInvitado ? 'Asiste' : 'Reservado por'}</p>
+            <p className="text-2xl font-extrabold tracking-tightest truncate">
+              {r.nombreInvitado ?? r.usuario.nombre}
+            </p>
+            {/* Cuando el puesto es para un acompañante, el teléfono sigue siendo
+                el de quien reservó: es a quien hay que llamar. */}
+            {r.nombreInvitado && (
+              <p className="text-xs text-humo-500 truncate">reservó {r.usuario.nombre}</p>
+            )}
             <a
               href={`tel:${r.usuario.telefono}`}
               className="text-sm text-humo-500 hover:text-humo-100"
@@ -516,8 +545,13 @@ function ResultadosBusqueda({ resultados, cargando }) {
         <li key={r.id} className={cx('tarjeta p-4', r.yaPaso && 'opacity-60')}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-bold tracking-tight truncate">{r.usuario.nombre}</p>
-              <p className="text-xs text-humo-500">{r.usuario.telefono}</p>
+              <p className="font-bold tracking-tight truncate">
+                {r.nombreInvitado ?? r.usuario.nombre}
+              </p>
+              <p className="text-xs text-humo-500">
+                {r.usuario.telefono}
+                {r.nombreInvitado && ` · reservó ${r.usuario.nombre}`}
+              </p>
               <p className="mt-1.5 text-sm">
                 <span
                   className="inline-block w-2 h-2 rounded-full mr-2 align-middle"

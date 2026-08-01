@@ -87,7 +87,7 @@ Clase       id, tipoClaseId, instructorId?, inicioEn(UTC), duracionMin, cupoMaxi
             precioCop, layoutOverride(JSON)?, puestosBloqueados[], estado(ACTIVA|CANCELADA), notas
 Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             estado(PENDIENTE_PAGO|CONFIRMADA|CANCELADA|EXPIRADA|ASISTIO|NO_SHOW),
-            expiraEn?, notasPago?,
+            expiraEn?, avisoPagoEn?, notasPago?, nombreInvitado?,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
 ```
@@ -204,6 +204,15 @@ programadas: solo alcanza a las futuras que aún tenían el precio anterior, nun
 ya pasaron —su precio es parte del historial de pagos— ni a las que tengan un precio propio,
 que se cuentan aparte para que una promoción no desaparezca sin avisar.
 
+**Varios puestos por persona.** Una pareja va junta y paga una sola: la misma persona
+puede tomar hasta `MAX_PUESTOS_POR_PERSONA` puestos en una clase (4 por defecto). Cada
+puesto es **una reserva independiente**, con su código y su pago —el tope existe para que
+nadie acapare el salón—. Desde la pantalla de éxito, «Reservar otro puesto en esta clase»
+lleva directo al mapa sin volver a pedir los datos, y pregunta el nombre del acompañante:
+sin eso recepción vería el mismo nombre repetido y no sabría a quién está recibiendo. Ese
+nombre es opcional y aparece en la ficha del puesto, en la lista de inscritos, en la
+búsqueda y en el CSV, en la columna «Quién asiste».
+
 **Plazo de cancelación.** El cliente cancela por su cuenta hasta `HORAS_LIMITE_CANCELACION`
 horas antes (2 por defecto); después la app se lo dice y no le ofrece el botón. El
 administrador puede cancelar siempre.
@@ -293,6 +302,19 @@ confirmación es humana:
 Marcar pagada una reserva apartada **siempre** la confirma y le quita el vencimiento, venga
 de la cola o del botón de cobro en efectivo. Sin eso, el barrido de vencidas liberaría más
 tarde un puesto ya pagado.
+
+**Cuando se arrepienten.** Un puesto apartado y sin pagar se puede soltar en cualquier
+momento, **sin el plazo de cancelación**: no hay plata que devolver y retenerlo solo le
+quita el cupo a quien sí va a pagar. Lo puede soltar el cliente —desde la pantalla de pago
+o desde el mapa— y también recepción, desde la cola. Y como quien vuelve al mapa veía su
+propio puesto en rojo sin saber que era suyo, ahora aparece un aviso con las dos salidas:
+terminar el pago o soltarlo.
+
+**El aviso en el panel.** La cantidad de pagos por confirmar se consulta desde el layout
+del panel, no desde la pantalla de Recepción, así que el contador se ve en **cualquier**
+sección. Se refresca cada 10 s, también con la pestaña en segundo plano —la tablet del
+mostrador pasa el día abierta y sin que nadie la toque— y comparte clave de caché con la
+pantalla de Recepción, de modo que abrirla no dispara una segunda consulta.
 
 Variables: `TRANSFERENCIA_LLAVE` (obligatoria), `TRANSFERENCIA_TITULAR`,
 `TRANSFERENCIA_ENTIDAD` y `TRANSFERENCIA_QR` (ruta a la imagen dentro de `/images`, que se
