@@ -271,7 +271,15 @@ export async function recuperarAcceso({ codigo, telefono }) {
  * cliente puede volver del checkout mientras el webhook llega. Confirmar dos
  * veces no debe cambiar nada ni "resucitar" una reserva ya expirada.
  */
-export async function aplicarResultadoPago({ referencia, estadoPago, pagoRef, payload }) {
+export async function aplicarResultadoPago({
+  referencia,
+  estadoPago,
+  pagoRef,
+  payload,
+  // Con qué medio pagó. Lo resuelve quien habla con la pasarela; aquí no se
+  // conoce el vocabulario del proveedor.
+  metodoPago = 'wompi',
+}) {
   const reserva = await prisma.reserva.findUnique({
     where: { codigo: String(referencia).toUpperCase() },
     include: incluirCompleto,
@@ -285,7 +293,7 @@ export async function aplicarResultadoPago({ referencia, estadoPago, pagoRef, pa
 
   const datos = {
     estadoPago,
-    metodoPago: 'wompi',
+    metodoPago,
     pagoRef: pagoRef ?? reserva.pagoRef,
     pagoPayload: payload ?? reserva.pagoPayload,
     pagoActualizadoEn: new Date(),

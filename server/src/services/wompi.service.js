@@ -100,6 +100,29 @@ export function verificarFirmaEvento(evento) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Con qué pagó realmente la persona.
+ *
+ * Wompi cobra una tarifa distinta por cada medio -tarjeta lleva un fijo por
+ * transacción, el Botón Bancolombia y Nequi no-, así que guardar solo "wompi"
+ * dejaba el reporte de pagos sin la información que decide cuánto se lleva la
+ * pasarela. Un medio nuevo que no esté en la tabla no rompe nada: cae en
+ * "wompi" y se ve igual en el reporte.
+ */
+const METODOS_WOMPI = {
+  CARD: 'wompi-tarjeta',
+  NEQUI: 'wompi-nequi',
+  PSE: 'wompi-pse',
+  BANCOLOMBIA_TRANSFER: 'wompi-bancolombia',
+  BANCOLOMBIA_COLLECT: 'wompi-bancolombia',
+  BANCOLOMBIA_QR: 'wompi-bancolombia',
+  DAVIPLATA: 'wompi-daviplata',
+};
+
+export function metodoDeTransaccion(transaccion) {
+  return METODOS_WOMPI[transaccion?.payment_method_type] ?? 'wompi';
+}
+
 /** Traduce el estado de Wompi al vocabulario de la app. */
 export function traducirEstado(estadoWompi) {
   switch (estadoWompi) {

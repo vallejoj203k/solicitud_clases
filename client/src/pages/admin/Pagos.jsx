@@ -186,6 +186,11 @@ export default function AdminPagos() {
                           <p className="text-xs text-humo-500">
                             {f.tipoClase} · {f.fecha} {hora12(f.hora)} · Puesto {f.puesto}
                           </p>
+                          {f.metodoPago && (
+                            <p className="mt-1 text-xs text-humo-500">
+                              {ETIQUETA_METODO[f.metodoPago] ?? f.metodoPago}
+                            </p>
+                          )}
                         </div>
                         <div className="text-right shrink-0">
                           <Insignia
