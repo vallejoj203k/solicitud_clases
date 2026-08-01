@@ -213,6 +213,12 @@ sin eso recepción vería el mismo nombre repetido y no sabría a quién está r
 nombre es opcional y aparece en la ficha del puesto, en la lista de inscritos, en la
 búsqueda y en el CSV, en la columna «Quién asiste».
 
+**La agenda del mostrador mira 7 días, pero nunca dice que no hay clases.** Si en esa
+ventana no hay ninguna, Recepción muestra las siguientes que existan con un aviso que lo
+explica. Antes respondía «No hay clases programadas» mientras el calendario y la app del
+cliente mostraban clases de dentro de dos semanas, y eso parecía que los datos estuvieran
+rotos cuando solo eran dos horizontes distintos.
+
 **Calendario de clases.** `/admin/clases` abre en un calendario del mes con las clases de
 cada día —en escritorio con sus horas, en el teléfono con un punto por disciplina y el
 conteo—. Al tocar un día se elige disciplina (si ese día solo hay una, se salta el paso) y
