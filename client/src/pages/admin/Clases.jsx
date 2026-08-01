@@ -160,7 +160,10 @@ export default function AdminClases() {
                       >
                         Editar
                       </button>
-                      {clase.estado === 'ACTIVA' ? (
+                      {/* Una clase activa a la que nadie se inscribió -la típica
+                          creada a la hora equivocada- se borra directo, sin
+                          obligar a cancelarla primero. */}
+                      {clase.estado === 'ACTIVA' && clase.ocupados > 0 ? (
                         <button
                           onClick={() => {
                             if (window.confirm('¿Cancelar la clase? Se cancelarán todas sus reservas.'))
@@ -173,7 +176,8 @@ export default function AdminClases() {
                       ) : (
                         <button
                           onClick={() => {
-                            if (window.confirm('¿Eliminar definitivamente?')) eliminar.mutate(clase.id);
+                            if (window.confirm('¿Eliminar la clase definitivamente?'))
+                              eliminar.mutate(clase.id);
                           }}
                           className="px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-alerta transition-colors"
                         >
