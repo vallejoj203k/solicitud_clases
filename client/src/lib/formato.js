@@ -63,4 +63,15 @@ export const ETIQUETA_METODO = {
   transferencia: 'Transferencia',
   datafono: 'Datáfono',
   cortesia: 'Cortesía',
+  // Pagos en línea. Se distingue el medio porque cada uno tiene una tarifa
+  // distinta: la tarjeta lleva un fijo por transacción y los otros no.
+  wompi: 'En línea',
+  'wompi-tarjeta': 'Tarjeta',
+  'wompi-nequi': 'Nequi',
+  'wompi-pse': 'PSE',
+  'wompi-bancolombia': 'Botón Bancolombia',
+  'wompi-daviplata': 'Daviplata',
 };
+
+/** Los que el administrador puede registrar a mano; el resto los pone la pasarela. */
+export const METODOS_MANUALES = ['efectivo', 'transferencia', 'datafono', 'cortesia'];

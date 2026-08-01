@@ -259,6 +259,13 @@ para quien cierra el navegador sin volver.
 otra persona, la reserva queda con el pago registrado y una nota en `notasPago` para que
 recepción gestione la devolución. No se le quita el puesto a quien ya lo tenía.
 
+**Con qué medio pagó.** Se guarda el medio real (`wompi-tarjeta`, `wompi-nequi`,
+`wompi-bancolombia`, `wompi-pse`) y no un genérico «wompi», porque **cada medio tiene una
+tarifa distinta**: la tarjeta lleva un costo fijo por transacción y el Botón Bancolombia y
+Nequi no. En clases baratas ese fijo es la mayor parte de la comisión, así que el reporte
+de pagos y el CSV muestran el medio y permiten calcular lo que se lleva la pasarela. Un
+medio nuevo que Wompi agregue no rompe nada: cae en «En línea».
+
 ### Poner Wompi en marcha
 
 1. Crea la cuenta de comercio en Wompi (requiere RUT y cuenta bancaria del gimnasio).

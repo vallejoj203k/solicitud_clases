@@ -15,7 +15,15 @@ import {
 } from '../../components/ui.jsx';
 import MapaPuestos from '../../components/MapaPuestos.jsx';
 import { IconoAtras, IconoCheck } from '../../components/Iconos.jsx';
-import { pesos, hora12, fechaLarga, ETIQUETA_PAGO, ETIQUETA_RESERVA, ETIQUETA_METODO } from '../../lib/formato.js';
+import {
+  pesos,
+  hora12,
+  fechaLarga,
+  ETIQUETA_PAGO,
+  ETIQUETA_RESERVA,
+  ETIQUETA_METODO,
+  METODOS_MANUALES,
+} from '../../lib/formato.js';
 
 export default function AdminClaseDetalle() {
   const { id } = useParams();
@@ -234,7 +242,12 @@ function HojaPago({ reserva, onCerrar, onGuardado }) {
   const [estadoPago, setEstadoPago] = useState(
     reserva.estadoPago === 'PENDIENTE' ? 'PAGADO' : reserva.estadoPago
   );
-  const [metodoPago, setMetodoPago] = useState(reserva.metodoPago ?? 'efectivo');
+  // Si la pagó la pasarela, el método que trae no está entre los manuales: el
+  // selector arrancaría en blanco. Se cae a "efectivo", que es lo que se
+  // registra cuando alguien cobra a mano.
+  const [metodoPago, setMetodoPago] = useState(
+    METODOS_MANUALES.includes(reserva.metodoPago) ? reserva.metodoPago : 'efectivo'
+  );
   const [error, setError] = useState(null);
 
   const guardar = useMutation({

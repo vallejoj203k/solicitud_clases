@@ -9,6 +9,7 @@ import {
   verificarFirmaEvento,
   traducirEstado,
   consultarTransaccion,
+  metodoDeTransaccion,
 } from '../services/wompi.service.js';
 import { aplicarResultadoPago, expirarReservasVencidas } from '../services/reserva.service.js';
 import { enviarConfirmacionReserva } from '../services/notificaciones.service.js';
@@ -92,6 +93,7 @@ pagosRouter.post(
       estadoPago,
       pagoRef: transaccion.id,
       payload: transaccion,
+      metodoPago: metodoDeTransaccion(transaccion),
     });
 
     if (cambio && estadoPago === 'PAGADO') {
