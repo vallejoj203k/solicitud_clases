@@ -130,7 +130,7 @@ export default function AdminPagos() {
                     <table className="w-full text-sm">
                       <thead className="bg-carbon-800 text-humo-500">
                         <tr>
-                          {['Fecha', 'Hora', 'Clase', 'Cliente', 'Puesto', 'Estado', 'Método', 'Monto'].map(
+                          {['Fecha', 'Hora', 'Clase', 'Cliente', 'Asiste', 'Puesto', 'Estado', 'Método', 'Monto'].map(
                             (c) => (
                               <th key={c} className="text-left font-semibold px-4 py-3 whitespace-nowrap">
                                 {c}
@@ -148,6 +148,9 @@ export default function AdminPagos() {
                             <td className="px-4 py-3">
                               <p className="truncate max-w-[180px]">{f.cliente}</p>
                               <p className="text-xs text-humo-500">{f.telefono}</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="truncate max-w-[160px]">{f.asiste}</p>
                             </td>
                             <td className="px-4 py-3 tabular-nums">{f.puesto}</td>
                             <td className="px-4 py-3">

@@ -87,7 +87,7 @@ Clase       id, tipoClaseId, instructorId?, inicioEn(UTC), duracionMin, cupoMaxi
             precioCop, layoutOverride(JSON)?, puestosBloqueados[], estado(ACTIVA|CANCELADA), notas
 Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             estado(PENDIENTE_PAGO|CONFIRMADA|CANCELADA|EXPIRADA|ASISTIO|NO_SHOW),
-            expiraEn?, notasPago?,
+            expiraEn?, avisoPagoEn?, notasPago?, nombreInvitado?,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
 ```
@@ -203,6 +203,15 @@ portada terminaba contradiciendo lo que después se cobraba. Al subir el precio 
 programadas: solo alcanza a las futuras que aún tenían el precio anterior, nunca a las que
 ya pasaron —su precio es parte del historial de pagos— ni a las que tengan un precio propio,
 que se cuentan aparte para que una promoción no desaparezca sin avisar.
+
+**Varios puestos por persona.** Una pareja va junta y paga una sola: la misma persona
+puede tomar hasta `MAX_PUESTOS_POR_PERSONA` puestos en una clase (4 por defecto). Cada
+puesto es **una reserva independiente**, con su código y su pago —el tope existe para que
+nadie acapare el salón—. Desde la pantalla de éxito, «Reservar otro puesto en esta clase»
+lleva directo al mapa sin volver a pedir los datos, y pregunta el nombre del acompañante:
+sin eso recepción vería el mismo nombre repetido y no sabría a quién está recibiendo. Ese
+nombre es opcional y aparece en la ficha del puesto, en la lista de inscritos, en la
+búsqueda y en el CSV, en la columna «Quién asiste».
 
 **Plazo de cancelación.** El cliente cancela por su cuenta hasta `HORAS_LIMITE_CANCELACION`
 horas antes (2 por defecto); después la app se lo dice y no le ofrece el botón. El

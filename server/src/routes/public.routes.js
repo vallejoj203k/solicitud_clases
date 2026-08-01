@@ -47,6 +47,7 @@ function serializarReserva(r) {
     // Para que la pantalla de espera sepa si ya se avisó del pago y no vuelva a
     // ofrecer el botón.
     avisoPagoEn: r.avisoPagoEn?.toISOString() ?? null,
+    nombreInvitado: r.nombreInvitado ?? null,
     creadoEn: r.creadoEn.toISOString(),
     cliente: r.usuario ? { id: r.usuario.id, nombre: r.usuario.nombre, telefono: r.usuario.telefono } : null,
     clase: {
@@ -129,6 +130,8 @@ const nuevaReserva = z.object({
   telefono: z.string().trim().min(7, 'Teléfono inválido').max(20).optional(),
   email: z.string().trim().email('Correo inválido').max(120).optional().or(z.literal('')),
   aceptaDatos: z.boolean().optional(),
+  // Para quién es el puesto, cuando se reserva para un acompañante.
+  nombreInvitado: z.string().trim().min(2).max(60).optional().or(z.literal('')),
 });
 
 publicRouter.post(

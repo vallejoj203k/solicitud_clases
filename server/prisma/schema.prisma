@@ -165,6 +165,11 @@ model Reserva {
   // en la cola de recepcion para que alguien coteje y confirme.
   avisoPagoEn DateTime?
 
+  // Para quien es el puesto, cuando no es para quien reserva: una pareja va
+  // junta y paga una sola persona. Sin esto recepcion veria el mismo nombre
+  // dos veces y no sabria a quien esta recibiendo.
+  nombreInvitado String?
+
   creadoEn    DateTime  @default(now())
   canceladoEn DateTime?
 

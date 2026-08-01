@@ -254,7 +254,10 @@ function PagosPorConfirmar() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-bold tracking-tight truncate">{p.usuario.nombre}</p>
-                <p className="text-xs text-humo-500">{p.usuario.telefono}</p>
+                <p className="text-xs text-humo-500">
+                  {p.usuario.telefono}
+                  {p.nombreInvitado && ` · puesto para ${p.nombreInvitado}`}
+                </p>
                 <p className="mt-1.5 text-sm">
                   <span
                     className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
@@ -434,8 +437,15 @@ function FichaPuesto({ puesto, acento, onCerrar, onAsistio, onCobrar, guardando 
             {puesto.codigo}
           </span>
           <div className="min-w-0">
-            <p className="etiqueta">Reservado por</p>
-            <p className="text-2xl font-extrabold tracking-tightest truncate">{r.usuario.nombre}</p>
+            <p className="etiqueta">{r.nombreInvitado ? 'Asiste' : 'Reservado por'}</p>
+            <p className="text-2xl font-extrabold tracking-tightest truncate">
+              {r.nombreInvitado ?? r.usuario.nombre}
+            </p>
+            {/* Cuando el puesto es para un acompañante, el teléfono sigue siendo
+                el de quien reservó: es a quien hay que llamar. */}
+            {r.nombreInvitado && (
+              <p className="text-xs text-humo-500 truncate">reservó {r.usuario.nombre}</p>
+            )}
             <a
               href={`tel:${r.usuario.telefono}`}
               className="text-sm text-humo-500 hover:text-humo-100"
@@ -516,8 +526,13 @@ function ResultadosBusqueda({ resultados, cargando }) {
         <li key={r.id} className={cx('tarjeta p-4', r.yaPaso && 'opacity-60')}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-bold tracking-tight truncate">{r.usuario.nombre}</p>
-              <p className="text-xs text-humo-500">{r.usuario.telefono}</p>
+              <p className="font-bold tracking-tight truncate">
+                {r.nombreInvitado ?? r.usuario.nombre}
+              </p>
+              <p className="text-xs text-humo-500">
+                {r.usuario.telefono}
+                {r.nombreInvitado && ` · reservó ${r.usuario.nombre}`}
+              </p>
               <p className="mt-1.5 text-sm">
                 <span
                   className="inline-block w-2 h-2 rounded-full mr-2 align-middle"

@@ -36,6 +36,9 @@ export default function Reservar() {
   const queryClient = useQueryClient();
 
   const claseIdUrl = params.get('clase');
+  // Se llega con ?otro=1 desde "Reservar otro puesto en esta clase": el puesto
+  // es para un acompañante, así que se pide su nombre.
+  const paraAcompanante = params.get('otro') === '1';
   const [dia, setDia] = useState(hoyISO());
   const [claseId, setClaseId] = useState(claseIdUrl);
   const [puesto, setPuesto] = useState(null);
@@ -47,6 +50,7 @@ export default function Reservar() {
   const [telefono, setTelefono] = useState(cliente?.telefono ?? '');
   const [email, setEmail] = useState('');
   const [aceptaDatos, setAceptaDatos] = useState(false);
+  const [nombreInvitado, setNombreInvitado] = useState('');
 
   const desde = hoyISO();
   const hasta = sumarDiasISO(desde, 6);
@@ -94,6 +98,7 @@ export default function Reservar() {
       api.crearReserva({
         claseId,
         puestoCodigo: puesto,
+        nombreInvitado: nombreInvitado.trim() || undefined,
         ...(cliente
           ? {}
           : {
@@ -107,6 +112,10 @@ export default function Reservar() {
       guardarToken('cliente', token);
       guardarCliente(perfil);
       queryClient.invalidateQueries({ queryKey: ['inicio'] });
+      // El mapa acaba de cambiar: sin esto, quien vuelve enseguida a tomar otro
+      // puesto para su acompañante vería el suyo todavía libre y chocaría contra
+      // un 409 al confirmarlo.
+      queryClient.invalidateQueries({ queryKey: ['disponibilidad', claseId] });
 
       // Con pago en línea el puesto quedó apartado, no confirmado: se manda a
       // la pasarela. Wompi devuelve a /reserva/:codigo cuando termina.
@@ -253,6 +262,9 @@ export default function Reservar() {
         setEmail={setEmail}
         aceptaDatos={aceptaDatos}
         setAceptaDatos={setAceptaDatos}
+        paraAcompanante={paraAcompanante}
+        nombreInvitado={nombreInvitado}
+        setNombreInvitado={setNombreInvitado}
         config={config}
         error={errorReserva}
         cargando={reservar.isPending}
@@ -367,6 +379,9 @@ function HojaConfirmacion({
   setEmail,
   aceptaDatos,
   setAceptaDatos,
+  paraAcompanante,
+  nombreInvitado,
+  setNombreInvitado,
   config,
   error,
   cargando,
@@ -404,13 +419,34 @@ function HojaConfirmacion({
 
         {/* El formulario solo aparece la primera vez. Después el dispositivo ya
             tiene la sesión del cliente y se salta este bloque completo. */}
+        {/* Puestos para acompañantes: quien reserva y paga es el mismo, pero
+            recepción necesita saber a quién está recibiendo en cada puesto. El
+            nombre es opcional: si no lo ponen, el puesto queda a nombre de quien
+            reservó. */}
+        {paraAcompanante && (
+          <Campo
+            etiqueta="¿Para quién es este puesto?"
+            ayuda="Opcional. Sirve para que en recepción sepan a quién esperan."
+          >
+            <Entrada
+              autoFocus
+              value={nombreInvitado}
+              onChange={(e) => setNombreInvitado(e.target.value)}
+              placeholder="Nombre de tu acompañante"
+              autoComplete="off"
+            />
+          </Campo>
+        )}
+
         {cliente ? (
           <div className="flex items-center gap-3 rounded-2xl bg-carbon-700/60 border border-carbon-600 px-4 py-3">
             <span className="p-2 rounded-xl bg-carbon-600 text-humo-300">
               <IconoUsuario className="w-4 h-4" />
             </span>
             <div className="min-w-0">
-              <p className="font-semibold truncate">{cliente.nombre}</p>
+              <p className="font-semibold truncate">
+                {paraAcompanante ? `Reserva y paga: ${cliente.nombre}` : cliente.nombre}
+              </p>
               <p className="text-xs text-humo-500">{cliente.telefono}</p>
             </div>
           </div>

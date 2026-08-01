@@ -125,6 +125,7 @@ export async function reservasDeClase(claseId) {
       montoCop: r.montoCop,
       creadoEn: r.creadoEn.toISOString(),
       usuario: r.usuario,
+      nombreInvitado: r.nombreInvitado,
     })),
   };
 }
@@ -160,6 +161,8 @@ export async function reportePagos({ desde, hasta, tipoSlug, estadoPago }) {
     instructor: r.clase.instructor?.nombre ?? '',
     cliente: r.usuario.nombre,
     telefono: r.usuario.telefono,
+    // Cuando el puesto es para un acompanante, quien asiste no es quien reservo.
+    asiste: r.nombreInvitado ?? r.usuario.nombre,
     puesto: r.puestoCodigo,
     codigo: r.codigo,
     estadoReserva: r.estado,
@@ -191,7 +194,8 @@ export const COLUMNAS_CSV = [
   { clave: 'hora', titulo: 'Hora' },
   { clave: 'tipoClase', titulo: 'Clase' },
   { clave: 'instructor', titulo: 'Instructor' },
-  { clave: 'cliente', titulo: 'Cliente' },
+  { clave: 'cliente', titulo: 'Quién reservó' },
+  { clave: 'asiste', titulo: 'Quién asiste' },
   { clave: 'telefono', titulo: 'Teléfono' },
   { clave: 'puesto', titulo: 'Puesto' },
   { clave: 'codigo', titulo: 'Código' },
@@ -244,6 +248,7 @@ export async function pagosPorConfirmar() {
       ? Math.max(0, Math.round((r.expiraEn.getTime() - ahora) / 60000))
       : null,
     usuario: r.usuario,
+    nombreInvitado: r.nombreInvitado,
     clase: {
       id: r.claseId,
       fecha: fechaISOLocal(r.clase.inicioEn),
@@ -335,6 +340,7 @@ export async function mapaConOcupantes(claseId) {
                   montoCop: r.montoCop,
                   creadoEn: r.creadoEn.toISOString(),
                   usuario: r.usuario,
+                  nombreInvitado: r.nombreInvitado,
                 }
               : null,
           };
@@ -402,6 +408,7 @@ export async function buscarReservas(consulta) {
       metodoPago: r.metodoPago,
       montoCop: r.montoCop,
       usuario: r.usuario,
+      nombreInvitado: r.nombreInvitado,
       claseId: r.clase.id,
       tipoClase: r.clase.tipoClase.nombre,
       color: r.clase.tipoClase.color,

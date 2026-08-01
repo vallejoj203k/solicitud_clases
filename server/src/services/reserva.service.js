@@ -80,6 +80,7 @@ export async function crearReserva({
   aceptaDatos,
   usuarioId,
   pagoEnLinea = false,
+  nombreInvitado,
 }) {
   return prisma.$transaction(async (tx) => {
     const clase = await tx.clase.findUnique({
@@ -113,19 +114,22 @@ export async function crearReserva({
       : null;
     const usuario = cliente ?? (await upsertCliente(tx, { nombre, telefono, email, aceptaDatos }));
 
-    // Una persona no puede tener dos puestos activos en la misma clase: evita
-    // tanto reservas duplicadas por doble toque como el acaparamiento de bicis.
-    const yaTiene = await tx.reserva.findFirst({
+    // Una persona puede llevar acompañantes -una pareja va junta y paga uno
+    // solo-, pero no acaparar el salón: el tope es `MAX_PUESTOS_POR_PERSONA`.
+    // El puesto que ya tiene apartado y sin pagar también cuenta, para que un
+    // doble toque no consuma dos cupos.
+    const suyos = await tx.reserva.findMany({
       where: { claseId, usuarioId: usuario.id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+      select: { puestoCodigo: true, estado: true },
     });
-    if (yaTiene) {
+    if (suyos.length >= env.maxPuestosPorPersona) {
       throw new AppError(
-        yaTiene.estado === 'PENDIENTE_PAGO'
-          ? `Ya tienes apartado el puesto ${yaTiene.puestoCodigo}; termina de pagarlo o espera a que se libere.`
-          : `Ya tienes el puesto ${yaTiene.puestoCodigo} reservado en esta clase.`,
+        `Ya tienes ${suyos.length} puestos en esta clase (${suyos
+          .map((r) => r.puestoCodigo)
+          .join(', ')}), que es el máximo por persona. Si necesitas más, habla con recepción.`,
         409,
-        'YA_RESERVADO',
-        { codigo: yaTiene.codigo, puestoCodigo: yaTiene.puestoCodigo, estado: yaTiene.estado }
+        'TOPE_POR_PERSONA',
+        { puestos: suyos.map((r) => r.puestoCodigo), maximo: env.maxPuestosPorPersona }
       );
     }
 
@@ -173,6 +177,7 @@ export async function crearReserva({
         expiraEn: conPasarela
           ? new Date(Date.now() + env.pagos.minutosParaPagar * 60_000)
           : null,
+        nombreInvitado: nombreInvitado?.trim() || null,
       },
       include: incluirCompleto,
     });

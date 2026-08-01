@@ -79,6 +79,7 @@ export default function Reserva() {
   const acento = reserva.clase.tipoClase.color;
   const cancelada = reserva.estado === 'CANCELADA';
   const expirada = reserva.estado === 'EXPIRADA';
+  const yaEmpezo = new Date(reserva.clase.inicioEn).getTime() <= Date.now();
 
   // El puesto está apartado mientras se paga. Cómo se paga depende del modo:
   // por pasarela lo resuelve Wompi, por transferencia lo confirma recepción.
@@ -157,6 +158,11 @@ export default function Reserva() {
               >
                 {reserva.puestoCodigo}
               </p>
+              {reserva.nombreInvitado && (
+                <p className="mt-1.5 text-[11px] text-humo-500 max-w-[90px] truncate">
+                  para {reserva.nombreInvitado}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -194,6 +200,19 @@ export default function Reserva() {
 
       {!cancelada && (
         <div className="mt-6 space-y-3">
+          {/* Una pareja va junta y paga una sola persona: desde aquí se toma el
+              segundo puesto sin volver a empezar y sin escribir los datos otra
+              vez. La clase viaja en la URL para caer directo en el mapa. */}
+          {!yaEmpezo && (
+            <Link
+              to={`/reservar/${reserva.clase.tipoClase.slug}?clase=${reserva.clase.id}&otro=1`}
+              className="block"
+            >
+              <Boton className="w-full" style={{ backgroundColor: acento }}>
+                Reservar otro puesto en esta clase
+              </Boton>
+            </Link>
+          )}
           <Boton
             variante="secundario"
             className="w-full"
