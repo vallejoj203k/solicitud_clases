@@ -228,6 +228,10 @@ function VistaAgenda({ onAbrirClase }) {
  * tarjeta pone el monto y el código de la reserva en grande, que es lo que hay
  * que buscar en el movimiento.
  *
+ * Ojo: el puesto NO está apartado mientras espera. Si alguien más lo confirma
+ * primero, al intentar confirmar este pago el servidor avisa y hay que
+ * reubicar o devolver.
+ *
  * Si no hay nadie esperando, la sección no se dibuja: en modo pasarela o cobro
  * en recepción esta cola siempre está vacía y no debe estorbar.
  */
@@ -240,7 +244,9 @@ function PagosPorConfirmar() {
   });
 
   const acciones = useAccionesMostrador();
-  const avisaron = (data ?? []).filter((p) => p.avisoPagoEn);
+  // Los que avisaron y los que quedaron en conflicto. Los que ni avisaron ni
+  // pagaron no se muestran: se vencen solos y no hay nada que hacer con ellos.
+  const avisaron = (data ?? []).filter((p) => p.avisoPagoEn || p.notasPago);
 
   if (avisaron.length === 0) return null;
 
@@ -283,6 +289,12 @@ function PagosPorConfirmar() {
               </div>
             </div>
 
+            {p.notasPago && (
+              <p className="mt-2 rounded-xl bg-alerta/10 border border-alerta/30 px-3 py-2 text-xs text-alerta">
+                {p.notasPago}
+              </p>
+            )}
+
             <div className="mt-3 flex items-center gap-2">
               <button
                 disabled={acciones.guardando}
@@ -303,7 +315,7 @@ function PagosPorConfirmar() {
                 Liberar
               </button>
               <span className="text-xs text-humo-500">
-                avisó {textoDesde(p.avisoPagoEn)}
+                {p.avisoPagoEn ? `avisó ${textoDesde(p.avisoPagoEn)}` : 'pago recibido'}
                 {p.minutosRestantes !== null && ` · vence en ${p.minutosRestantes} min`}
               </span>
             </div>

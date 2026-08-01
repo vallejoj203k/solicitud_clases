@@ -226,7 +226,13 @@ export const COLUMNAS_CSV = [
  */
 export async function pagosPorConfirmar() {
   const reservas = await prisma.reserva.findMany({
-    where: { estado: 'PENDIENTE_PAGO', expiraEn: { gt: new Date() } },
+    where: {
+      estado: 'PENDIENTE_PAGO',
+      // Sin vencimiento entran las que quedaron en conflicto -pago recibido pero
+      // el puesto ya era de otro-: no se pueden perder de vista, son las que hay
+      // que devolver o reubicar.
+      OR: [{ expiraEn: null }, { expiraEn: { gt: new Date() } }],
+    },
     include: {
       clase: { include: { tipoClase: true } },
       usuario: { select: { nombre: true, telefono: true } },
@@ -242,6 +248,8 @@ export async function pagosPorConfirmar() {
     montoCop: r.montoCop,
     creadoEn: r.creadoEn.toISOString(),
     avisoPagoEn: r.avisoPagoEn?.toISOString() ?? null,
+    // Si el puesto se lo llevó otro, aquí viene la instrucción para recepción.
+    notasPago: r.notasPago,
     // Minutos que le quedan al puesto apartado, para que recepcion sepa a quien
     // atender primero.
     minutosRestantes: r.expiraEn

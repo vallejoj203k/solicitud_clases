@@ -4,7 +4,7 @@ import { generarCodigoReserva, normalizarTelefono } from '../utils/codigo.js';
 import { resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
 import { env } from '../config/env.js';
 import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
-import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
+import { ESTADOS_OCUPAN_PUESTO, ESTADOS_SIN_PAGAR } from '../config/estados.js';
 
 
 const incluirCompleto = {
@@ -116,12 +116,27 @@ export async function crearReserva({
 
     // Una persona puede llevar acompañantes -una pareja va junta y paga uno
     // solo-, pero no acaparar el salón: el tope es `MAX_PUESTOS_POR_PERSONA`.
-    // El puesto que ya tiene apartado y sin pagar también cuenta, para que un
-    // doble toque no consuma dos cupos.
+    // Las que están sin pagar cuentan aunque no ocupen puesto: si no, alguien
+    // podría llenar la clase de reservas sin pagar una sola.
     const suyos = await tx.reserva.findMany({
-      where: { claseId, usuarioId: usuario.id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
-      select: { puestoCodigo: true, estado: true },
+      where: {
+        claseId,
+        usuarioId: usuario.id,
+        estado: { in: [...ESTADOS_OCUPAN_PUESTO, ...ESTADOS_SIN_PAGAR] },
+      },
+      select: { codigo: true, puestoCodigo: true, estado: true },
     });
+
+    // Doble toque sobre el mismo puesto: se devuelve la reserva que ya existe en
+    // vez de crear otra. Antes lo frenaba el índice único, que ya no mira las
+    // reservas sin pagar.
+    const mismoPuesto = suyos.find(
+      (r) => r.puestoCodigo === puestoCodigo && r.estado === 'PENDIENTE_PAGO'
+    );
+    if (mismoPuesto) {
+      return tx.reserva.findUnique({ where: { codigo: mismoPuesto.codigo }, include: incluirCompleto });
+    }
+
     if (suyos.length >= env.maxPuestosPorPersona) {
       throw new AppError(
         `Ya tienes ${suyos.length} puestos en esta clase (${suyos
@@ -183,6 +198,25 @@ export async function crearReserva({
     });
 
     return reserva;
+  });
+}
+
+/**
+ * ¿Alguien ya tiene confirmado este puesto?
+ *
+ * Es la comprobación que sustituye al apartado: como una reserva sin pagar no
+ * bloquea nada, el puesto se decide en el momento de confirmar y lo gana el
+ * primero. Quien confirme después se entera aquí.
+ */
+export async function quienTieneElPuesto({ claseId, puestoCodigo, exceptoReservaId }) {
+  return prisma.reserva.findFirst({
+    where: {
+      claseId,
+      puestoCodigo,
+      estado: { in: ESTADOS_OCUPAN_PUESTO },
+      ...(exceptoReservaId ? { id: { not: exceptoReservaId } } : {}),
+    },
+    include: { usuario: { select: { nombre: true, telefono: true } } },
   });
 }
 
@@ -311,27 +345,28 @@ export async function aplicarResultadoPago({
   };
 
   if (estadoPago === 'PAGADO') {
-    // El pago entro: se confirma aunque el plazo se haya vencido por segundos,
-    // siempre que el puesto no se lo hayan dado a otra persona.
-    if (reserva.estado === 'EXPIRADA') {
-      const ocupadoPorOtro = await prisma.reserva.findFirst({
-        where: {
-          claseId: reserva.claseId,
-          puestoCodigo: reserva.puestoCodigo,
-          estado: { in: ESTADOS_OCUPAN_PUESTO },
-          id: { not: reserva.id },
+    // Como una reserva sin pagar NO aparta el puesto, entre que esta persona
+    // empezo a pagar y ahora otra pudo haberlo confirmado. Se comprueba siempre,
+    // no solo cuando el plazo vencio.
+    const ocupadoPorOtro = await quienTieneElPuesto({
+      claseId: reserva.claseId,
+      puestoCodigo: reserva.puestoCodigo,
+      exceptoReservaId: reserva.id,
+    });
+    if (ocupadoPorOtro) {
+      // Caso incomodo pero real: el pago entro y el puesto ya no esta. Se deja
+      // constancia -y se le quita el vencimiento- para que la reserva siga a la
+      // vista de recepcion hasta que devuelvan la plata o la reubiquen.
+      const actualizada = await prisma.reserva.update({
+        where: { id: reserva.id },
+        data: {
+          ...datos,
+          expiraEn: null,
+          notasPago: `Pago recibido, pero el puesto ${reserva.puestoCodigo} ya lo tenía ${ocupadoPorOtro.usuario.nombre}. Reubicar o devolver.`,
         },
+        include: incluirCompleto,
       });
-      if (ocupadoPorOtro) {
-        // Caso incomodo pero real: pago tarde y el puesto ya no esta. Se deja
-        // constancia del pago para que recepcion pueda devolverle la plata.
-        const actualizada = await prisma.reserva.update({
-          where: { id: reserva.id },
-          data: { ...datos, notasPago: 'Pago recibido despues de expirar; el puesto ya estaba tomado.' },
-          include: incluirCompleto,
-        });
-        return { reserva: actualizada, cambio: true, requiereReembolso: true };
-      }
+      return { reserva: actualizada, cambio: true, requiereReembolso: true };
     }
     datos.estado = 'CONFIRMADA';
     datos.expiraEn = null;

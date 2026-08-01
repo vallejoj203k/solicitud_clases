@@ -84,9 +84,8 @@ export default function Reservar() {
     if (primero) setDia(primero.fecha);
   }, [data, clasesPorDia, dia, claseId]);
 
-  // Los puestos que esta persona ya tiene en esta clase. Sirve para lo que más
-  // confundía: quien empieza el pago, se arrepiente y vuelve al mapa veía su
-  // propio puesto en rojo, sin manera de saber que era suyo ni de soltarlo.
+  // Reservas sin pagar de esta persona en esta clase, para recordarle que dejó
+  // un pago a medias en vez de que reserve otra vez sin querer.
   const { data: misReservas } = useQuery({
     queryKey: ['misReservas'],
     queryFn: api.misReservas,
@@ -335,17 +334,17 @@ function PasoHorarios({ isLoading, dias, conteoPorDia, dia, setDia, clases, onEl
 }
 
 /**
- * Aviso de que el puesto en rojo es tuyo.
+ * Aviso de que ya hay una reserva sin pagar en esta clase.
  *
- * Es el remate de la queja más común: empiezas a pagar, te arrepientes, vuelves
- * al mapa y tu propio puesto aparece ocupado sin explicación. Aquí se dice de
- * quién es y se ofrecen las dos salidas: terminar el pago o soltarlo.
+ * El puesto sigue verde -no se aparta hasta que el pago esté verificado-, así
+ * que esto no explica un puesto en rojo: recuerda que hay un pago a medias y
+ * ofrece las dos salidas, terminarlo o descartarlo.
  */
 function ApartadaPropia({ reserva, onLiberar }) {
   const [liberando, setLiberando] = useState(false);
 
   const liberar = async () => {
-    if (!window.confirm(`¿Soltar el puesto ${reserva.puestoCodigo}? Queda libre para todos.`)) return;
+    if (!window.confirm(`¿Descartar la reserva del puesto ${reserva.puestoCodigo}?`)) return;
     setLiberando(true);
     try {
       await api.cancelarReserva(reserva.codigo);
@@ -358,8 +357,9 @@ function ApartadaPropia({ reserva, onLiberar }) {
   return (
     <div className="mb-5 rounded-2xl border border-amber-400/40 bg-amber-400/[0.08] px-4 py-3">
       <p className="text-sm text-amber-200">
-        Tienes el puesto <span className="font-bold">{reserva.puestoCodigo}</span> apartado en esta
-        clase, sin pagar. Nadie más lo puede tomar mientras tanto.
+        Tienes una reserva sin pagar en esta clase, en el puesto{' '}
+        <span className="font-bold">{reserva.puestoCodigo}</span>. Ese puesto sigue disponible para
+        otros hasta que confirmemos tu pago.
       </p>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Link
@@ -373,7 +373,7 @@ function ApartadaPropia({ reserva, onLiberar }) {
           disabled={liberando}
           className="text-sm text-humo-500 hover:text-alerta transition-colors disabled:opacity-60"
         >
-          {liberando ? 'Soltando…' : 'Soltar el puesto'}
+          {liberando ? 'Descartando…' : 'Descartar la reserva'}
         </button>
       </div>
     </div>
@@ -581,8 +581,9 @@ function HojaConfirmacion({
         <p className="text-xs text-humo-500 -mt-2 px-1">
           {
             {
-              wompi: `Te llevamos a pagar. Te guardamos el puesto ${config?.minutosParaPagar} minutos mientras completas el pago.`,
-              transferencia: `Te mostramos a dónde transferir. Te guardamos el puesto ${config?.minutosParaPagar} minutos mientras el gimnasio verifica el pago.`,
+              wompi: 'Te llevamos a pagar. El puesto queda tuyo cuando entre el pago.',
+              transferencia:
+                'Te mostramos a dónde transferir. El puesto queda tuyo cuando el gimnasio verifique el pago; hasta entonces sigue disponible para otros.',
               manual: 'Pagas en recepción antes de la clase (efectivo o transferencia).',
             }[config?.modoPago ?? 'manual']
           }

@@ -244,16 +244,30 @@ Tres modos, según `PAGO_MODO`:
 Si el modo elegido no tiene con qué operar —faltan las llaves de Wompi, o falta
 `TRANSFERENCIA_LLAVE`— se cae a `manual` en vez de dejar la app sin poder reservar.
 
-### El puesto se aparta, no se vende, mientras se paga
+### Una reserva sin pagar NO aparta el puesto
 
-Cobrar primero y reservar después deja el puesto suelto durante los minutos que la persona
-está en la pasarela: dos personas podrían pagar por la misma bicicleta y a una habría que
-devolverle la plata a mano. Por eso:
+**El cupo es de quien paga primero.** Una reserva en `PENDIENTE_PAGO` no ocupa nada: el
+puesto sigue verde en el mapa y otra persona lo puede tomar. Es una decisión del gimnasio,
+tomada después de ver el caso real: quien empieza a pagar y se arrepiente dejaba un cupo
+muerto durante quince minutos.
+
+El precio de esa decisión es que **dos personas pueden pagar por el mismo puesto**. La app
+no lo puede evitar —nadie avisa mientras alguien transfiere— así que lo detecta al
+confirmar:
+
+- Recepción intenta confirmar el segundo pago y el servidor lo frena con
+  `409 PUESTO_YA_CONFIRMADO`, diciendo quién se quedó con el puesto.
+- Si el pago llega por pasarela cuando el puesto ya es de otro, se registra igual y la
+  reserva queda con una nota en `notasPago` («Reubicar o devolver»), **sin vencimiento**,
+  para que no desaparezca de la cola del mostrador hasta que alguien la resuelva.
+
+Por eso el índice único solo mira las reservas firmes: varias `PENDIENTE_PAGO` pueden
+convivir sobre el mismo puesto.
 
 1. Al confirmar, la reserva nace en **`PENDIENTE_PAGO`** con `expiraEn` a
-   `MINUTOS_PARA_PAGAR` minutos. Ese estado **ocupa el puesto** en el mapa —nadie más lo
-   puede tomar— pero **no es una venta**: no aparece en el reporte de pagos ni suma a los
-   ingresos.
+   `MINUTOS_PARA_PAGAR` minutos. Ese plazo ya no aparta nada: solo decide cuándo se da por
+   abandonada y deja de estorbar en la cola. Tampoco es una venta: no aparece en el reporte
+   de pagos ni suma a los ingresos.
 2. Se redirige a Wompi con una **firma de integridad**
    (`SHA256(referencia + centavos + moneda + secreto)`), que impide pagar $1.000 por una
    clase de $25.000 editando la URL.
@@ -303,12 +317,10 @@ Marcar pagada una reserva apartada **siempre** la confirma y le quita el vencimi
 de la cola o del botón de cobro en efectivo. Sin eso, el barrido de vencidas liberaría más
 tarde un puesto ya pagado.
 
-**Cuando se arrepienten.** Un puesto apartado y sin pagar se puede soltar en cualquier
-momento, **sin el plazo de cancelación**: no hay plata que devolver y retenerlo solo le
-quita el cupo a quien sí va a pagar. Lo puede soltar el cliente —desde la pantalla de pago
-o desde el mapa— y también recepción, desde la cola. Y como quien vuelve al mapa veía su
-propio puesto en rojo sin saber que era suyo, ahora aparece un aviso con las dos salidas:
-terminar el pago o soltarlo.
+**Cuando se arrepienten.** Una reserva sin pagar se descarta en cualquier momento, **sin el
+plazo de cancelación**: no hay nada que devolver. Lo puede hacer el cliente —desde la
+pantalla de pago o desde el mapa, donde se le recuerda que dejó un pago a medias— y también
+recepción, desde la cola.
 
 **El aviso en el panel.** La cantidad de pagos por confirmar se consulta desde el layout
 del panel, no desde la pantalla de Recepción, así que el contador se ve en **cualquier**

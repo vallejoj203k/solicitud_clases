@@ -1,17 +1,26 @@
 /**
  * Estados de una reserva y qué significan para el cupo.
  *
- * La distinción importa desde que existe el pago en línea: una reserva en
- * PENDIENTE_PAGO **aparta el puesto** (nadie más lo puede tomar mientras la
- * persona paga) pero **no es una venta**: no cuenta como ingreso ni aparece en
- * el reporte de pagos hasta que Wompi confirma.
+ * DECISIÓN CLAVE: una reserva sin pagar **no aparta el puesto**. Mientras el
+ * pago no esté verificado, la bicicleta sigue a la venta y se la lleva quien
+ * confirme primero. Es lo que pidió el gimnasio: quien empieza a pagar y se
+ * arrepiente no deja un cupo muerto.
+ *
+ * El precio de esa decisión es que dos personas pueden pagar por el mismo
+ * puesto. La app no lo puede evitar -nadie avisa mientras alguien transfiere-,
+ * así que lo detecta al confirmar: el primero se queda con el puesto y el
+ * segundo queda marcado en `notasPago` para que recepción le devuelva o lo
+ * reubique. Ver `confirmarOcupacion` en reserva.service.js.
  */
 
-/** Ocupan un puesto en el mapa y consumen cupo. */
-export const ESTADOS_OCUPAN_PUESTO = ['PENDIENTE_PAGO', 'CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
+/** Ocupan un puesto en el mapa y consumen cupo. Solo las reservas firmes. */
+export const ESTADOS_OCUPAN_PUESTO = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
 /** Reservas ya firmes: son las que cuentan para reportes, ingresos y asistencia. */
 export const ESTADOS_CONFIRMADOS = ['CONFIRMADA', 'ASISTIO', 'NO_SHOW'];
 
-/** Terminadas sin efecto: liberan el puesto. */
+/** Esperando que alguien verifique el pago. No ocupan nada. */
+export const ESTADOS_SIN_PAGAR = ['PENDIENTE_PAGO'];
+
+/** Terminadas sin efecto. */
 export const ESTADOS_LIBERAN = ['CANCELADA', 'EXPIRADA'];
