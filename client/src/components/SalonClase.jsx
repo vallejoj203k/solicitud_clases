@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import MapaPuestos from './MapaPuestos.jsx';
-import { Aviso, BarraDisponibilidad, Cargando, Hoja, Insignia, Vacio } from './ui.jsx';
+import FilaMusica from './FilaMusica.jsx';
+import { Aviso, BarraDisponibilidad, Cargando, Chip, Hoja, Insignia, Vacio } from './ui.jsx';
 import { IconoAtras, IconoCheck, IconoReloj } from './Iconos.jsx';
 import { pesos, hora12, fechaLarga, ETIQUETA_PAGO, ETIQUETA_RESERVA } from '../lib/formato.js';
 
@@ -81,6 +82,7 @@ export function useAccionesMostrador(alActualizar) {
 
 export default function SalonClase({ claseId, onVolver }) {
   const [puestoAbierto, setPuestoAbierto] = useState(null);
+  const [vista, setVista] = useState('salon');
 
   const { data, isLoading } = useQuery({
     queryKey: ['adminMapa', claseId],
@@ -156,20 +158,37 @@ export default function SalonClase({ claseId, onVolver }) {
       <div className="px-5 md:px-8 space-y-5 md:landscape:px-0 md:landscape:flex-1 md:landscape:min-w-0 md:landscape:space-y-3">
         {acciones.error && <Aviso>{acciones.error}</Aviso>}
 
-        <p className="text-sm text-humo-500">
-          Toca un puesto ocupado para ver quién lo reservó.
-        </p>
-
-        <div className="tarjeta p-5 max-w-md md:landscape:max-w-none md:landscape:py-4">
-          <MapaPuestos
-            mapa={mapa}
-            soloLectura
-            alTocarOcupado={(puesto) => {
-              acciones.limpiarError();
-              setPuestoAbierto(puesto);
-            }}
-          />
+        {/* Salón y música son las dos cosas que se consultan de pie durante la
+            clase, así que comparten pantalla en vez de vivir en dos sitios. */}
+        <div className="flex gap-2">
+          <Chip activo={vista === 'salon'} onClick={() => setVista('salon')}>
+            Salón
+          </Chip>
+          <Chip activo={vista === 'musica'} onClick={() => setVista('musica')}>
+            Música
+          </Chip>
         </div>
+
+        {vista === 'salon' ? (
+          <>
+            <p className="text-sm text-humo-500">
+              Toca un puesto ocupado para ver quién lo reservó.
+            </p>
+
+            <div className="tarjeta p-5 max-w-md md:landscape:max-w-none md:landscape:py-4">
+              <MapaPuestos
+                mapa={mapa}
+                soloLectura
+                alTocarOcupado={(puesto) => {
+                  acciones.limpiarError();
+                  setPuestoAbierto(puesto);
+                }}
+              />
+            </div>
+          </>
+        ) : (
+          <FilaMusica claseId={claseId} acento={clase.tipoClase.color} />
+        )}
       </div>
 
       {puestoAbierto && (

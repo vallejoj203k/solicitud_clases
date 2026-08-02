@@ -89,6 +89,14 @@ export const api = {
   checkout: (codigo) => pedir(`/reservas/${codigo}/checkout`),
   avisarPago: (codigo) => pedir(`/reservas/${codigo}/aviso-pago`, { metodo: 'POST' }),
 
+  // --- Musica --------------------------------------------------------------
+  canciones: (q) => pedir(`/canciones${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  cancionesDeLaCasa: () => pedir('/canciones/de-la-casa'),
+  musicaDeClase: (claseId) => pedir(`/clases/${claseId}/musica`),
+  pedirCancion: (claseId, cancionId) =>
+    pedir(`/clases/${claseId}/musica`, { metodo: 'POST', cuerpo: { cancionId } }),
+  quitarPedido: (pedidoId) => pedir(`/musica/${pedidoId}`, { metodo: 'DELETE' }),
+
   // --- Admin ---------------------------------------------------------------
   admin: {
     login: (usuario, password) =>
@@ -148,6 +156,21 @@ export const api = {
     actualizarPrecioTipo: (id, datos) =>
       pedir(`/admin/tipos-clase/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     instructores: () => pedir('/admin/instructores', { tipoToken: 'admin' }),
+    canciones: (q) =>
+      pedir(`/admin/canciones${q ? `?q=${encodeURIComponent(q)}` : ''}`, { tipoToken: 'admin' }),
+    crearCancion: (datos) =>
+      pedir('/admin/canciones', { metodo: 'POST', cuerpo: datos, tipoToken: 'admin' }),
+    importarCanciones: (texto) =>
+      pedir('/admin/canciones/importar', { metodo: 'POST', cuerpo: { texto }, tipoToken: 'admin' }),
+    actualizarCancion: (id, datos) =>
+      pedir(`/admin/canciones/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
+    eliminarCancion: (id) =>
+      pedir(`/admin/canciones/${id}`, { metodo: 'DELETE', tipoToken: 'admin' }),
+    musicaDeClase: (id) => pedir(`/admin/clases/${id}/musica`, { tipoToken: 'admin' }),
+    marcarSono: (pedidoId, sono = true) =>
+      pedir(`/admin/musica/${pedidoId}/sono`, { metodo: 'POST', cuerpo: { sono }, tipoToken: 'admin' }),
+    quitarPedidoMusica: (pedidoId) =>
+      pedir(`/admin/musica/${pedidoId}`, { metodo: 'DELETE', tipoToken: 'admin' }),
     crearInstructor: (nombre) =>
       pedir('/admin/instructores', { metodo: 'POST', cuerpo: { nombre }, tipoToken: 'admin' }),
   },

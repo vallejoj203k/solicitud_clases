@@ -165,3 +165,13 @@ export function IconoDinero({ className = 'w-5 h-5' }) {
     </svg>
   );
 }
+
+export function IconoMusica({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M9 17.4V5.6l10-2v11.8" />
+      <circle cx="6.6" cy="17.4" r="2.6" />
+      <circle cx="16.6" cy="15.4" r="2.6" />
+    </svg>
+  );
+}

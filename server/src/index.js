@@ -15,6 +15,7 @@ import { publicRouter } from './routes/public.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { adminRouter } from './routes/admin.routes.js';
 import { pagosRouter } from './routes/pagos.routes.js';
+import { musicaRouter } from './routes/musica.routes.js';
 import { expirarReservasVencidas } from './services/reserva.service.js';
 
 const app = express();
@@ -60,6 +61,7 @@ app.get('/api/salud', async (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', pagosRouter);
+app.use('/api', musicaRouter);
 app.use('/api', publicRouter);
 
 // --- SPA --------------------------------------------------------------------

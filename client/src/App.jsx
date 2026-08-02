@@ -13,6 +13,7 @@ import AdminClaseDetalle from './pages/admin/ClaseDetalle.jsx';
 import AdminPagos from './pages/admin/Pagos.jsx';
 import AdminClientes from './pages/admin/Clientes.jsx';
 import AdminRecepcion from './pages/admin/Recepcion.jsx';
+import AdminMusica from './pages/admin/Musica.jsx';
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="recepcion" element={<AdminRecepcion />} />
         <Route path="clases" element={<AdminClases />} />
         <Route path="clases/:id" element={<AdminClaseDetalle />} />
+        <Route path="musica" element={<AdminMusica />} />
         <Route path="pagos" element={<AdminPagos />} />
         <Route path="clientes" element={<AdminClientes />} />
       </Route>
