@@ -40,6 +40,11 @@ const REPRODUCIENDO = 1;
 const EN_COLA = 5;
 const SIN_EMPEZAR = -1;
 
+// Tope de saltos seguidos buscando algo que no haya sonado dentro de la mezcla.
+// Sin él, una mezcla corta de canciones ya oídas dejaría la pantalla saltando
+// sin parar.
+const MAX_SALTOS = 6;
+
 export default function Reproductor() {
   const queryClient = useQueryClient();
   const esAdmin = Boolean(leerToken('admin'));
@@ -58,6 +63,10 @@ export default function Reproductor() {
   const rellenoEsCasa = useRef(false);
   const casa = useRef([]);
   const casaIdx = useRef(0);
+  // Todo lo que ya sonó en esta clase: los pedidos que el servidor da por
+  // sonados más lo que haya puesto el relleno. Nada de aquí vuelve a sonar.
+  const reproducidas = useRef(new Set());
+  const saltos = useRef(0);
 
   const [arrancado, setArrancado] = useState(false);
   const [listo, setListo] = useState(false);
@@ -91,6 +100,7 @@ export default function Reproductor() {
    */
   const cargar = useCallback((videoId) => {
     ultimoVideo.current = videoId;
+    reproducidas.current.add(videoId);
     reproductor.current?.loadVideoById(videoId);
     setTimeout(() => {
       const estado = reproductor.current?.getPlayerState?.();
@@ -98,7 +108,12 @@ export default function Reproductor() {
     }, 2000);
   }, []);
 
-  /** Siguiente canción de la casa, en círculo. */
+  /**
+   * Siguiente canción de la casa que no haya sonado ya.
+   *
+   * Solo se repite el catálogo cuando se agotó entero; antes de eso, ninguna
+   * suena dos veces en la misma clase.
+   */
   const ponerDeLaCasa = useCallback(async () => {
     if (!casa.current.length) {
       const lista = await api.cancionesDeLaCasa().catch(() => []);
@@ -111,11 +126,27 @@ export default function Reproductor() {
       );
       return;
     }
+
+    const total = casa.current.length;
+    let elegida = null;
+    for (let i = 0; i < total; i += 1) {
+      const c = casa.current[(casaIdx.current + i) % total];
+      if (!reproducidas.current.has(c.videoId)) {
+        elegida = c;
+        casaIdx.current = (casaIdx.current + i + 1) % total;
+        break;
+      }
+    }
+    // Si ya sonaron todas, se empieza otra vuelta: mejor repetir que callar.
+    if (!elegida) {
+      reproducidas.current = new Set();
+      elegida = casa.current[casaIdx.current % total];
+      casaIdx.current = (casaIdx.current + 1) % total;
+    }
+
     setError(null);
     rellenoEsCasa.current = true;
-    const c = casa.current[casaIdx.current % casa.current.length];
-    casaIdx.current += 1;
-    cargar(c.videoId);
+    cargar(elegida.videoId);
   }, [cargar]);
 
   /**
@@ -127,11 +158,16 @@ export default function Reproductor() {
    */
   const ponerRelleno = useCallback(async () => {
     fijarModo('relleno');
+    saltos.current = 0;
     if (ultimoVideo.current && !mezclaFallida.current) {
       rellenoEsCasa.current = false;
       reproductor.current?.loadPlaylist({
         list: `RD${ultimoVideo.current}`,
         listType: 'playlist',
+        // ARRANCAR EN EL SEGUNDO. Una mezcla "RD" siempre empieza por la
+        // canción que la siembra, y esa acaba de sonar: sin este índice lo
+        // primero que hacía la pantalla al vaciarse la fila era repetirla.
+        index: 1,
       });
       return;
     }
@@ -188,16 +224,48 @@ export default function Reproductor() {
     if (!hubo && rellenoEsCasa.current) await ponerDeLaCasa();
   }, [avanzar, ponerDeLaCasa]);
 
+  /**
+   * Vigila que la mezcla no esté repitiendo algo ya sonado.
+   *
+   * Dentro de una lista quien elige la siguiente es YouTube, no nosotros: lo
+   * único que se puede hacer es mirar qué acaba de empezar y pasar de largo si
+   * ya sonó. El tope de saltos evita que una mezcla corta de canciones ya
+   * oídas deje la pantalla saltando sin parar.
+   */
+  const vigilarRepetida = useCallback(() => {
+    if (modo.current !== 'relleno' || rellenoEsCasa.current) return;
+    const id = reproductor.current?.getVideoData?.()?.video_id;
+    if (!id) return;
+
+    if (!reproducidas.current.has(id)) {
+      reproducidas.current.add(id);
+      ultimoVideo.current = id;
+      saltos.current = 0;
+      return;
+    }
+
+    saltos.current += 1;
+    if (saltos.current > MAX_SALTOS) {
+      // La mezcla se está repitiendo entera: mejor las de la casa.
+      mezclaFallida.current = true;
+      ponerDeLaCasa();
+      return;
+    }
+    reproductor.current?.nextVideo?.();
+  }, [ponerDeLaCasa]);
+
   // Los callbacks de YouTube se registran una vez, así que leen las refs y no
   // el estado. Estas guardan la versión viva de cada función.
   const refAlTerminar = useRef(alTerminar);
   const refAvanzar = useRef(avanzar);
   const refPonerDeLaCasa = useRef(ponerDeLaCasa);
+  const refVigilarRepetida = useRef(vigilarRepetida);
   useEffect(() => {
     refAlTerminar.current = alTerminar;
     refAvanzar.current = avanzar;
     refPonerDeLaCasa.current = ponerDeLaCasa;
-  }, [alTerminar, avanzar, ponerDeLaCasa]);
+    refVigilarRepetida.current = vigilarRepetida;
+  }, [alTerminar, avanzar, ponerDeLaCasa, vigilarRepetida]);
 
   // --- Montaje del reproductor ---------------------------------------------
   useEffect(() => {
@@ -221,7 +289,14 @@ export default function Reproductor() {
               refAvanzar.current();
             },
             onStateChange: (e) => {
-              if (e.data === TERMINADO) refAlTerminar.current();
+              if (e.data === TERMINADO) {
+                refAlTerminar.current();
+                return;
+              }
+              // Empezó algo dentro de la mezcla. YouTube elige qué encadena, así
+              // que hay que mirar si es algo que ya sonó y, si lo es, pasar de
+              // largo: es la única forma de que la mezcla no repita.
+              if (e.data === REPRODUCIENDO) refVigilarRepetida.current();
             },
             onError: () => {
               // Un vídeo que falla no puede congelar la pantalla.
@@ -244,6 +319,16 @@ export default function Reproductor() {
       reproductor.current = null;
     };
   }, [arrancado]);
+
+  /**
+   * Lo que el servidor da por sonado se suma a lo que no debe repetirse.
+   *
+   * Importa al recargar la pantalla a mitad de clase: sin esto, el relleno no
+   * sabría qué sonó antes de abrirla y volvería a poner esas canciones.
+   */
+  useEffect(() => {
+    for (const id of data?.reproducidas ?? []) reproducidas.current.add(id);
+  }, [data]);
 
   /**
    * Entró un pedido mientras sonaba el relleno: se atiende sin esperar.
