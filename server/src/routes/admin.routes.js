@@ -22,14 +22,17 @@ import { generarIcs } from '../utils/ics.js';
 import {
   buscarCanciones,
   crearCancion,
-  importarCanciones,
+  importarDeYoutube,
+  guardarDeYoutube,
   actualizarCancion,
   eliminarCancion,
   filaDeClase,
   marcarSono,
+  siguienteCancion,
   quitarPedido,
   MOMENTOS,
 } from '../services/musica.service.js';
+import { buscar as buscarEnYoutube } from '../services/youtube.service.js';
 import {
   dashboard,
   buscarReservas,
@@ -331,9 +334,10 @@ adminRouter.post(
 
 // --- Musica -----------------------------------------------------------------
 /**
- * El catalogo es solo texto: la app no guarda ni reproduce audio. Se carga
- * pegando una lista, que es lo mas rapido cuando el gimnasio ya tiene su
- * playlist en algun lado.
+ * La app no aloja audio: guarda el id del video de YouTube y lo pone con el
+ * reproductor incrustado oficial. Lo que administra el gimnasio aqui son las
+ * canciones "de la casa" -las que suenan cuando nadie ha pedido nada- y la fila
+ * de cada clase.
  */
 adminRouter.get(
   '/canciones',
@@ -357,11 +361,44 @@ adminRouter.post(
   })
 );
 
+/**
+ * Carga masiva pegando enlaces de YouTube o el de una lista completa. Va por
+ * enlaces y no por titulos porque buscar cada titulo costaria 100 unidades de
+ * cuota por cancion; con los enlaces son 50 canciones por unidad.
+ */
 adminRouter.post(
   '/canciones/importar',
   asyncHandler(async (req, res) => {
-    const { texto } = z.object({ texto: z.string().min(1).max(100_000) }).parse(req.body);
-    res.json(await importarCanciones(texto));
+    const { texto, deLaCasa = true } = z
+      .object({ texto: z.string().min(1).max(100_000), deLaCasa: z.boolean().optional() })
+      .parse(req.body);
+    res.json(await importarDeYoutube(texto, { deLaCasa }));
+  })
+);
+
+/** Buscar en YouTube desde el panel, para armar las de la casa. */
+adminRouter.get(
+  '/musica/buscar',
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    res.json(await buscarEnYoutube(q));
+  })
+);
+
+/** Agregar una cancion de YouTube al catalogo (normalmente, de la casa). */
+adminRouter.post(
+  '/musica/agregar',
+  asyncHandler(async (req, res) => {
+    const { videoId, deLaCasa = true } = z
+      .object({
+        videoId: z.string().regex(/^[\w-]{11}$/),
+        deLaCasa: z.boolean().optional(),
+      })
+      .parse(req.body);
+    const cancion = await guardarDeYoutube(videoId);
+    res
+      .status(201)
+      .json(await actualizarCancion(cancion.id, { deLaCasa, activa: true }));
   })
 );
 
@@ -385,6 +422,21 @@ adminRouter.get(
   '/clases/:id/musica',
   asyncHandler(async (req, res) => {
     res.json(await filaDeClase(req.params.id));
+  })
+);
+
+/**
+ * El reproductor del gimnasio pide la siguiente cancion.
+ *
+ * Se llama al terminar la que estaba puesta y tambien al saltarla a mano.
+ * Devuelve `sonando: null` con motivo FILA_VACIA cuando nadie ha pedido nada:
+ * ahi la pantalla sigue sola con lo que YouTube encadene.
+ */
+adminRouter.post(
+  '/musica/siguiente',
+  asyncHandler(async (req, res) => {
+    const { clase } = z.object({ clase: z.string().nullish() }).parse(req.body ?? {});
+    res.json(await siguienteCancion(clase ?? null));
   })
 );
 

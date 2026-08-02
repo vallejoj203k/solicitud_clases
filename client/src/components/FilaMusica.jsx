@@ -41,6 +41,7 @@ export default function FilaMusica({ claseId, acento = '#C8F751' }) {
   });
 
   const pedidos = data?.pedidos ?? [];
+  const sonando = pedidos.find((p) => p.estado === 'SONANDO') ?? null;
   const enFila = pedidos.filter((p) => p.estado === 'EN_FILA');
   const sonadas = pedidos.filter((p) => p.estado === 'SONO');
   const ocupado = sono.isPending || quitar.isPending;
@@ -50,6 +51,31 @@ export default function FilaMusica({ claseId, acento = '#C8F751' }) {
   return (
     <div className="space-y-4">
       {error && <Aviso>{error}</Aviso>}
+
+      {/* Lo que el reproductor del gimnasio tiene puesto en este momento. */}
+      {sonando && (
+        <div
+          className="rounded-2xl border p-3 flex items-center gap-3"
+          style={{ borderColor: `${acento}55`, backgroundColor: `${acento}12` }}
+        >
+          {sonando.cancion.miniatura && (
+            <img
+              src={sonando.cancion.miniatura}
+              alt=""
+              className="w-16 h-12 rounded-xl object-cover shrink-0"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="etiqueta" style={{ color: acento }}>
+              Sonando ahora
+            </p>
+            <p className="font-bold truncate">{sonando.cancion.titulo}</p>
+            <p className="text-xs text-humo-500 truncate">
+              pidió {sonando.pidio?.nombre ?? 'la casa'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {enFila.length === 0 ? (
         <>

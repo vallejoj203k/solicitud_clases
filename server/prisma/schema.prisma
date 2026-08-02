@@ -45,6 +45,7 @@ enum EstadoPago {
 
 enum EstadoPedidoMusica {
   EN_FILA
+  SONANDO
   SONO
 }
 
@@ -188,15 +189,27 @@ model Reserva {
   @@index([creadoEn])
 }
 
-// Catalogo de musica del gimnasio.
+// Catalogo de musica.
 //
-// SOLO TEXTO: la app no guarda ni reproduce audio. Es la lista de la que el
-// cliente elige y que el instructor lee para saber que poner. Mil canciones son
-// unos 60 KB, menos que una foto: el catalogo no pesa.
+// LA APP NO ALOJA AUDIO. Guarda el id del video de YouTube y lo reproduce con
+// el reproductor incrustado oficial, que va con su publicidad y sus reglas. Lo
+// que se guarda aqui es lo justo para pintar la fila sin volver a preguntarle a
+// YouTube en cada carga: titulo, canal, duracion y miniatura.
+//
+// Las filas sin `videoId` son del catalogo de texto anterior: siguen sirviendo
+// para que el instructor las ponga a mano, pero el reproductor las salta.
 model Cancion {
   id      String  @id @default(cuid())
   titulo  String
   artista String?
+
+  // Identificador del video en YouTube (11 caracteres). Unico: dos personas que
+  // eligen la misma cancion apuntan a la misma fila.
+  videoId     String? @unique
+  canal       String?
+  duracionSeg Int?
+  miniatura   String?
+
   // Momento de la clase al que le va ("calentamiento", "subida", "pico",
   // "enfriamiento"). Opcional; ayuda al instructor a encajar los pedidos.
   momento String?
@@ -210,6 +223,7 @@ model Cancion {
   // Evita duplicados al pegar la lista dos veces.
   @@unique([titulo, artista])
   @@index([activa, titulo])
+  @@index([deLaCasa, activa])
 }
 
 // Una cancion pedida por alguien para una clase concreta.

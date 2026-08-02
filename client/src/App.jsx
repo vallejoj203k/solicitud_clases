@@ -4,6 +4,7 @@ import Reservar from './pages/Reservar.jsx';
 import Reserva from './pages/Reserva.jsx';
 import MisReservas from './pages/MisReservas.jsx';
 import Musica from './pages/Musica.jsx';
+import Reproductor from './pages/Reproductor.jsx';
 import Recuperar from './pages/Recuperar.jsx';
 import Privacidad from './pages/Privacidad.jsx';
 import AdminLogin from './pages/admin/Login.jsx';
@@ -25,6 +26,9 @@ export default function App() {
       <Route path="/reserva/:codigo" element={<Reserva />} />
       <Route path="/mis-reservas" element={<MisReservas />} />
       <Route path="/musica" element={<Musica />} />
+      {/* La pantalla del gimnasio: fuera del layout del panel a propósito, para
+          que ocupe todo el televisor sin la barra de navegación. */}
+      <Route path="/musica/reproductor" element={<Reproductor />} />
       <Route path="/recuperar" element={<Recuperar />} />
       <Route path="/privacidad" element={<Privacidad />} />
 

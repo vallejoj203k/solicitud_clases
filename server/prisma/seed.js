@@ -48,6 +48,11 @@ function aleatorio() {
 
 async function main() {
   console.log('› Limpiando datos anteriores...');
+  // Los pedidos de musica cuelgan de clases y usuarios, asi que van primero.
+  // El catalogo tambien se borra: si no, las canciones sobreviven al seed y las
+  // pruebas arrancan con datos de la corrida anterior.
+  await prisma.pedidoMusica.deleteMany();
+  await prisma.cancion.deleteMany();
   await prisma.reserva.deleteMany();
   await prisma.clase.deleteMany();
   await prisma.instructor.deleteMany();
