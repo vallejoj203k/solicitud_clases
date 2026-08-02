@@ -322,21 +322,23 @@ export async function pedirCancion({ claseId, videoId, cancionId, usuarioId }) {
     : await prisma.cancion.findUnique({ where: { id: cancionId } });
   if (!cancion || !cancion.activa) throw noEncontrado('Canción');
 
-  const yaLaPidio = await prisma.pedidoMusica.findFirst({
-    where: { claseId, cancionId: cancion.id, usuarioId },
-  });
-  if (yaLaPidio) {
-    throw new AppError('Ya pediste esa canción para esta clase.', 409, 'CANCION_REPETIDA');
-  }
-  // Que la haya pedido OTRO tampoco la repite: la fila no debe sonar dos veces
-  // lo mismo porque dos personas coincidieron.
-  const yaEnLaFila = await prisma.pedidoMusica.findFirst({
-    where: { claseId, cancionId: cancion.id, estado: { in: ['EN_FILA', 'SONANDO'] } },
+  // UNA CANCION SUENA UNA SOLA VEZ POR CLASE. No importa quien la pida ni si ya
+  // sono: si existe cualquier pedido suyo en esta clase, no vuelve a entrar. Sin
+  // esto, en cuanto una terminaba cualquiera podia volver a ponerla y la clase
+  // se quedaba dando vueltas sobre las mismas tres canciones.
+  const yaEstuvo = await prisma.pedidoMusica.findFirst({
+    where: { claseId, cancionId: cancion.id },
     include: { usuario: { select: { nombre: true } } },
   });
-  if (yaEnLaFila) {
+  if (yaEstuvo) {
+    if (yaEstuvo.estado === 'SONO') {
+      throw new AppError('Esa canción ya sonó en esta clase.', 409, 'CANCION_YA_SONO');
+    }
+    if (yaEstuvo.usuarioId === usuarioId) {
+      throw new AppError('Ya pediste esa canción para esta clase.', 409, 'CANCION_REPETIDA');
+    }
     throw new AppError(
-      `${yaEnLaFila.usuario.nombre.split(' ')[0]} ya la pidió: está en la fila.`,
+      `${yaEstuvo.usuario.nombre.split(' ')[0]} ya la pidió: está en la fila.`,
       409,
       'CANCION_YA_EN_FILA'
     );
@@ -423,6 +425,12 @@ export async function estadoReproduccion(claseId = null) {
     sonando: sonando ? serializarPedido(sonando) : null,
     fila: pedidos.filter((p) => p.estado === 'EN_FILA').map(serializarPedido),
     sonadas: pedidos.filter((p) => p.estado === 'SONO').length,
+    // Lo que ya sono en esta clase, para que el relleno no lo repita. La mezcla
+    // de YouTube arranca por la cancion que la siembra, asi que sin esta lista
+    // lo primero que hacia al vaciarse la fila era volver a poner la ultima.
+    reproducidas: pedidos
+      .filter((p) => p.estado !== 'EN_FILA' && p.cancion.videoId)
+      .map((p) => p.cancion.videoId),
   };
 }
 
