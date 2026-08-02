@@ -90,8 +90,9 @@ Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             expiraEn?, avisoPagoEn?, notasPago?, nombreInvitado?,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
-Cancion       id, titulo, artista?, momento?, deLaCasa, activa, creadoEn   (único: titulo+artista)
-PedidoMusica  id, claseId, cancionId, usuarioId, turno, estado(EN_FILA|SONO),
+Cancion       id, titulo, artista?, videoId(único)?, canal?, duracionSeg?, miniatura?,
+              momento?, deLaCasa, activa, creadoEn
+PedidoMusica  id, claseId, cancionId, usuarioId, turno, estado(EN_FILA|SONANDO|SONO),
               creadoEn, sonoEn?                        (único: claseId+cancionId+usuarioId)
 ```
 
@@ -276,31 +277,99 @@ propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 
 ## Música
 
-**La app no reproduce nada.** Es el papelito de «qué va después»: el cliente elige de un
-catálogo y el instructor lee la fila para saber qué poner cuando termine la canción que
-está sonando. No hay archivos ni enlaces de audio, solo título y artista, así que el
-catálogo no pesa (unos 60 KB por cada mil canciones) y no hay licencias de por medio.
+**La música suena de verdad, desde YouTube.** El cliente busca en todo YouTube desde su
+teléfono, la canción entra a una fila y suena en **una sola pantalla**: la del gimnasio,
+conectada a los parlantes. De los teléfonos no sale sonido —con veinte celulares sonando a
+destiempo no habría clase—, y por eso «si ya hay una sonando, la tuya espera» tiene
+sentido: hay un único sitio donde suena.
 
-**El catálogo lo arma el gimnasio** en `/admin/musica`. La vía rápida es «Pegar lista»: una
-canción por línea, `Título - Artista` (sirven `-`, `–`, `—` y `|`; sin separador, la línea
-entera es el título). Volver a pegar la misma lista no duplica nada. Una canción se puede
-marcar **de la casa** —las que suenan cuando nadie pidió— y sacar del catálogo; si ya la
-pidió alguien no se borra, se desactiva, para no perder el registro de quién la pidió.
+La app **no aloja ni descarga audio**. Guarda el id del video y lo pone con el reproductor
+incrustado oficial de YouTube (IFrame Player API), que va con su publicidad y sus reglas.
 
-**El cliente pide** desde la tercera tarjeta de la pantalla principal —`/musica`, que lista
-sus clases próximas— o desde la pantalla de su reserva, botón «Pedir música». Solo puede
-pedir quien tenga reserva firme en esa clase, y hasta que la clase termine —no solo antes
-de que empiece—. Puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
+### Las tres pantallas
 
-**La fila se ordena por rondas**, no por llegada estricta: primero la primera canción de
-cada persona, después la segunda de cada persona, y así (`PedidoMusica.turno` es la
-n-ésima canción que pide esa persona en esa clase; se ordena por `turno`, y dentro de cada
-ronda por `creadoEn`). Con llegada estricta, el primero que pidiera diez canciones se
-comería la clase entera; así el que pide muchas nunca tapa al que pidió una.
+| Quién | Dónde | Qué hace |
+|---|---|---|
+| Cliente | `/musica` (tercera tarjeta del inicio) o su reserva | Busca en YouTube y manda a la fila |
+| Gimnasio | `/musica/reproductor` | **Suena aquí.** Se deja abierta todo el día |
+| Recepción | `/admin/musica` | Canciones de la casa; `/admin/recepcion` → clase → Música para ver la fila |
 
-**El instructor** la ve en `/admin/recepcion` → clase → pestaña **Música**, con la
-siguiente resaltada. «Sonó» la baja a «Ya sonaron» y la fila avanza; si se marca por error,
-«Devolver a la fila» lo deshace. Si nadie pidió nada, ahí quedan las canciones de la casa.
+### El reproductor
+
+Va en el televisor o la tablet conectada a los parlantes. Arranca con un botón grande de
+**Empezar** que se toca **una vez al abrir el gimnasio**: los navegadores no dejan iniciar
+audio sin un gesto del usuario y no hay forma de saltárselo, así que en vez de fallar en
+silencio la pantalla lo pide de frente. De ahí en adelante encadena sola.
+
+Toma **la clase que se esté dictando en ese momento** —el servidor la resuelve con
+`claseEnCurso()`—, así que no hay que reconfigurarla cada hora.
+
+**Cuando la fila se vacía no se para la música**, que es lo peor que puede pasar en un
+salón. Se intenta, en orden:
+
+1. la **mezcla de YouTube** a partir de la última canción (`loadPlaylist({list: 'RD'+id})`),
+   que es lo más cercano a «que YouTube siga sugiriendo» que expone el reproductor
+   incrustado —la API de vídeos relacionados fue retirada en 2023, no hay forma oficial;
+2. si eso tampoco arranca, una canción **de la casa** al azar.
+
+Si alguien pide algo mientras suena el relleno, se atiende sin esperar a que termine.
+
+### La cuota es el límite real
+
+La API de datos de YouTube da **10.000 unidades al día**: una búsqueda cuesta **100** (unas
+100 búsquedas diarias para todo el gimnasio) y pedir los datos de hasta 50 vídeos por su
+enlace cuesta **1**. De ahí tres decisiones:
+
+- **la búsqueda se dispara al enviar, nunca al teclear** —buscar mientras se escribe
+  agotaría la cuota en una tarde—;
+- los resultados se **cachean 12 horas** por texto normalizado, así que «bad bunny» cuesta
+  una sola vez al día;
+- el catálogo que se ve al abrir sale de **listas de reproducción** (`YOUTUBE_LISTAS`), no
+  de búsquedas, y la carga masiva va **por enlaces**, no por títulos: pegar 50 títulos
+  costaría media cuota diaria; pegar 50 enlaces cuesta 1 unidad.
+
+Buscar exige sesión de cliente, justamente para que la cuota no se la gaste cualquiera
+desde internet.
+
+### Qué se descarta y por qué
+
+Ofrecer una canción que después no suena es peor que no ofrecerla, así que al buscar se
+piden los detalles de cada vídeo (`videos.list`) y se dejan fuera:
+
+- los que **no se dejan incrustar** (sonarían un cuadro negro);
+- los **bloqueados en Colombia** (`YOUTUBE_REGION`);
+- los que **duran más de 10 minutos** (`YOUTUBE_MAX_DURACION_SEG`) y las emisiones en
+  directo: un mix de dos horas congela la fila hasta que alguien la salte a mano.
+
+Los títulos se limpian de adornos —`(Official Video)`, `[4K]`, `| Lyrics`— porque en una
+fila que se lee de reojo estorban.
+
+### La fila
+
+Se ordena **por rondas**, no por llegada estricta: primero la primera canción de cada
+persona, después la segunda de cada persona, y así (`PedidoMusica.turno` es la n-ésima que
+pide esa persona en esa clase; se ordena por `turno` y, dentro de cada ronda, por
+`creadoEn`). Con llegada estricta, el primero que pidiera diez se comería la clase entera.
+
+Cada persona puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
+Solo pide quien tenga reserva firme en esa clase: es lo que evita que un desconocido llene
+de canciones los parlantes del gimnasio. Una canción no entra dos veces a la misma fila,
+aunque la pidan dos personas distintas.
+
+Estados de un pedido: `EN_FILA` → `SONANDO` → `SONO`. `SONANDO` existe como estado propio
+—en vez de deducirlo de «la primera de la fila»— para que el reproductor sepa desde dónde
+retomar si alguien recarga la pantalla a mitad de canción.
+
+### Antes de encenderlo
+
+Dos cosas que no dependen del código:
+
+- **Licencia de música en público.** Poner música en un local comercial en Colombia
+  normalmente requiere licencia de la OSA (Sayco & Acinpro), y los términos de YouTube son
+  para uso personal, no para difusión en un negocio. Vale la pena resolverlo antes, no
+  después de una visita.
+- **La llave de la API.** Sin `YOUTUBE_API_KEY` la búsqueda se apaga sola y lo dice; el
+  resto de la app sigue igual.
 
 ---
 
@@ -432,15 +501,16 @@ a "Ir a pagar" según eso.
 │       ├── components/
 │       │   ├── MapaPuestos.jsx    Mapa de puestos reutilizable (grid dinámico)
 │       │   ├── SalonClase.jsx     Salón + fila de música, compartido admin/recepción
-│       │   ├── FilaMusica.jsx     La fila que lee el instructor («Sonó»)
+│       │   ├── FilaMusica.jsx     La fila, vista desde recepción
 │       │   ├── PedirMusica.jsx    Hoja del cliente para pedir canciones
 │       │   ├── CalendarioDias.jsx Calendario del mes para el cliente
 │       │   ├── TarjetaHorario.jsx Horario con barra de ocupación
 │       │   ├── Iconos.jsx         SVG en línea, sin dependencias
 │       │   └── ui.jsx             Botón, Chip, Hoja inferior, Insignia, inputs…
-│       ├── lib/{sesion,formato}.js
+│       ├── lib/{sesion,formato,youtube}.js
 │       └── pages/
-│           ├── Home · Reservar · Reserva · MisReservas · Musica · Recuperar · Privacidad
+│           ├── Home · Reservar · Reserva · MisReservas · Musica · Reproductor
+│           │   Recuperar · Privacidad
 │           └── admin/ Login · Layout · Dashboard · Clases · Calendario · ClaseDetalle
 │                      Recepcion · Musica · Pagos · Clientes
 └── server/
@@ -454,7 +524,8 @@ a "Ir a pagar" según eso.
         │   ├── disponibilidad.service.js  Cupos y expansión del mapa
         │   ├── clase.service.js           CRUD de horarios (lote y borrado por rango)
         │   ├── pago.service.js            Pagos (extensible a Wompi/Stripe)
-        │   ├── musica.service.js          Catálogo y fila por rondas
+        │   ├── musica.service.js          Fila por rondas y reproducción
+        │   ├── youtube.service.js         API de datos de YouTube y caché de cuota
         │   └── reporte.service.js         Dashboard, reportes, clientes
         └── utils/{fechas,layout,ics,csv,codigo,errores}.js
 ```
@@ -483,11 +554,14 @@ zona con horario de verano.
 | `GET` | `/api/reservas/:codigo/calendario.ics` | Archivo de calendario |
 | `GET` | `/api/mis-reservas` | Reservas del dispositivo (token de cliente) |
 | `POST` | `/api/reservas/:codigo/cancelar` | Cancelar la propia reserva |
-| `GET` | `/api/canciones?q=` | Buscar en el catálogo (máx. 20 filas) |
+| `GET` | `/api/musica/buscar?q=` | Buscar en YouTube (token de cliente: protege la cuota) |
+| `GET` | `/api/musica/catalogo` | Listas configuradas + canciones de la casa |
+| `GET` | `/api/musica/ahora[?clase=]` | Qué suena y qué viene; sin `clase`, la que está en curso |
+| `GET` | `/api/canciones[?q=]` | Lo ya pedido alguna vez, sin gastar cuota |
 | `GET` | `/api/canciones/de-la-casa` | Las que pone el gimnasio si nadie pide |
 | `GET` | `/api/clases/:id/musica` | Fila de la clase, en orden de rondas |
-| `POST` | `/api/clases/:id/musica` | Pedir una canción (token de cliente con reserva) |
-| `DELETE` | `/api/musica/:pedidoId` | Quitar un pedido propio que no haya sonado |
+| `POST` | `/api/clases/:id/musica` | Pedir (`{videoId}`; token de cliente con reserva) |
+| `DELETE` | `/api/musica/:pedidoId` | Quitar un pedido propio que no esté sonando |
 | `GET` | `/api/salud` | Healthcheck (lo usa Railway) |
 
 ### Admin — requiere `Authorization: Bearer <token>` de rol `ADMIN`
@@ -507,8 +581,11 @@ zona con horario de verano.
 | `GET` | `/api/admin/reportes/pagos[.csv]` | Reporte filtrable y exportación |
 | `GET` | `/api/admin/clientes[/:id]` | Clientes e historial |
 | `GET/POST` | `/api/admin/canciones` | Catálogo completo (incluye las desactivadas) / crear |
-| `POST` | `/api/admin/canciones/importar` | Carga masiva pegando una lista |
+| `POST` | `/api/admin/canciones/importar` | Carga masiva pegando enlaces o una lista de YouTube |
 | `PATCH/DELETE` | `/api/admin/canciones/:id` | Editar / sacar del catálogo |
+| `GET` | `/api/admin/musica/buscar?q=` | Buscar en YouTube desde el panel |
+| `POST` | `/api/admin/musica/agregar` | Agregar un vídeo al catálogo (`{videoId}`) |
+| `POST` | `/api/admin/musica/siguiente` | **El reproductor avanza la fila** |
 | `GET` | `/api/admin/clases/:id/musica` | Fila de la clase |
 | `POST` | `/api/admin/musica/:pedidoId/sono` | Marcar que sonó (o devolverla a la fila) |
 | `DELETE` | `/api/admin/musica/:pedidoId` | Quitar un pedido |

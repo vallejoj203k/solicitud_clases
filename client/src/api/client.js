@@ -90,11 +90,15 @@ export const api = {
   avisarPago: (codigo) => pedir(`/reservas/${codigo}/aviso-pago`, { metodo: 'POST' }),
 
   // --- Musica --------------------------------------------------------------
+  buscarMusica: (q) => pedir(`/musica/buscar?q=${encodeURIComponent(q)}`),
+  catalogoMusica: () => pedir('/musica/catalogo'),
+  // Que suena ahora en el gimnasio. Sin `clase` usa la que se este dictando.
+  musicaAhora: (claseId) => pedir(`/musica/ahora${claseId ? `?clase=${claseId}` : ''}`),
   canciones: (q) => pedir(`/canciones${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   cancionesDeLaCasa: () => pedir('/canciones/de-la-casa'),
   musicaDeClase: (claseId) => pedir(`/clases/${claseId}/musica`),
-  pedirCancion: (claseId, cancionId) =>
-    pedir(`/clases/${claseId}/musica`, { metodo: 'POST', cuerpo: { cancionId } }),
+  pedirCancion: (claseId, cuerpo) =>
+    pedir(`/clases/${claseId}/musica`, { metodo: 'POST', cuerpo }),
   quitarPedido: (pedidoId) => pedir(`/musica/${pedidoId}`, { metodo: 'DELETE' }),
 
   // --- Admin ---------------------------------------------------------------
@@ -160,8 +164,23 @@ export const api = {
       pedir(`/admin/canciones${q ? `?q=${encodeURIComponent(q)}` : ''}`, { tipoToken: 'admin' }),
     crearCancion: (datos) =>
       pedir('/admin/canciones', { metodo: 'POST', cuerpo: datos, tipoToken: 'admin' }),
-    importarCanciones: (texto) =>
-      pedir('/admin/canciones/importar', { metodo: 'POST', cuerpo: { texto }, tipoToken: 'admin' }),
+    importarCanciones: (texto, deLaCasa = true) =>
+      pedir('/admin/canciones/importar', {
+        metodo: 'POST',
+        cuerpo: { texto, deLaCasa },
+        tipoToken: 'admin',
+      }),
+    buscarEnYoutube: (q) =>
+      pedir(`/admin/musica/buscar?q=${encodeURIComponent(q)}`, { tipoToken: 'admin' }),
+    agregarDeYoutube: (videoId, deLaCasa = true) =>
+      pedir('/admin/musica/agregar', {
+        metodo: 'POST',
+        cuerpo: { videoId, deLaCasa },
+        tipoToken: 'admin',
+      }),
+    // El reproductor del gimnasio avanza la fila.
+    siguienteCancion: (clase = null) =>
+      pedir('/admin/musica/siguiente', { metodo: 'POST', cuerpo: { clase }, tipoToken: 'admin' }),
     actualizarCancion: (id, datos) =>
       pedir(`/admin/canciones/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     eliminarCancion: (id) =>

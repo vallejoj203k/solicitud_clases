@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { forwardRef, useEffect } from 'react';
 import { IconoCerrar } from './Iconos.jsx';
 
 export const cx = (...clases) => clases.filter(Boolean).join(' ');
@@ -210,9 +210,11 @@ export const claseInput = cx(
   'focus:outline-none focus:border-volt-500 focus:ring-1 focus:ring-volt-500 transition-colors'
 );
 
-export function Entrada({ className = '', ...props }) {
-  return <input {...props} className={cx(claseInput, className)} />;
-}
+// Reenvia la ref para que quien la use pueda enfocarla o quitarle el foco;
+// la busqueda de musica cierra el teclado al enviar.
+export const Entrada = forwardRef(function Entrada({ className = '', ...props }, ref) {
+  return <input ref={ref} {...props} className={cx(claseInput, className)} />;
+});
 
 export function Seleccion({ className = '', children, ...props }) {
   return (

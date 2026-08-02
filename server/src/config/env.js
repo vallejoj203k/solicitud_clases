@@ -127,6 +127,32 @@ export const env = {
     contacto: process.env.GIMNASIO_CONTACTO || '',
   },
 
+  // Musica desde YouTube. Sin `apiKey` la busqueda se apaga sola y la pantalla
+  // lo dice, en vez de fallar con un error tecnico.
+  //
+  // OJO CON LA CUOTA: la API gratuita da 10.000 unidades al dia y una busqueda
+  // cuesta 100, o sea ~100 busquedas diarias. Por eso el servidor cachea por
+  // texto normalizado (ver youtube.service.js) y el catalogo de la pantalla se
+  // arma con listas de reproduccion, que cuestan 1.
+  youtube: {
+    apiKey: process.env.YOUTUBE_API_KEY || null,
+    // Listas publicas cuyo contenido se muestra como catalogo para ojear.
+    // Separadas por coma. Se ven sin buscar y casi no gastan cuota.
+    listas: (process.env.YOUTUBE_LISTAS || '')
+      .split(',')
+      .map((l) => l.trim())
+      .filter(Boolean),
+    // Region para el ranking de resultados y para descartar los videos
+    // bloqueados en el pais.
+    region: process.env.YOUTUBE_REGION || 'CO',
+    // Tope de duracion: sin esto se cuela un "mix de 2 horas" y la fila se
+    // congela hasta que alguien la salte a mano.
+    maxDuracionSeg: Number(process.env.YOUTUBE_MAX_DURACION_SEG ?? 600),
+    // Solo para pruebas automatizadas: apunta a una API de YouTube simulada,
+    // igual que WOMPI_URL_PRUEBAS con la pasarela.
+    urlBasePruebas: process.env.YOUTUBE_URL_PRUEBAS || null,
+  },
+
   admin: {
     telefono: process.env.ADMIN_TELEFONO || '3001234567',
     password: process.env.ADMIN_PASSWORD || 'admin123',
