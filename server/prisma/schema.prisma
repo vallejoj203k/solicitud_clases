@@ -43,6 +43,11 @@ enum EstadoPago {
   RECHAZADO
 }
 
+enum EstadoPedidoMusica {
+  EN_FILA
+  SONO
+}
+
 model Usuario {
   id           String   @id @default(cuid())
   nombre       String
@@ -59,7 +64,8 @@ model Usuario {
   aceptoDatosEn DateTime?
   creadoEn     DateTime @default(now())
 
-  reservas Reserva[]
+  reservas      Reserva[]
+  pedidosMusica PedidoMusica[]
 
   @@index([nombre])
   @@index([rol])
@@ -119,7 +125,8 @@ model Clase {
   notas    String?
   creadoEn DateTime    @default(now())
 
-  reservas Reserva[]
+  reservas      Reserva[]
+  pedidosMusica PedidoMusica[]
 
   @@index([inicioEn])
   @@index([tipoClaseId, inicioEn])
@@ -179,4 +186,56 @@ model Reserva {
   @@index([usuarioId, creadoEn])
   @@index([estadoPago])
   @@index([creadoEn])
+}
+
+// Catalogo de musica del gimnasio.
+//
+// SOLO TEXTO: la app no guarda ni reproduce audio. Es la lista de la que el
+// cliente elige y que el instructor lee para saber que poner. Mil canciones son
+// unos 60 KB, menos que una foto: el catalogo no pesa.
+model Cancion {
+  id      String  @id @default(cuid())
+  titulo  String
+  artista String?
+  // Momento de la clase al que le va ("calentamiento", "subida", "pico",
+  // "enfriamiento"). Opcional; ayuda al instructor a encajar los pedidos.
+  momento String?
+  // Las que pone el gimnasio cuando nadie pide nada.
+  deLaCasa Boolean  @default(false)
+  activa   Boolean  @default(true)
+  creadoEn DateTime @default(now())
+
+  pedidos PedidoMusica[]
+
+  // Evita duplicados al pegar la lista dos veces.
+  @@unique([titulo, artista])
+  @@index([activa, titulo])
+}
+
+// Una cancion pedida por alguien para una clase concreta.
+model PedidoMusica {
+  id String @id @default(cuid())
+
+  claseId String
+  clase   Clase  @relation(fields: [claseId], references: [id], onDelete: Cascade)
+
+  cancionId String
+  cancion   Cancion @relation(fields: [cancionId], references: [id], onDelete: Cascade)
+
+  usuarioId String
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  // Numero de pedido de ESA persona en ESA clase: 1 la primera que pidio, 2 la
+  // segunda... La fila se ordena por turno y luego por hora, de modo que suena
+  // la primera de cada quien antes que la segunda de nadie. Sin esto, el que
+  // llega primero y pide veinte deja a los demas sin sonar.
+  turno Int @default(1)
+
+  estado   EstadoPedidoMusica @default(EN_FILA)
+  creadoEn DateTime           @default(now())
+  sonoEn   DateTime?
+
+  // La misma persona no repite cancion en la misma clase.
+  @@unique([claseId, cancionId, usuarioId])
+  @@index([claseId, estado, turno])
 }

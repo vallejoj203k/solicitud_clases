@@ -20,6 +20,17 @@ import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.j
 import { enviarConfirmacionReserva } from '../services/notificaciones.service.js';
 import { generarIcs } from '../utils/ics.js';
 import {
+  buscarCanciones,
+  crearCancion,
+  importarCanciones,
+  actualizarCancion,
+  eliminarCancion,
+  filaDeClase,
+  marcarSono,
+  quitarPedido,
+  MOMENTOS,
+} from '../services/musica.service.js';
+import {
   dashboard,
   buscarReservas,
   agendaRecepcion,
@@ -315,5 +326,79 @@ adminRouter.post(
   '/layouts/preview',
   asyncHandler(async (req, res) => {
     res.json(expandirLayout(req.body));
+  })
+);
+
+// --- Musica -----------------------------------------------------------------
+/**
+ * El catalogo es solo texto: la app no guarda ni reproduce audio. Se carga
+ * pegando una lista, que es lo mas rapido cuando el gimnasio ya tiene su
+ * playlist en algun lado.
+ */
+adminRouter.get(
+  '/canciones',
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    res.json(await buscarCanciones({ q, incluirInactivas: true, limite: 100 }));
+  })
+);
+
+const cancionSchema = z.object({
+  titulo: z.string().trim().min(1).max(120),
+  artista: z.string().trim().max(120).nullish(),
+  momento: z.enum(MOMENTOS).nullish(),
+  deLaCasa: z.boolean().optional(),
+});
+
+adminRouter.post(
+  '/canciones',
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await crearCancion(cancionSchema.parse(req.body)));
+  })
+);
+
+adminRouter.post(
+  '/canciones/importar',
+  asyncHandler(async (req, res) => {
+    const { texto } = z.object({ texto: z.string().min(1).max(100_000) }).parse(req.body);
+    res.json(await importarCanciones(texto));
+  })
+);
+
+adminRouter.patch(
+  '/canciones/:id',
+  asyncHandler(async (req, res) => {
+    const datos = cancionSchema.partial().extend({ activa: z.boolean().optional() }).parse(req.body);
+    res.json(await actualizarCancion(req.params.id, datos));
+  })
+);
+
+adminRouter.delete(
+  '/canciones/:id',
+  asyncHandler(async (req, res) => {
+    res.json(await eliminarCancion(req.params.id));
+  })
+);
+
+/** La fila de una clase, para que el instructor sepa que sigue. */
+adminRouter.get(
+  '/clases/:id/musica',
+  asyncHandler(async (req, res) => {
+    res.json(await filaDeClase(req.params.id));
+  })
+);
+
+adminRouter.post(
+  '/musica/:pedidoId/sono',
+  asyncHandler(async (req, res) => {
+    const { sono = true } = z.object({ sono: z.boolean().optional() }).parse(req.body ?? {});
+    res.json(await marcarSono(req.params.pedidoId, sono));
+  })
+);
+
+adminRouter.delete(
+  '/musica/:pedidoId',
+  asyncHandler(async (req, res) => {
+    res.json(await quitarPedido({ pedidoId: req.params.pedidoId, porAdmin: true }));
   })
 );

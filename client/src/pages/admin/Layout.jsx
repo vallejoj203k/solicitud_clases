@@ -10,6 +10,7 @@ import {
   IconoUsuario,
   IconoRayo,
   IconoBuscar,
+  IconoMusica,
 } from '../../components/Iconos.jsx';
 
 const SECCIONES = [
@@ -17,6 +18,7 @@ const SECCIONES = [
   // `avisa: true` -> lleva el contador de pagos por confirmar.
   { a: '/admin/recepcion', texto: 'Recepción', Icono: IconoBuscar, avisa: true },
   { a: '/admin/clases', texto: 'Clases', Icono: IconoCalendario },
+  { a: '/admin/musica', texto: 'Música', Icono: IconoMusica },
   { a: '/admin/pagos', texto: 'Pagos', Icono: IconoDinero },
   { a: '/admin/clientes', texto: 'Clientes', Icono: IconoUsuario },
 ];
@@ -109,7 +111,7 @@ export default function AdminLayout() {
 
       {/* Barra inferior en móvil: navegación al alcance del pulgar. */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-carbon-800/95 backdrop-blur border-t border-carbon-700 pb-segura">
-        <div className="grid grid-cols-5">
+        <div className="grid grid-cols-6">
           {SECCIONES.map((seccion) => (
             <NavLink
               key={seccion.a}

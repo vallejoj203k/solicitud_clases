@@ -90,6 +90,9 @@ Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             expiraEn?, avisoPagoEn?, notasPago?, nombreInvitado?,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
+Cancion       id, titulo, artista?, momento?, deLaCasa, activa, creadoEn   (único: titulo+artista)
+PedidoMusica  id, claseId, cancionId, usuarioId, turno, estado(EN_FILA|SONO|DESCARTADA),
+              creadoEn, sonoEn?                        (único: claseId+cancionId+usuarioId)
 ```
 
 ### No hay tabla `Puesto`
@@ -271,6 +274,35 @@ propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 
 ---
 
+## Música
+
+**La app no reproduce nada.** Es el papelito de «qué va después»: el cliente elige de un
+catálogo y el instructor lee la fila para saber qué poner cuando termine la canción que
+está sonando. No hay archivos ni enlaces de audio, solo título y artista, así que el
+catálogo no pesa (unos 60 KB por cada mil canciones) y no hay licencias de por medio.
+
+**El catálogo lo arma el gimnasio** en `/admin/musica`. La vía rápida es «Pegar lista»: una
+canción por línea, `Título - Artista` (sirven `-`, `–`, `—` y `|`; sin separador, la línea
+entera es el título). Volver a pegar la misma lista no duplica nada. Una canción se puede
+marcar **de la casa** —las que suenan cuando nadie pidió— y sacar del catálogo; si ya la
+pidió alguien no se borra, se desactiva, para no perder el registro de quién la pidió.
+
+**El cliente pide** desde la pantalla de su reserva, botón «Pedir música». Solo puede pedir
+quien tenga reserva firme en esa clase, y hasta que la clase termine —no solo antes de que
+empiece—. Puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
+
+**La fila se ordena por rondas**, no por llegada estricta: primero la primera canción de
+cada persona, después la segunda de cada persona, y así (`PedidoMusica.turno` es la
+n-ésima canción que pide esa persona en esa clase; se ordena por `turno`, y dentro de cada
+ronda por `creadoEn`). Con llegada estricta, el primero que pidiera diez canciones se
+comería la clase entera; así el que pide muchas nunca tapa al que pidió una.
+
+**El instructor** la ve en `/admin/recepcion` → clase → pestaña **Música**, con la
+siguiente resaltada. «Sonó» la baja a «Ya sonaron» y la fila avanza; si se marca por error,
+«Devolver a la fila» lo deshace. Si nadie pidió nada, ahí quedan las canciones de la casa.
+
+---
+
 ## Pagos
 
 Tres modos, según `PAGO_MODO`:
@@ -398,25 +430,30 @@ a "Ir a pagar" según eso.
 │       ├── api/client.js          Cliente HTTP + manejo de errores
 │       ├── components/
 │       │   ├── MapaPuestos.jsx    Mapa de puestos reutilizable (grid dinámico)
-│       │   ├── CarruselDias.jsx   Carrusel horizontal de 7 días
+│       │   ├── SalonClase.jsx     Salón + fila de música, compartido admin/recepción
+│       │   ├── FilaMusica.jsx     La fila que lee el instructor («Sonó»)
+│       │   ├── PedirMusica.jsx    Hoja del cliente para pedir canciones
+│       │   ├── CalendarioDias.jsx Calendario del mes para el cliente
 │       │   ├── TarjetaHorario.jsx Horario con barra de ocupación
 │       │   ├── Iconos.jsx         SVG en línea, sin dependencias
 │       │   └── ui.jsx             Botón, Chip, Hoja inferior, Insignia, inputs…
 │       ├── lib/{sesion,formato}.js
 │       └── pages/
-│           ├── Home · Reservar · Reserva · MisReservas
-│           └── admin/ Login · Layout · Dashboard · Clases · ClaseDetalle · Pagos · Clientes
+│           ├── Home · Reservar · Reserva · MisReservas · Recuperar · Privacidad
+│           └── admin/ Login · Layout · Dashboard · Clases · Calendario · ClaseDetalle
+│                      Recepcion · Musica · Pagos · Clientes
 └── server/
     ├── prisma/{schema.prisma, migrations/, seed.js}
     └── src/
-        ├── config/{env,prisma}.js
+        ├── config/{env,prisma,estados}.js
         ├── middleware/{auth,errores}.js
-        ├── routes/{public,auth,admin}.routes.js
+        ├── routes/{public,auth,admin,musica}.routes.js
         ├── services/
         │   ├── reserva.service.js         Creación de reservas y concurrencia
         │   ├── disponibilidad.service.js  Cupos y expansión del mapa
-        │   ├── clase.service.js           CRUD de horarios (incluye creación en lote)
+        │   ├── clase.service.js           CRUD de horarios (lote y borrado por rango)
         │   ├── pago.service.js            Pagos (extensible a Wompi/Stripe)
+        │   ├── musica.service.js          Catálogo y fila por rondas
         │   └── reporte.service.js         Dashboard, reportes, clientes
         └── utils/{fechas,layout,ics,csv,codigo,errores}.js
 ```
@@ -445,6 +482,11 @@ zona con horario de verano.
 | `GET` | `/api/reservas/:codigo/calendario.ics` | Archivo de calendario |
 | `GET` | `/api/mis-reservas` | Reservas del dispositivo (token de cliente) |
 | `POST` | `/api/reservas/:codigo/cancelar` | Cancelar la propia reserva |
+| `GET` | `/api/canciones?q=` | Buscar en el catálogo (máx. 20 filas) |
+| `GET` | `/api/canciones/de-la-casa` | Las que pone el gimnasio si nadie pide |
+| `GET` | `/api/clases/:id/musica` | Fila de la clase, en orden de rondas |
+| `POST` | `/api/clases/:id/musica` | Pedir una canción (token de cliente con reserva) |
+| `DELETE` | `/api/musica/:pedidoId` | Quitar un pedido propio que no haya sonado |
 | `GET` | `/api/salud` | Healthcheck (lo usa Railway) |
 
 ### Admin — requiere `Authorization: Bearer <token>` de rol `ADMIN`
@@ -463,6 +505,12 @@ zona con horario de verano.
 | `POST` | `/api/admin/reservas/:id/asistencia` | Check-in |
 | `GET` | `/api/admin/reportes/pagos[.csv]` | Reporte filtrable y exportación |
 | `GET` | `/api/admin/clientes[/:id]` | Clientes e historial |
+| `GET/POST` | `/api/admin/canciones` | Catálogo completo (incluye las desactivadas) / crear |
+| `POST` | `/api/admin/canciones/importar` | Carga masiva pegando una lista |
+| `PATCH/DELETE` | `/api/admin/canciones/:id` | Editar / sacar del catálogo |
+| `GET` | `/api/admin/clases/:id/musica` | Fila de la clase |
+| `POST` | `/api/admin/musica/:pedidoId/sono` | Marcar que sonó (o devolverla a la fila) |
+| `DELETE` | `/api/admin/musica/:pedidoId` | Quitar un pedido |
 
 ### Sesiones
 
