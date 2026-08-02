@@ -91,7 +91,7 @@ Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
 Cancion       id, titulo, artista?, momento?, deLaCasa, activa, creadoEn   (único: titulo+artista)
-PedidoMusica  id, claseId, cancionId, usuarioId, turno, estado(EN_FILA|SONO|DESCARTADA),
+PedidoMusica  id, claseId, cancionId, usuarioId, turno, estado(EN_FILA|SONO),
               creadoEn, sonoEn?                        (único: claseId+cancionId+usuarioId)
 ```
 
@@ -287,9 +287,10 @@ entera es el título). Volver a pegar la misma lista no duplica nada. Una canci�
 marcar **de la casa** —las que suenan cuando nadie pidió— y sacar del catálogo; si ya la
 pidió alguien no se borra, se desactiva, para no perder el registro de quién la pidió.
 
-**El cliente pide** desde la pantalla de su reserva, botón «Pedir música». Solo puede pedir
-quien tenga reserva firme en esa clase, y hasta que la clase termine —no solo antes de que
-empiece—. Puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
+**El cliente pide** desde la tercera tarjeta de la pantalla principal —`/musica`, que lista
+sus clases próximas— o desde la pantalla de su reserva, botón «Pedir música». Solo puede
+pedir quien tenga reserva firme en esa clase, y hasta que la clase termine —no solo antes
+de que empiece—. Puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
 
 **La fila se ordena por rondas**, no por llegada estricta: primero la primera canción de
 cada persona, después la segunda de cada persona, y así (`PedidoMusica.turno` es la
@@ -439,7 +440,7 @@ a "Ir a pagar" según eso.
 │       │   └── ui.jsx             Botón, Chip, Hoja inferior, Insignia, inputs…
 │       ├── lib/{sesion,formato}.js
 │       └── pages/
-│           ├── Home · Reservar · Reserva · MisReservas · Recuperar · Privacidad
+│           ├── Home · Reservar · Reserva · MisReservas · Musica · Recuperar · Privacidad
 │           └── admin/ Login · Layout · Dashboard · Clases · Calendario · ClaseDetalle
 │                      Recepcion · Musica · Pagos · Clientes
 └── server/
@@ -699,6 +700,19 @@ contorneado). Es la convención que cualquiera entiende sin leer la leyenda. El 
 pinta como capa sobre un fondo opaco, no como color translúcido: detrás hay una foto y los
 números tienen que leerse igual.
 
+**La pantalla principal no se desplaza.** Son tres tarjetas —Spinning, Running y Música— y
+nada más. La app se usa de pie, con una mano y muchas veces en la tablet del mostrador, así
+que todo lo que se puede hacer tiene que estar a la vista. El alto es `h-dvh` y las
+tarjetas se reparten el espacio sobrante (`grid-rows-3` + `min-h-0` en cada una) en vez de
+tener alto propio: en un teléfono corto se encogen, pero siguen cabiendo las tres. En
+tablet horizontal pasan a `grid-cols-3`, una al lado de la otra.
+
+El listado de horarios que antes vivía en esa pantalla se cambió por una sola pastilla con
+la próxima clase, que salta directo al mapa de puestos: reservar sigue siendo un toque
+desde el inicio. El resto de horarios está a un toque, en la disciplina. Las tarjetas
+tampoco muestran precio: el que se cobra es el de **cada clase**, no el de la disciplina, y
+anunciar el de la plantilla en la portada contradecía lo que el cliente veía después.
+
 Decisiones pensadas para el uso con una mano:
 
 - Objetivos táctiles de 44–52 px; los puestos del mapa nunca bajan de 38 px y no necesitan
@@ -719,11 +733,12 @@ desplazar la página**:
 
 | Pantalla | En horizontal |
 |---|---|
-| Principal | Running y Spinning en dos columnas que se estiran hasta llenar la ventana; los próximos horarios en rejilla, sin arrastrar |
+| Principal | Spinning, Running y Música en tres columnas que se estiran hasta llenar la ventana |
 | Horarios | El calendario a la izquierda y las clases del día a la derecha |
 | Puestos | Salón a la izquierda; puesto elegido, total y botón en un panel fijo a la derecha, en vez de la barra inferior |
 | Recepción | Datos de la clase en una columna y el mapa del salón en la otra |
 
 Los puestos crecen de 60 a 78 px (`--ancho-puesto` en `index.css`): con la tablet apoyada
 se tocan con el brazo estirado, no con el pulgar. Verificado sin scroll —ni vertical ni
-horizontal— en 1024×768 y 1280×800.
+horizontal— en 1024×768 y 1280×800. La pantalla principal, además, en 360×640, 375×667 y
+390×844: es la única que no se desplaza en ningún tamaño.
