@@ -389,17 +389,16 @@ adminRouter.get(
 /**
  * Qué poner cuando nadie ha pedido nada.
  *
- * El reproductor manda lo que acaba de sonar y todo lo que ya sonó, y recibe
- * una canción nueva. Es lo que mantiene la pantalla sonando sola sin pedidos.
+ * El reproductor manda todo lo que ya sonó y recibe canciones del catálogo del
+ * gimnasio. Es lo que mantiene la pantalla sonando sola sin pedidos.
  */
 adminRouter.get(
   '/musica/sugeridas',
   asyncHandler(async (req, res) => {
-    const desde = typeof req.query.desde === 'string' ? req.query.desde : null;
     const excluir =
       typeof req.query.excluir === 'string' ? req.query.excluir.split(',').filter(Boolean) : [];
     const limite = Math.min(Number(req.query.limite) || 12, 25);
-    res.json(await sugerenciasParaReproductor({ desde, excluir, limite }));
+    res.json(await sugerenciasParaReproductor({ excluir, limite }));
   })
 );
 

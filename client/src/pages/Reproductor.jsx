@@ -15,7 +15,8 @@ import { cargarApiYoutube, duracion } from '../lib/youtube.js';
  *
  * EL FLUJO ES ESTE:
  *   1. quien abre la pantalla elige la primera canción,
- *   2. de ahí en adelante encadena sola con lo que YouTube da por parecido,
+ *   2. de ahí en adelante encadena sola CON LA MÚSICA DEL GIMNASIO: lo que hay
+ *      en /admin/musica, no lo que a YouTube le parezca,
  *   3. si un cliente pide algo, entra en cuanto termine la que está sonando,
  *   4. si hay varias pedidas, van una tras otra y después vuelve la automática.
  *
@@ -27,8 +28,8 @@ import { cargarApiYoutube, duracion } from '../lib/youtube.js';
  * NO SE USAN LAS MEZCLAS "RD" DE YOUTUBE. Eran lo primero que probé -son
  * literalmente lo que YouTube encadena- pero el reproductor incrustado las
  * rechaza: salía "Se produjo un error" y la música se paraba. Lo que sigue
- * ahora sale de `/admin/musica/sugerida`, que busca a partir de lo que acaba de
- * sonar y devuelve algo ya comprobado como incrustable.
+ * ahora sale de `/admin/musica/sugeridas`, que reparte el catálogo del gimnasio
+ * y devuelve solo cosas ya comprobadas como incrustables.
  *
  * QUIÉN DECIDE QUE LA FILA AVANCE. Solo dos cosas, las dos explícitas: la
  * canción terminó, o falló. El sondeo del estado NO decide nada: solo pinta la
@@ -52,11 +53,9 @@ export default function Reproductor() {
   const contenedor = useRef(null);
   const reproductor = useRef(null);
   const avanzando = useRef(false);
-  // Lo último que se puso: es la semilla de la siguiente sugerencia.
-  const ultimoVideo = useRef(null);
   // Todo lo que ya sonó, en orden y ACOTADO. El tope importa: si la lista
-  // creciera sin freno, al cabo de unas horas excluiría todo lo que YouTube
-  // puede ofrecer y las sugerencias volverían vacías.
+  // creciera sin freno acabaría excluyendo el catálogo entero y las
+  // sugerencias volverían vacías.
   const reproducidas = useRef([]);
   const reintento = useRef(null);
   const apartando = useRef(false);
@@ -103,7 +102,6 @@ export default function Reproductor() {
 
   /** Pone un vídeo y se asegura de que arranque. */
   const cargar = useCallback((videoId) => {
-    ultimoVideo.current = videoId;
     reproducidas.current = [...reproducidas.current.filter((v) => v !== videoId), videoId].slice(
       -MAX_RECORDADAS
     );
@@ -133,7 +131,7 @@ export default function Reproductor() {
         // Se excluye lo ya sonado Y lo que está esperando en la cola: si no, la
         // automática proponía justo la canción que un cliente acababa de pedir y
         // sonaba dos veces seguidas.
-        .sugeridas(ultimoVideo.current, [...reproducidas.current, ...enCola.current], 12)
+        .sugeridas([...reproducidas.current, ...enCola.current], 12)
         .catch(() => []);
 
       if (lista?.length) {
@@ -199,7 +197,7 @@ export default function Reproductor() {
     const vieja = reproducidas.current[0];
     if (vieja) {
       setAutomatica(null);
-      setError('Sin conexión con YouTube: repitiendo mientras vuelve.');
+      setError('Sin conexión con el servidor: repitiendo mientras vuelve.');
       cargar(vieja);
     } else {
       setError('Busca una canción arriba para arrancar.');
@@ -274,7 +272,6 @@ export default function Reproductor() {
     cargarApiYoutube()
       .then((YT) => {
         if (!vivo || !contenedor.current) return;
-        ultimoVideo.current = semilla.videoId;
         reproducidas.current = [semilla.videoId];
 
         reproductor.current = new YT.Player(contenedor.current, {
@@ -399,9 +396,9 @@ export default function Reproductor() {
               </div>
             )}
 
-            {/* Buscador. Las sugerencias de YouTube no siempre aciertan, y si
-                además nadie ha pedido nada no habría forma de poner algo
-                concreto sin salir de la pantalla. */}
+            {/* Buscador. Va a TODO YouTube, no solo al catálogo: es la vía para
+                poner algo que todavía no está en la lista del gimnasio sin
+                tener que salir de la pantalla. */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -475,13 +472,14 @@ export default function Reproductor() {
               </div>
             )}
 
-            {/* Las propuestas de YouTube. Se enseñan siempre, no solo cuando la
-                cola está vacía: sirven para escoger otra cosa y no acabar
-                oyendo el mismo artista una hora seguida. Se ocultan mientras hay
-                una búsqueda a la vista, para no amontonar dos listas. */}
+            {/* Lo que viene del catálogo del gimnasio. Se enseñan siempre, no
+                solo cuando la cola está vacía: sirven para escoger otra cosa y
+                no acabar oyendo el mismo artista una hora seguida. Se ocultan
+                mientras hay una búsqueda a la vista, para no amontonar dos
+                listas. */}
             <div className={consulta.length >= 2 ? 'hidden' : undefined}>
               <p className="etiqueta mb-2">
-                {fila.length > 0 ? 'Y después, sugeridas' : 'Sugeridas de YouTube'}
+                {fila.length > 0 ? 'Y después, del gimnasio' : 'De la lista del gimnasio'}
               </p>
 
               {sugeridas.length === 0 ? (

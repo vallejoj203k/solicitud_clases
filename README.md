@@ -310,7 +310,7 @@ incrustado oficial de YouTube (IFrame Player API), que va con su publicidad y su
 Va en el televisor o la tablet conectada a los parlantes. El flujo es:
 
 1. quien abre la pantalla **elige la primera canción** buscando en YouTube,
-2. de ahí en adelante **encadena sola**,
+2. de ahí en adelante **encadena sola con la música del gimnasio**,
 3. si un cliente pide algo, entra **en cuanto termine** la que está sonando,
 4. si hay varias pedidas van una tras otra, y al agotarse vuelve la automática.
 
@@ -329,32 +329,47 @@ el reproductor responde *«Se produjo un error»* y la música se para. Además,
 `RD` empieza siempre por el vídeo que la siembra, o sea que repetía la canción que acababa
 de sonar.
 
-Lo que sigue ahora sale de `GET /api/admin/musica/sugeridas`: el reproductor manda lo último
-que sonó y todo lo que ya puso, y el servidor devuelve una lista barajada mezclando el canal
-de esa canción, el ranking del momento y las listas configuradas. Tiene dos ventajas sobre la mezcla:
-todo lo que sale **ya pasó el filtro** de incrustable, no bloqueado y de duración
-razonable, y `buscar` cachea 12 horas, así que encadenar canciones del mismo hilo **no
-vuelve a gastar cuota** —una búsqueda de 100 unidades da para unas veinte canciones—.
+Lo que sigue ahora sale de `GET /api/admin/musica/sugeridas`: el reproductor manda todo lo
+que ya puso y el servidor le devuelve canciones del catálogo del gimnasio. Todo lo que sale
+**ya pasó el filtro** de incrustable, no bloqueado y de duración razonable, y no cuesta
+cuota: sale de la base de datos.
+
+#### Solo suena la música del gimnasio
+
+**YouTube no propone nada por su cuenta.** Las sugerencias salen únicamente de lo que hay
+en `/admin/musica`: lo que se importó pegando enlaces o listas de YouTube, más las listas
+de `YOUTUBE_LISTAS`. Antes se mezclaban el ranking de Colombia y el canal de lo que estaba
+sonando y el resultado era que la pantalla ponía música que el gimnasio no había elegido:
+se cargaban canciones propias y no se notaban por ningún lado.
+
+Para que la lista no se vuelva monótona, cada tanda respeta un **tope de dos canciones por
+artista**. Es una preferencia, no una regla: si con el tope no se llena la tanda —una lista
+de un solo artista es una decisión válida del gimnasio— se completa sin él, dejando lo
+variado arriba, que es lo que se ve y lo primero que suena.
+
+Esto vale para lo **automático**. El buscador del panel sigue yendo a todo YouTube, y lo que
+pide un cliente suena sea del catálogo o no: son decisiones de una persona, no de la máquina.
 
 #### La pantalla no se puede quedar muda
 
-Un salón en silencio es peor que una canción repetida, así que las sugerencias bajan por
-una escalera de respaldos en vez de rendirse en el primer hueco:
+Un salón en silencio es peor que una canción repetida, así que si con las exclusiones no
+sale nada se afloja en vez de rendirse:
 
-1. YouTube —canal de la última + lo popular + las listas— sin nada de lo ya sonado;
-2. lo mismo **aflojando** las exclusiones a las últimas cinco: tras un par de horas todo lo
-   que YouTube ofrece ya sonó, y filtrar por eso deja la lista en cero. Si toca repetir, que
-   sea lo más viejo y nunca lo que acaba de sonar;
-3. el **catálogo local** —todo lo que alguna vez se pidió o se importó—, que no necesita a
-   YouTube y por tanto sobrevive a un corte de red o a la cuota agotada;
-4. el catálogo local sin exclusiones.
+1. el catálogo del gimnasio sin nada de lo ya sonado;
+2. lo mismo **aflojando** las exclusiones a las últimas cinco: cuando ya sonó la lista
+   entera hay que repetir, y que sea lo más viejo y nunca lo que acaba de sonar;
+3. el catálogo entero sin exclusiones, o sea la lista **dando la vuelta**.
+
+Solo hay una excepción, la del primer día: si no hay **ni una** canción guardada, se tira
+del ranking de YouTube para que la pantalla no arranque muda. En cuanto el gimnasio importa
+su primera lista, ese camino deja de usarse.
 
 Y si aun así no hay nada —sin internet y sin una sola canción guardada—, el reproductor
 repite lo más antiguo de la sesión y sigue reintentando por detrás. Solo se queda quieto
 si nunca ha sonado nada, y para eso está la pantalla de elegir la primera.
 
-La lista de «ya sonadas» está **acotada a 120**: sin tope acabaría excluyendo todo lo que
-YouTube puede ofrecer y las sugerencias volverían vacías por su propia culpa.
+La lista de «ya sonadas» está **acotada a 120**: sin tope acabaría excluyendo el catálogo
+entero y las sugerencias volverían vacías por su propia culpa.
 
 #### Lo pedido suena; lo automático no repite
 
@@ -416,9 +431,10 @@ pide esa persona en esa clase; se ordena por `turno` y, dentro de cada ronda, po
 `creadoEn`). Con llegada estricta, el primero que pidiera diez se comería la clase entera.
 
 Cada persona puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
-Solo pide quien tenga reserva firme en esa clase: es lo que evita que un desconocido llene
-de canciones los parlantes del gimnasio. Una canción no entra dos veces a la misma fila,
-aunque la pidan dos personas distintas.
+**No hace falta reserva ni sesión**: quien está en el salón quiere poner música sin haber
+reservado por la app. Los frenos son otros: una canción no entra dos veces a la fila aunque
+la pidan dos personas distintas, no vuelve a pedirse hasta tres horas después de sonar, y
+los turnos se reparten por persona —o por navegador, si no hay sesión—.
 
 Estados de un pedido: `EN_FILA` → `SONANDO` → `SONO`. `SONANDO` existe como estado propio
 —en vez de deducirlo de «la primera de la cola»— para que el reproductor sepa desde dónde
@@ -427,10 +443,10 @@ retomar si alguien recarga la pantalla a mitad de canción.
 #### El panel de la derecha
 
 Lleva un **buscador** arriba y debajo enseña **lo que viene**: las pedidas primero y, tras
-ellas, una **lista de sugeridas** de la que se puede escoger tocando.
+ellas, una **lista del catálogo del gimnasio** de la que se puede escoger tocando.
 
-El buscador es la salida para cuando las sugerencias no convencen y además nadie ha pedido
-nada: se escribe, se toca **PONER** y suena en el acto. Mientras hay resultados a la vista
+El buscador va a **todo YouTube**, no solo al catálogo: es la vía para poner algo que
+todavía no está en la lista del gimnasio. Se escribe, se toca **PONER** y suena en el acto. Mientras hay resultados a la vista
 las sugeridas se ocultan, para no amontonar dos listas en una columna estrecha; al elegir
 una, el buscador se limpia solo y vuelven. La primera lleva la marca `SIGUE` porque es la que sonará sola si
 nadie hace nada; tocar cualquier otra la pone en el acto.
@@ -669,7 +685,7 @@ zona con horario de verano.
 | `POST` | `/api/admin/canciones/importar` | Carga masiva pegando enlaces o una lista de YouTube |
 | `PATCH/DELETE` | `/api/admin/canciones/:id` | Editar / sacar del catálogo |
 | `GET` | `/api/admin/musica/buscar?q=` | Buscar en YouTube desde el panel |
-| `GET` | `/api/admin/musica/sugeridas?desde=&excluir=&limite=` | Lista de propuestas para el reproductor |
+| `GET` | `/api/admin/musica/sugeridas?excluir=&limite=` | Propuestas para el reproductor, del catálogo del gimnasio |
 | `POST` | `/api/admin/musica/agregar` | Agregar un vídeo al catálogo (`{videoId}`) |
 | `POST` | `/api/admin/musica/siguiente` | **El reproductor avanza la fila** |
 | `GET` | `/api/admin/musica/cola` | La cola, con lo ya sonado |
