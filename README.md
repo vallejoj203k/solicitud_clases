@@ -301,7 +301,7 @@ incrustado oficial de YouTube (IFrame Player API), que va con su publicidad y su
 
 | Quién | Dónde | Qué hace |
 |---|---|---|
-| Cliente | `/musica` (tercera tarjeta del inicio) o su reserva | Busca en YouTube y manda a la fila |
+| Cliente | `/musica` (tercera tarjeta del inicio) o su reserva | Busca en YouTube, manda a la fila y vuelve al inicio |
 | Gimnasio | `/musica/reproductor` | **Suena aquí.** Se deja abierta todo el día |
 | Recepción | `/admin/musica` | Canciones de la casa; `/admin/recepcion` → clase → Música para ver la fila |
 
@@ -477,6 +477,20 @@ piden los detalles de cada vídeo (`videos.list`) y se dejan fuera:
 
 Los títulos se limpian de adornos —`(Official Video)`, `[4K]`, `| Lyrics`— porque en una
 fila que se lee de reojo estorban.
+
+### Pedir y volver
+
+Al pedir una canción la pantalla enseña una confirmación —qué canción entró y que suena en
+los parlantes cuando le toque— y **vuelve sola al inicio** a los 1,8 segundos. Pedir es el
+final del recorrido: quien lo hace está en mitad de la clase y no tiene nada más que hacer
+ahí. Antes se quedaba en la lista, sin señal clara de que hubiera funcionado.
+
+El salto no es inmediato a propósito: saltar en el acto deja a la persona sin saber si su
+canción entró. Se puede tocar la confirmación para no esperar, y ocupa la pantalla entera
+también para que un segundo toque por inercia no pida otra canción de más.
+
+**Si el pedido falla no se va a ningún lado**: se queda con el motivo a la vista (`409` si
+ya estaba en la cola, `422` si YouTube no la deja sonar) para poder elegir otra.
 
 ### La fila
 

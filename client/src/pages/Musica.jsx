@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import { Aviso, Cargando, Entrada, cx } from '../components/ui.jsx';
@@ -26,13 +26,26 @@ import { duracion } from '../lib/youtube.js';
  * LA BÚSQUEDA SE DISPARA AL ENVIAR, NO AL TECLEAR. Cada búsqueda gasta 100 de
  * las 10.000 unidades diarias que da la API de YouTube; buscar mientras se
  * escribe agotaría la cuota del gimnasio en una tarde.
+ *
+ * AL PEDIR, SE VUELVE AL INICIO. Pedir una canción es el final del recorrido:
+ * quien lo hace está en mitad de la clase y no tiene nada más que hacer aquí.
+ * Antes se quedaba en la lista sin señal clara de que hubiera funcionado.
  */
+
+// Cuánto se enseña la confirmación antes de volver al inicio. No es cero a
+// propósito: saltar en el acto deja a la persona sin saber si su canción entró.
+// Se puede tocar la confirmación para no esperar.
+const MS_CONFIRMACION = 1800;
 export default function Musica() {
+  const navegar = useNavigate();
   const queryClient = useQueryClient();
   const [texto, setTexto] = useState('');
   const [consulta, setConsulta] = useState('');
   const [error, setError] = useState(null);
   const [pidiendo, setPidiendo] = useState(null);
+  // El pedido recién hecho. Mientras esté puesto se ve la confirmación y corre
+  // el reloj para volver al inicio.
+  const [confirmado, setConfirmado] = useState(null);
   const entrada = useRef(null);
 
   const { data: estado } = useQuery({
@@ -73,13 +86,23 @@ export default function Musica() {
   const pedir = useMutation({
     mutationFn: (videoId) => api.pedirCancion({ videoId }),
     onMutate: (videoId) => setPidiendo(videoId),
-    onSuccess: () => {
+    onSuccess: (pedido) => {
       setError(null);
       refrescar();
+      setConfirmado(pedido);
     },
     onError: (e) => setError(e.message),
     onSettled: () => setPidiendo(null),
   });
+
+  // Vuelta al inicio. El temporizador se limpia si la pantalla se desmonta
+  // antes -por ejemplo si tocan la confirmación-, para no navegar encima de
+  // donde haya ido la persona.
+  useEffect(() => {
+    if (!confirmado) return undefined;
+    const t = setTimeout(() => navegar('/'), MS_CONFIRMACION);
+    return () => clearTimeout(t);
+  }, [confirmado, navegar]);
 
   const quitar = useMutation({
     mutationFn: (pedidoId) => api.quitarPedido(pedidoId),
@@ -99,6 +122,8 @@ export default function Musica() {
     ...(catalogo?.deLaCasa ?? []),
   ];
   const mostrando = consulta.length >= 2 ? resultados : paraEmpezar;
+
+  if (confirmado) return <Confirmacion pedido={confirmado} onIr={() => navegar('/')} />;
 
   return (
     <div className="min-h-dvh pb-16">
@@ -271,5 +296,34 @@ export default function Musica() {
         </div>
       </main>
     </div>
+  );
+}
+
+/**
+ * "Listo, tu canción entró".
+ *
+ * Ocupa la pantalla entera a propósito: es la señal de que el recorrido terminó
+ * y, de paso, evita que un segundo toque por inercia pida otra canción mientras
+ * se vuelve al inicio.
+ */
+function Confirmacion({ pedido, onIr }) {
+  return (
+    <button
+      onClick={onIr}
+      aria-label="Ir al inicio"
+      className="min-h-dvh w-full px-8 flex flex-col items-center justify-center text-center animate-aparecer"
+    >
+      <span className="inline-flex w-20 h-20 rounded-full bg-volt-500 text-carbon-900 items-center justify-center">
+        <IconoCheck className="w-10 h-10" />
+      </span>
+
+      <h1 className="mt-5 text-2xl font-extrabold tracking-tightest">¡Listo, va sonando!</h1>
+      <p className="mt-2 font-semibold text-humo-100 line-clamp-2">{pedido.cancion.titulo}</p>
+      <p className="mt-1 text-sm text-humo-500">
+        Entró a la cola. Suena en los parlantes del salón cuando le toque el turno.
+      </p>
+
+      <p className="mt-8 text-xs text-humo-500">Volviendo al inicio…</p>
+    </button>
   );
 }
