@@ -227,29 +227,44 @@ model Cancion {
 }
 
 // Una cancion pedida por alguien para una clase concreta.
+// Una cancion pedida para los parlantes del gimnasio.
+//
+// LA COLA ES UNA SOLA, no una por clase: hay un unico reproductor y pedir no
+// exige tener reserva. Por eso `claseId` y `usuarioId` son opcionales.
+//
+//  - `claseId` queda para saber en que clase se pidio, si habia alguna. No
+//    filtra nada; es historial.
+//  - `usuarioId` esta cuando el telefono ya tiene sesion de cliente (la recibio
+//    al reservar alguna vez). Si no, el pedido es anonimo.
 model PedidoMusica {
   id String @id @default(cuid())
 
-  claseId String
-  clase   Clase  @relation(fields: [claseId], references: [id], onDelete: Cascade)
+  claseId String?
+  clase   Clase?  @relation(fields: [claseId], references: [id], onDelete: SetNull)
 
   cancionId String
   cancion   Cancion @relation(fields: [cancionId], references: [id], onDelete: Cascade)
 
-  usuarioId String
-  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
 
-  // Numero de pedido de ESA persona en ESA clase: 1 la primera que pidio, 2 la
-  // segunda... La fila se ordena por turno y luego por hora, de modo que suena
-  // la primera de cada quien antes que la segunda de nadie. Sin esto, el que
-  // llega primero y pide veinte deja a los demas sin sonar.
+  // Identificador del navegador que pidio. Es lo que permite repartir turnos
+  // entre personas que no tienen sesion: sin el, cualquiera podria pedir veinte
+  // seguidas y todas irian antes que la primera de los demas.
+  dispositivoId String?
+  // Como se muestra en la pantalla. Sale de la sesion si la hay.
+  nombre String?
+
+  // Numero de pedido de QUIEN pide: 1 la primera que pidio, 2 la segunda... La
+  // fila se ordena por turno y luego por hora, de modo que suena la primera de
+  // cada quien antes que la segunda de nadie.
   turno Int @default(1)
 
   estado   EstadoPedidoMusica @default(EN_FILA)
   creadoEn DateTime           @default(now())
   sonoEn   DateTime?
 
-  // La misma persona no repite cancion en la misma clase.
-  @@unique([claseId, cancionId, usuarioId])
-  @@index([claseId, estado, turno])
+  @@index([estado, turno, creadoEn])
+  @@index([cancionId, estado])
+  @@index([claseId])
 }

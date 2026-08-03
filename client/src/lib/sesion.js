@@ -11,6 +11,7 @@ const CLAVES = {
   cliente: 'sc.token.cliente',
   admin: 'sc.token.admin',
   perfil: 'sc.cliente',
+  dispositivo: 'sc.dispositivo',
 };
 
 function seguro(fn, alterno = null) {
@@ -42,3 +43,23 @@ export const cerrarSesionCliente = () => {
   borrarToken('cliente');
   seguro(() => localStorage.removeItem(CLAVES.perfil));
 };
+
+/**
+ * Identificador de este navegador.
+ *
+ * Pedir musica no exige reserva ni sesion, asi que hace falta algo con lo que
+ * distinguir a quien pide: es lo que reparte los turnos entre desconocidos y lo
+ * que permite que cada quien quite lo suyo. No identifica a la persona, solo al
+ * navegador, y se genera la primera vez que hace falta.
+ */
+export const idDispositivo = () =>
+  seguro(() => {
+    let id = localStorage.getItem(CLAVES.dispositivo);
+    if (!id) {
+      id = (crypto.randomUUID?.() ?? `d${Date.now()}${Math.random().toString(36).slice(2)}`)
+        .replace(/-/g, '')
+        .slice(0, 32);
+      localStorage.setItem(CLAVES.dispositivo, id);
+    }
+    return id;
+  }, null);

@@ -92,8 +92,9 @@ Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
 Cancion       id, titulo, artista?, videoId(único)?, canal?, duracionSeg?, miniatura?,
               momento?, deLaCasa, activa, creadoEn
-PedidoMusica  id, claseId, cancionId, usuarioId, turno, estado(EN_FILA|SONANDO|SONO),
-              creadoEn, sonoEn?                        (único: claseId+cancionId+usuarioId)
+PedidoMusica  id, cancionId, claseId?, usuarioId?, dispositivoId?, nombre?, turno,
+              estado(EN_FILA|SONANDO|SONO), creadoEn, sonoEn?
+              (único parcial: cancionId donde estado IN (EN_FILA, SONANDO))
 ```
 
 ### No hay tabla `Puesto`
@@ -393,8 +394,16 @@ de canciones los parlantes del gimnasio. Una canción no entra dos veces a la mi
 aunque la pidan dos personas distintas.
 
 Estados de un pedido: `EN_FILA` → `SONANDO` → `SONO`. `SONANDO` existe como estado propio
-—en vez de deducirlo de «la primera de la fila»— para que el reproductor sepa desde dónde
+—en vez de deducirlo de «la primera de la cola»— para que el reproductor sepa desde dónde
 retomar si alguien recarga la pantalla a mitad de canción.
+
+#### El panel de la derecha
+
+Enseña **lo que viene**: las pedidas primero y, debajo, la que va a sonar por recomendación
+cuando se agoten. Esa recomendación se pide **por adelantado**, en cuanto arranca cada
+canción, por dos motivos: se puede enseñar, y el cambio de canción no tiene que esperar a
+que responda la red. Excluye tanto lo ya sonado como **lo que está esperando en la cola**;
+sin eso proponía justo la canción que un cliente acababa de pedir.
 
 ### Antes de encenderlo
 
@@ -592,11 +601,11 @@ zona con horario de verano.
 | `POST` | `/api/reservas/:codigo/cancelar` | Cancelar la propia reserva |
 | `GET` | `/api/musica/buscar?q=` | Buscar en YouTube (token de cliente: protege la cuota) |
 | `GET` | `/api/musica/catalogo` | Listas configuradas + canciones de la casa |
-| `GET` | `/api/musica/ahora[?clase=]` | Qué suena y qué viene; sin `clase`, la que está en curso |
+| `GET` | `/api/musica/ahora` | Qué suena y qué viene |
+| `GET` | `/api/musica/cola` | La cola completa |
 | `GET` | `/api/canciones[?q=]` | Lo ya pedido alguna vez, sin gastar cuota |
 | `GET` | `/api/canciones/de-la-casa` | Las que pone el gimnasio si nadie pide |
-| `GET` | `/api/clases/:id/musica` | Fila de la clase, en orden de rondas |
-| `POST` | `/api/clases/:id/musica` | Pedir (`{videoId}`; token de cliente con reserva) |
+| `POST` | `/api/musica/pedir` | Pedir (`{videoId}`; sin reserva ni cuenta) |
 | `DELETE` | `/api/musica/:pedidoId` | Quitar un pedido propio que no esté sonando |
 | `GET` | `/api/salud` | Healthcheck (lo usa Railway) |
 
@@ -623,7 +632,7 @@ zona con horario de verano.
 | `GET` | `/api/admin/musica/sugerida?desde=&excluir=` | Qué poner cuando nadie ha pedido nada |
 | `POST` | `/api/admin/musica/agregar` | Agregar un vídeo al catálogo (`{videoId}`) |
 | `POST` | `/api/admin/musica/siguiente` | **El reproductor avanza la fila** |
-| `GET` | `/api/admin/clases/:id/musica` | Fila de la clase |
+| `GET` | `/api/admin/musica/cola` | La cola, con lo ya sonado |
 | `POST` | `/api/admin/musica/:pedidoId/sono` | Marcar que sonó (o devolverla a la fila) |
 | `DELETE` | `/api/admin/musica/:pedidoId` | Quitar un pedido |
 
