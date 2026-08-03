@@ -326,8 +326,25 @@ todo lo que sale **ya pasó el filtro** de incrustable, no bloqueado y de duraci
 razonable, y `buscar` cachea 12 horas, así que encadenar canciones del mismo hilo **no
 vuelve a gastar cuota** —una búsqueda de 100 unidades da para unas veinte canciones—.
 
-Si la sugerencia no encuentra nada, se tira de las canciones **de la casa**; si tampoco
-hay, la pantalla lo dice en vez de quedarse muda sin explicación.
+#### La pantalla no se puede quedar muda
+
+Un salón en silencio es peor que una canción repetida, así que las sugerencias bajan por
+una escalera de respaldos en vez de rendirse en el primer hueco:
+
+1. YouTube —canal de la última + lo popular + las listas— sin nada de lo ya sonado;
+2. lo mismo **aflojando** las exclusiones a las últimas cinco: tras un par de horas todo lo
+   que YouTube ofrece ya sonó, y filtrar por eso deja la lista en cero. Si toca repetir, que
+   sea lo más viejo y nunca lo que acaba de sonar;
+3. el **catálogo local** —todo lo que alguna vez se pidió o se importó—, que no necesita a
+   YouTube y por tanto sobrevive a un corte de red o a la cuota agotada;
+4. el catálogo local sin exclusiones.
+
+Y si aun así no hay nada —sin internet y sin una sola canción guardada—, el reproductor
+repite lo más antiguo de la sesión y sigue reintentando por detrás. Solo se queda quieto
+si nunca ha sonado nada, y para eso está la pantalla de elegir la primera.
+
+La lista de «ya sonadas» está **acotada a 120**: sin tope acabaría excluyendo todo lo que
+YouTube puede ofrecer y las sugerencias volverían vacías por su propia culpa.
 
 #### Lo pedido suena; lo automático no repite
 

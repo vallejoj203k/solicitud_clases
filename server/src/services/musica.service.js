@@ -4,6 +4,7 @@ import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 import {
   detalle as detalleYoutube,
   detallesDe,
+  sugerencias as sugerenciasYoutube,
   videosDeLista,
 } from './youtube.service.js';
 
@@ -252,6 +253,63 @@ export async function cancionesDeLaCasa(limite = 50) {
     take: limite,
   });
   return canciones.map(serializarCancion);
+}
+
+/** Cualquier cancion reproducible que ya haya pasado por aqui. */
+async function delCatalogoLocal(excluir = [], limite = 12) {
+  const canciones = await prisma.cancion.findMany({
+    where: {
+      activa: true,
+      videoId: { not: null, ...(excluir.length ? { notIn: excluir } : {}) },
+    },
+    take: 200,
+  });
+  // Se baraja para no proponer siempre las mismas primeras.
+  for (let i = canciones.length - 1; i > 0; i -= 1) {
+    const k = Math.floor(Math.random() * (i + 1));
+    [canciones[i], canciones[k]] = [canciones[k], canciones[i]];
+  }
+  return canciones.slice(0, limite).map(serializarCancion);
+}
+
+/**
+ * Que poner a continuacion. NUNCA DEVUELVE VACIO SI HAY ALGO QUE PONER.
+ *
+ * La pantalla del gimnasio no se puede quedar muda, asi que esto baja por una
+ * escalera de respaldos en vez de rendirse en el primer hueco:
+ *
+ *   1. YouTube -canal de la ultima + lo popular + las listas- sin lo ya sonado;
+ *   2. lo mismo AFLOJANDO las exclusiones: tras un par de horas todo lo que
+ *      YouTube ofrece ya sono, y filtrar por eso deja la lista en cero;
+ *   3. el catalogo local -todo lo que alguna vez se pidio o se importo-, que no
+ *      necesita a YouTube y por tanto sobrevive a un corte o a la cuota agotada;
+ *   4. el catalogo local sin exclusiones.
+ *
+ * Solo se queda sin nada si el gimnasio no tiene ni una cancion guardada y
+ * ademas YouTube no responde; de eso se encarga el reproductor, que en ese caso
+ * repite antes que callar.
+ */
+export async function sugerenciasParaReproductor({ desde = null, excluir = [], limite = 12 } = {}) {
+  // Al aflojar no se tiran TODAS las exclusiones: se conservan las ULTIMAS
+  // CINCO. Si toca repetir algo, que sea lo mas viejo y nunca lo que acaba de
+  // sonar. Guardar mas -veinte, por ejemplo- no sirve de nada cuando el
+  // catalogo es pequeno: serian todas otra vez, y volveriamos a quedarnos sin
+  // nada que proponer.
+  const recientes = excluir.slice(-5);
+
+  const intentos = [
+    () => sugerenciasYoutube({ desde, excluir, limite }),
+    () => sugerenciasYoutube({ desde, excluir: recientes, limite }),
+    () => delCatalogoLocal(excluir, limite),
+    () => delCatalogoLocal(recientes, limite),
+    () => delCatalogoLocal([], limite),
+  ];
+
+  for (const intento of intentos) {
+    const lista = await intento().catch(() => []);
+    if (lista?.length) return lista;
+  }
+  return [];
 }
 
 /* ----------------------------------------------------------------- Fila */
