@@ -416,8 +416,13 @@ retomar si alguien recarga la pantalla a mitad de canción.
 
 #### El panel de la derecha
 
-Enseña **lo que viene**: las pedidas primero y, debajo, una **lista de sugeridas** de la que
-se puede escoger tocando. La primera lleva la marca `SIGUE` porque es la que sonará sola si
+Lleva un **buscador** arriba y debajo enseña **lo que viene**: las pedidas primero y, tras
+ellas, una **lista de sugeridas** de la que se puede escoger tocando.
+
+El buscador es la salida para cuando las sugerencias no convencen y además nadie ha pedido
+nada: se escribe, se toca **PONER** y suena en el acto. Mientras hay resultados a la vista
+las sugeridas se ocultan, para no amontonar dos listas en una columna estrecha; al elegir
+una, el buscador se limpia solo y vuelven. La primera lleva la marca `SIGUE` porque es la que sonará sola si
 nadie hace nada; tocar cualquier otra la pone en el acto.
 
 Las sugerencias se piden **por adelantado**, en cuanto arranca cada canción, por dos

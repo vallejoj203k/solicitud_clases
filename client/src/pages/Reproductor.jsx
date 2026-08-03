@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import { Aviso, Boton, Cargando, Entrada, cx } from '../components/ui.jsx';
-import { IconoAtras, IconoBuscar, IconoMusica } from '../components/Iconos.jsx';
+import { IconoAtras, IconoBuscar, IconoCerrar, IconoMusica } from '../components/Iconos.jsx';
 import { leerToken } from '../lib/sesion.js';
 import { cargarApiYoutube, duracion } from '../lib/youtube.js';
 
@@ -74,6 +74,11 @@ export default function Reproductor() {
   // tiene que esperar a la red.
   const [sugeridas, setSugeridas] = useState([]);
   const sugeridasRef = useRef([]);
+  // Buscador del panel: para cuando ni las sugerencias ni los pedidos sirven y
+  // quien atiende la pantalla quiere poner algo concreto.
+  const [texto, setTexto] = useState('');
+  const [consulta, setConsulta] = useState('');
+  const entradaPanel = useRef(null);
 
   const { data } = useQuery({
     queryKey: ['musicaAhora'],
@@ -87,6 +92,14 @@ export default function Reproductor() {
     () => queryClient.invalidateQueries({ queryKey: ['musicaAhora'] }),
     [queryClient]
   );
+
+  const { data: resultados, isFetching: buscando } = useQuery({
+    queryKey: ['adminBuscarYoutube', consulta],
+    queryFn: () => api.admin.buscarEnYoutube(consulta),
+    enabled: consulta.length >= 2,
+    staleTime: 30 * 60_000,
+    retry: false,
+  });
 
   /** Pone un vídeo y se asegura de que arranque. */
   const cargar = useCallback((videoId) => {
@@ -386,10 +399,87 @@ export default function Reproductor() {
               </div>
             )}
 
+            {/* Buscador. Las sugerencias de YouTube no siempre aciertan, y si
+                además nadie ha pedido nada no habría forma de poner algo
+                concreto sin salir de la pantalla. */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                setConsulta(texto.trim());
+                entradaPanel.current?.blur();
+              }}
+            >
+              <div className="relative">
+                <IconoBuscar className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-humo-500 pointer-events-none" />
+                <Entrada
+                  ref={entradaPanel}
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  placeholder="Buscar y poner otra"
+                  className="pl-9 pr-9 min-h-[44px] text-sm"
+                  enterKeyHint="search"
+                />
+                {(texto || consulta) && (
+                  <button
+                    type="button"
+                    aria-label="Limpiar búsqueda"
+                    onClick={() => {
+                      setTexto('');
+                      setConsulta('');
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-humo-500 hover:text-humo-100"
+                  >
+                    <IconoCerrar className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {consulta.length >= 2 && (
+              <div>
+                <p className="etiqueta mb-2">Resultados</p>
+                {buscando && !resultados && <Cargando texto="Buscando…" />}
+                {resultados?.length === 0 && (
+                  <p className="text-sm text-humo-500">Sin resultados.</p>
+                )}
+                <ul className="space-y-1.5">
+                  {(resultados ?? []).map((c) => (
+                    <li key={c.videoId}>
+                      <button
+                        onClick={() => {
+                          ponerSugerida(c);
+                          setTexto('');
+                          setConsulta('');
+                        }}
+                        title="Poner esta ahora"
+                        className="w-full flex items-center gap-3 rounded-2xl border border-carbon-600 bg-carbon-700 px-2.5 py-2 text-left hover:border-carbon-500 transition-colors"
+                      >
+                        {c.miniatura && (
+                          <img
+                            src={c.miniatura}
+                            alt=""
+                            className="w-14 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold truncate leading-tight">{c.titulo}</p>
+                          <p className="text-[11px] text-humo-500 truncate">
+                            {c.canal} · {duracion(c.duracionSeg)}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-volt-500 shrink-0">PONER</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Las propuestas de YouTube. Se enseñan siempre, no solo cuando la
                 cola está vacía: sirven para escoger otra cosa y no acabar
-                oyendo el mismo artista una hora seguida. */}
-            <div>
+                oyendo el mismo artista una hora seguida. Se ocultan mientras hay
+                una búsqueda a la vista, para no amontonar dos listas. */}
+            <div className={consulta.length >= 2 ? 'hidden' : undefined}>
               <p className="etiqueta mb-2">
                 {fila.length > 0 ? 'Y después, sugeridas' : 'Sugeridas de YouTube'}
               </p>
