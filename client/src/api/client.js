@@ -181,6 +181,15 @@ export const api = {
     // El reproductor del gimnasio avanza la fila.
     siguienteCancion: (clase = null) =>
       pedir('/admin/musica/siguiente', { metodo: 'POST', cuerpo: { clase }, tipoToken: 'admin' }),
+    // Qué poner cuando nadie ha pedido nada.
+    sugerida: (desde, excluir = []) => {
+      const q = new URLSearchParams();
+      if (desde) q.set('desde', desde);
+      // Se recorta la lista de excluidas: la URL tiene un límite y con las
+      // últimas basta para que no se repita nada reciente.
+      if (excluir.length) q.set('excluir', excluir.slice(-60).join(','));
+      return pedir(`/admin/musica/sugerida?${q}`, { tipoToken: 'admin' });
+    },
     actualizarCancion: (id, datos) =>
       pedir(`/admin/canciones/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     eliminarCancion: (id) =>
