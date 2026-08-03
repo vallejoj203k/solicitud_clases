@@ -96,6 +96,7 @@ export const api = {
   // --- Musica --------------------------------------------------------------
   buscarMusica: (q) => pedir(`/musica/buscar?q=${encodeURIComponent(q)}`),
   catalogoMusica: () => pedir('/musica/catalogo'),
+  popularesMusica: () => pedir('/musica/populares'),
   // Que suena ahora en los parlantes del gimnasio.
   musicaAhora: () => pedir('/musica/ahora'),
   canciones: (q) => pedir(`/canciones${q ? `?q=${encodeURIComponent(q)}` : ''}`),
@@ -184,14 +185,15 @@ export const api = {
     // El reproductor del gimnasio avanza la fila.
     siguienteCancion: (clase = null) =>
       pedir('/admin/musica/siguiente', { metodo: 'POST', cuerpo: { clase }, tipoToken: 'admin' }),
-    // Qué poner cuando nadie ha pedido nada.
-    sugerida: (desde, excluir = []) => {
-      const q = new URLSearchParams();
+    // Qué poner cuando nadie ha pedido nada. Devuelve varias para que la
+    // pantalla pueda enseñarlas y el administrador escoger.
+    sugeridas: (desde, excluir = [], limite = 12) => {
+      const q = new URLSearchParams({ limite: String(limite) });
       if (desde) q.set('desde', desde);
       // Se recorta la lista de excluidas: la URL tiene un límite y con las
       // últimas basta para que no se repita nada reciente.
       if (excluir.length) q.set('excluir', excluir.slice(-60).join(','));
-      return pedir(`/admin/musica/sugerida?${q}`, { tipoToken: 'admin' });
+      return pedir(`/admin/musica/sugeridas?${q}`, { tipoToken: 'admin' });
     },
     actualizarCancion: (id, datos) =>
       pedir(`/admin/canciones/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),

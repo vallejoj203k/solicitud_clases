@@ -32,7 +32,7 @@ import {
   quitarPedido,
   MOMENTOS,
 } from '../services/musica.service.js';
-import { buscar as buscarEnYoutube, sugerir } from '../services/youtube.service.js';
+import { buscar as buscarEnYoutube, sugerencias } from '../services/youtube.service.js';
 import {
   dashboard,
   buscarReservas,
@@ -392,12 +392,13 @@ adminRouter.get(
  * una canción nueva. Es lo que mantiene la pantalla sonando sola sin pedidos.
  */
 adminRouter.get(
-  '/musica/sugerida',
+  '/musica/sugeridas',
   asyncHandler(async (req, res) => {
     const desde = typeof req.query.desde === 'string' ? req.query.desde : null;
     const excluir =
       typeof req.query.excluir === 'string' ? req.query.excluir.split(',').filter(Boolean) : [];
-    res.json((await sugerir({ desde, excluir })) ?? null);
+    const limite = Math.min(Number(req.query.limite) || 12, 25);
+    res.json(await sugerencias({ desde, excluir, limite }));
   })
 );
 

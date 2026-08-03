@@ -59,11 +59,13 @@ export default function Reproductor() {
   const [semilla, setSemilla] = useState(null);
   const [error, setError] = useState(null);
   const [automatica, setAutomatica] = useState(null);
-  // La recomendación que ya está reservada para cuando termine la de ahora.
-  // Se pide por adelantado para poder enseñarla en el panel y para que el
-  // cambio de canción no tenga que esperar a la red.
-  const [proxima, setProxima] = useState(null);
-  const proximaRef = useRef(null);
+  // Las recomendaciones que se enseñan en el panel. La primera es la que sonará
+  // sola cuando termine lo de ahora; las demás están para que quien atiende la
+  // pantalla pueda escoger otra y no acabe oyendo el mismo artista una hora.
+  // Se piden por adelantado: así se pueden enseñar y el cambio de canción no
+  // tiene que esperar a la red.
+  const [sugeridas, setSugeridas] = useState([]);
+  const sugeridasRef = useRef([]);
 
   const { data } = useQuery({
     queryKey: ['musicaAhora'],
@@ -99,36 +101,45 @@ export default function Reproductor() {
    * inmediato en vez de esperar a que responda la red.
    */
   const apartarProxima = useCallback(async () => {
-    const sugerida = await api.admin
+    const lista = await api.admin
       // Se excluye lo ya sonado Y lo que está esperando en la cola: si no, la
       // automática proponía justo la canción que un cliente acababa de pedir y
       // sonaba dos veces seguidas.
-      .sugerida(ultimoVideo.current, [...reproducidas.current, ...enCola.current])
-      .catch(() => null);
+      .sugeridas(ultimoVideo.current, [...reproducidas.current, ...enCola.current], 12)
+      .catch(() => []);
 
-    if (sugerida?.videoId) {
-      proximaRef.current = sugerida;
-      setProxima(sugerida);
+    if (lista?.length) {
+      sugeridasRef.current = lista;
+      setSugeridas(lista);
       return;
     }
 
-    // Sin sugerencia, la red de seguridad son las canciones de la casa.
+    // Sin sugerencias, la red de seguridad son las canciones de la casa.
     const casa = await api.cancionesDeLaCasa().catch(() => []);
-    const libre = casa.find((c) => c.videoId && !reproducidas.current.has(c.videoId)) ?? null;
-    proximaRef.current = libre;
-    setProxima(libre);
+    const libres = casa.filter((c) => c.videoId && !reproducidas.current.has(c.videoId));
+    sugeridasRef.current = libres;
+    setSugeridas(libres);
   }, []);
 
-  /** Pone la recomendación que estaba apartada, o busca una al vuelo. */
-  const ponerAutomatica = useCallback(async () => {
-    let elegida = proximaRef.current;
-    if (!elegida) {
-      await apartarProxima();
-      elegida = proximaRef.current;
-    }
+  /** Pone una canción concreta y deja lista la siguiente tanda. */
+  const ponerSugerida = useCallback(
+    (cancion) => {
+      if (!cancion?.videoId) return;
+      sugeridasRef.current = sugeridasRef.current.filter((c) => c.videoId !== cancion.videoId);
+      setSugeridas(sugeridasRef.current);
+      setAutomatica(cancion);
+      setError(null);
+      cargar(cancion.videoId);
+      // Se rellena la lista para la próxima vez.
+      apartarProxima();
+    },
+    [cargar, apartarProxima]
+  );
 
-    proximaRef.current = null;
-    setProxima(null);
+  /** Pone la primera recomendación, o busca una al vuelo si no hay. */
+  const ponerAutomatica = useCallback(async () => {
+    if (!sugeridasRef.current.length) await apartarProxima();
+    const elegida = sugeridasRef.current[0];
 
     if (!elegida?.videoId) {
       setError(
@@ -136,13 +147,8 @@ export default function Reproductor() {
       );
       return;
     }
-
-    setAutomatica(elegida);
-    setError(null);
-    cargar(elegida.videoId);
-    // Ya se puede ir buscando la de después.
-    apartarProxima();
-  }, [cargar, apartarProxima]);
+    ponerSugerida(elegida);
+  }, [apartarProxima, ponerSugerida]);
 
   /**
    * Terminó lo que sonaba: primero lo pedido, si no, la automática.
@@ -325,41 +331,67 @@ export default function Reproductor() {
               </div>
             )}
 
-            {/* Qué viene cuando se acabe lo pedido. Se aparta por adelantado
-                justo para poder enseñarlo aquí. */}
+            {/* Las propuestas de YouTube. Se enseñan siempre, no solo cuando la
+                cola está vacía: sirven para escoger otra cosa y no acabar
+                oyendo el mismo artista una hora seguida. */}
             <div>
               <p className="etiqueta mb-2">
-                {fila.length > 0 ? 'Y después, automática' : 'A continuación'}
+                {fila.length > 0 ? 'Y después, sugeridas' : 'Sugeridas de YouTube'}
               </p>
-              {proxima ? (
-                <div className="flex items-center gap-3 rounded-2xl border border-dashed border-carbon-600 px-3 py-2">
-                  {proxima.miniatura && (
-                    <img
-                      src={proxima.miniatura}
-                      alt=""
-                      className="w-12 h-9 rounded-lg object-cover shrink-0 opacity-80"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold truncate">{proxima.titulo}</p>
-                    <p className="text-[11px] text-humo-500 truncate">
-                      {proxima.canal ?? proxima.artista ?? 'YouTube'}
-                      {proxima.duracionSeg ? ` · ${duracion(proxima.duracionSeg)}` : ''}
-                    </p>
-                  </div>
-                  <span className="text-[11px] font-semibold text-humo-500 shrink-0">
-                    sugerida
-                  </span>
-                </div>
-              ) : (
+
+              {sugeridas.length === 0 ? (
                 <p className="text-sm text-humo-500">Buscando qué poner…</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {sugeridas.map((c, i) => (
+                    <li key={c.videoId}>
+                      <button
+                        onClick={() => ponerSugerida(c)}
+                        title="Poner esta ahora"
+                        className={cx(
+                          'w-full flex items-center gap-3 rounded-2xl border px-2.5 py-2 text-left transition-colors',
+                          // La primera es la que sonará sola si nadie toca nada.
+                          i === 0 && fila.length === 0
+                            ? 'border-carbon-500 bg-carbon-700'
+                            : 'border-transparent hover:border-carbon-600 hover:bg-carbon-800'
+                        )}
+                      >
+                        {c.miniatura ? (
+                          <img
+                            src={c.miniatura}
+                            alt=""
+                            className="w-14 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        ) : (
+                          <span className="w-14 h-10 rounded-lg bg-carbon-700 flex items-center justify-center shrink-0">
+                            <IconoMusica className="w-4 h-4 text-humo-500" />
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold truncate leading-tight">
+                            {c.titulo}
+                          </p>
+                          <p className="text-[11px] text-humo-500 truncate">
+                            {c.canal ?? c.artista ?? 'YouTube'}
+                            {c.duracionSeg ? ` · ${duracion(c.duracionSeg)}` : ''}
+                          </p>
+                        </div>
+                        {i === 0 && fila.length === 0 && (
+                          <span className="text-[10px] font-bold text-volt-500 shrink-0">
+                            SIGUE
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 
             {fila.length === 0 && (
               <p className="text-xs text-humo-500">
-                Sigue sonando sola. Lo que pidan los clientes entra aquí y suena en cuanto
-                termine la de ahora.
+                Nadie ha pedido nada: sigue sonando sola. Toca cualquiera de arriba para
+                ponerla ya.
               </p>
             )}
           </div>

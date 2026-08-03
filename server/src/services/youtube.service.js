@@ -228,46 +228,87 @@ export async function catalogo() {
 }
 
 /**
- * Qué poner a continuación cuando nadie ha pedido nada.
+ * Lo mas popular en musica ahora mismo, en el pais del gimnasio.
  *
- * NO SE USAN LAS MEZCLAS "RD" DE YOUTUBE. Parecían lo ideal -son literalmente
- * lo que YouTube encadena- pero el reproductor incrustado las rechaza: en la
- * pantalla salía "Se produjo un error" y la música se paraba.
- *
- * Lo que sí funciona es buscar a partir de lo que acaba de sonar y elegir al
- * azar entre los resultados. Tiene dos ventajas sobre la mezcla: todo lo que
- * sale ya pasó el filtro de incrustable, no bloqueado y de duración razonable,
- * y `buscar` cachea doce horas, así que encadenar canciones del mismo hilo no
- * vuelve a gastar cuota. Una búsqueda de 100 unidades da para unas veinte
- * canciones.
+ * Es la lista que YouTube usa para su propia pantalla de Musica, y se actualiza
+ * sola cuando ellos la actualizan. Cuesta 1 UNIDAD -no 100 como una busqueda-
+ * porque `chart=mostPopular` no pasa por `search.list`.
  */
-export async function sugerir({ desde = null, excluir = [] } = {}) {
+export async function populares(limite = 40) {
+  const clave = `populares:${env.youtube.region}`;
+  const guardado = deCache(clave);
+  if (guardado) return guardado.slice(0, limite);
+
+  const datos = await llamar('videos', {
+    part: 'snippet,contentDetails,status',
+    chart: 'mostPopular',
+    // 10 = musica.
+    videoCategoryId: '10',
+    regionCode: env.youtube.region,
+    maxResults: '50',
+  });
+
+  const canciones = (datos.items ?? []).map(aCancion).filter(Boolean);
+  // Dos horas: lo bastante para no gastar llamadas y lo bastante poco para que
+  // "lo del momento" siga siendo del momento.
+  aCache(clave, canciones, 120);
+  return canciones.slice(0, limite);
+}
+
+/**
+ * Varias opciones para lo que sigue, no una sola.
+ *
+ * MEZCLA FUENTES A PROPOSITO. Buscar por el canal de la ultima cancion mantiene
+ * el hilo, pero si se usa solo eso la pantalla acaba poniendo el mismo artista
+ * una hora seguida. Asi que se junta con lo mas popular del momento y con las
+ * listas que configure el gimnasio, y ademas se limita cuantas pueden salir del
+ * mismo canal.
+ */
+const MAX_POR_CANAL = 2;
+
+export async function sugerencias({ desde = null, excluir = [], limite = 12 } = {}) {
   const fuera = new Set(excluir.filter(Boolean));
   const candidatos = [];
 
   if (desde) {
     const semilla = await detalle(desde).catch(() => null);
-    // Se busca por el canal -el artista, casi siempre- porque es lo que mejor
-    // mantiene el hilo de lo que estaba sonando.
+    // `buscar` cachea 12 h, asi que seguir el hilo de un artista no vuelve a
+    // gastar cuota.
     if (semilla?.canal) candidatos.push(...(await buscar(semilla.canal).catch(() => [])));
   }
 
-  // Las listas que configure el gimnasio entran siempre a la baraja: cuestan
-  // 1 unidad y dan variedad cuando el artista se agota.
+  candidatos.push(...(await populares().catch(() => [])));
+
   if (env.youtube.listas.length) {
     const grupos = await catalogo().catch(() => []);
     for (const g of grupos) candidatos.push(...g.canciones);
   }
 
   const vistos = new Set();
-  const libres = candidatos.filter((c) => {
-    if (fuera.has(c.videoId) || vistos.has(c.videoId)) return false;
+  const porCanal = new Map();
+  const libres = [];
+  for (const c of candidatos) {
+    if (fuera.has(c.videoId) || vistos.has(c.videoId)) continue;
+    const cuantas = porCanal.get(c.canal) ?? 0;
+    if (cuantas >= MAX_POR_CANAL) continue;
     vistos.add(c.videoId);
-    return true;
-  });
+    porCanal.set(c.canal, cuantas + 1);
+    libres.push(c);
+  }
 
-  if (!libres.length) return null;
-  return libres[Math.floor(Math.random() * libres.length)];
+  // Se barajan para que la pantalla no proponga siempre lo mismo en el mismo
+  // orden.
+  for (let i = libres.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [libres[i], libres[j]] = [libres[j], libres[i]];
+  }
+  return libres.slice(0, limite);
+}
+
+/** Qué poner a continuación: la primera de la lista diversificada. */
+export async function sugerir({ desde = null, excluir = [] } = {}) {
+  const [primera] = await sugerencias({ desde, excluir, limite: 1 });
+  return primera ?? null;
 }
 
 /** Detalle de un video suelto, para cuando el cliente elige uno. */

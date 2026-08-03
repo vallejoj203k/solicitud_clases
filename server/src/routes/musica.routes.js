@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler, AppError } from '../utils/errores.js';
-import { buscar, catalogo, hayYoutube } from '../services/youtube.service.js';
+import { buscar, catalogo, hayYoutube, populares } from '../services/youtube.service.js';
 import {
   buscarCanciones,
   cancionesDeLaCasa,
@@ -44,6 +44,20 @@ musicaRouter.get(
     }
     const q = typeof req.query.q === 'string' ? req.query.q : '';
     res.json(await buscar(q));
+  })
+);
+
+/**
+ * Lo mas escuchado ahora mismo, que es con lo que abre la pantalla del cliente.
+ *
+ * Sale del ranking de musica de YouTube para el pais: se actualiza cuando ellos
+ * lo actualizan, y cuesta 1 unidad de cuota, no 100 como una busqueda.
+ */
+musicaRouter.get(
+  '/musica/populares',
+  asyncHandler(async (_req, res) => {
+    if (!hayYoutube()) return res.json([]);
+    res.json(await populares(40).catch(() => []));
   })
 );
 
