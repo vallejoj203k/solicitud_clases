@@ -218,12 +218,19 @@ model Cancion {
   activa   Boolean  @default(true)
   creadoEn DateTime @default(now())
 
+  // Cuando el reproductor incrustado se nego a ponerla. La API de datos dice
+  // que muchos videos se dejan incrustar y luego no: es el caso tipico de los
+  // sellos grandes. No se puede saber por adelantado, asi que se aprende de la
+  // primera vez y no se vuelve a proponer ni a dejar pedir.
+  bloqueadaEn DateTime?
+
   pedidos PedidoMusica[]
 
   // Evita duplicados al pegar la lista dos veces.
   @@unique([titulo, artista])
   @@index([activa, titulo])
   @@index([deLaCasa, activa])
+  @@index([bloqueadaEn])
 }
 
 // Una cancion pedida por alguien para una clase concreta.

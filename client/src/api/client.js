@@ -195,6 +195,14 @@ export const api = {
       if (excluir.length) q.set('excluir', excluir.slice(-60).join(','));
       return pedir(`/admin/musica/sugeridas?${q}`, { tipoToken: 'admin' });
     },
+    // El reproductor avisa de que YouTube no dejó poner esta canción, para que
+    // no se vuelva a proponer.
+    noSuena: (videoId) =>
+      pedir('/admin/musica/no-suena', {
+        metodo: 'POST',
+        cuerpo: { videoId },
+        tipoToken: 'admin',
+      }),
     actualizarCancion: (id, datos) =>
       pedir(`/admin/canciones/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     eliminarCancion: (id) =>

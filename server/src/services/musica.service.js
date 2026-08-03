@@ -40,6 +40,8 @@ const serializarCancion = (c) => ({
   // El panel pinta "fuera del catálogo" con esto; sin el campo, toda canción
   // recién pedida se veía desactivada.
   activa: c.activa,
+  // Fecha en que YouTube se negó a ponerla incrustada, si pasó.
+  bloqueadaEn: c.bloqueadaEn?.toISOString?.() ?? c.bloqueadaEn ?? null,
 });
 
 const serializarPedido = (p) => ({
@@ -246,10 +248,45 @@ export async function importarDeYoutube(texto, { deLaCasa = true } = {}) {
   };
 }
 
+/**
+ * El reproductor se topo con una cancion que no suena: se apunta para no
+ * volver a proponerla.
+ *
+ * POR QUE HACE FALTA. La API de datos de YouTube trae un campo `embeddable` y
+ * ya se filtra por el, pero MIENTE de forma sistematica con los sellos grandes:
+ * "Muerte en Hawaii" de Calle 13 o "Bandolero" de Don Omar dicen que si y
+ * despues el reproductor incrustado responde con el error 150 -"el propietario
+ * no permite reproducirlo en otros sitios"-. No hay manera de saberlo sin
+ * intentarlo, asi que se aprende del primer intento: la pantalla avisa, la
+ * cancion queda marcada y no se propone ni se deja pedir nunca mas.
+ *
+ * Se guarda la fecha, no un booleano, porque YouTube cambia de opinion: sirve
+ * para saber cual se cayo y cuando, y para poder revisarlas mas adelante.
+ */
+export async function marcarNoSuena(videoId) {
+  const cancion = await prisma.cancion.findUnique({ where: { videoId } });
+  // Puede no estar guardada: el reproductor tambien pone cosas que vienen
+  // directas de una busqueda y nunca pasaron por el catalogo.
+  if (!cancion) return { ok: true, marcada: false };
+  if (cancion.bloqueadaEn) return { ok: true, marcada: true };
+
+  await prisma.cancion.update({
+    where: { id: cancion.id },
+    data: { bloqueadaEn: new Date() },
+  });
+
+  // Si estaba esperando en la cola se saca: no va a sonar y solo estorbaria.
+  await prisma.pedidoMusica.deleteMany({
+    where: { cancionId: cancion.id, estado: 'EN_FILA' },
+  });
+
+  return { ok: true, marcada: true, titulo: cancion.titulo };
+}
+
 /** Las que pone el gimnasio cuando nadie pidio nada. Solo las reproducibles. */
 export async function cancionesDeLaCasa(limite = 50) {
   const canciones = await prisma.cancion.findMany({
-    where: { activa: true, deLaCasa: true, videoId: { not: null } },
+    where: { activa: true, deLaCasa: true, videoId: { not: null }, bloqueadaEn: null },
     orderBy: { titulo: 'asc' },
     take: limite,
   });
@@ -259,7 +296,7 @@ export async function cancionesDeLaCasa(limite = 50) {
 /** Todo lo reproducible que hay guardado, de la casa o no. */
 async function delCatalogoLocal(limite = 300) {
   const canciones = await prisma.cancion.findMany({
-    where: { activa: true, videoId: { not: null } },
+    where: { activa: true, videoId: { not: null }, bloqueadaEn: null },
     take: limite,
   });
   return canciones.map(serializarCancion);
@@ -386,20 +423,24 @@ export async function colaActual({ incluirSonadas = false, limiteSonadas = 20 } 
   return pedidos.map(serializarPedido);
 }
 
-/** Cuanto tiempo tiene que pasar para que una cancion pueda repetirse. */
-const HORAS_SIN_REPETIR = 3;
+/**
+ * Cuanto historial reciente se le manda al reproductor al abrirlo, para que no
+ * empiece repitiendo justo lo que acababa de sonar. NO es una prohibicion: solo
+ * sirve para variar.
+ */
+const HORAS_DE_MEMORIA = 3;
 
 /**
  * Pedir una cancion para los parlantes.
  *
  * NO HACE FALTA RESERVA NI SESION. El gimnasio lo pidio asi: quien esta en el
- * salon quiere poner musica sin tener que haber reservado por la app. A cambio
- * quedan dos frenos, que son los que de verdad importan:
+ * salon quiere poner musica sin tener que haber reservado por la app.
  *
- *  - la misma cancion no puede estar dos veces en la cola, ni volver a pedirse
- *    hasta unas horas despues de haber sonado;
- *  - los turnos se reparten por persona -o por navegador, si no hay sesion-, de
- *    modo que quien pide diez no deja sin sonar a quien pidio una.
+ * REPETIR ESTA PERMITIDO. Antes una cancion no podia volver a pedirse hasta
+ * tres horas despues de sonar; el gimnasio pidio quitarlo, porque si alguien la
+ * quiere oir otra vez ese es justo el punto. El unico freno que queda -aparte
+ * del reparto de turnos- es que no este YA en la cola: dos veces seguidas la
+ * misma no es repetir, es un error.
  */
 export async function pedirCancion({
   videoId,
@@ -412,6 +453,13 @@ export async function pedirCancion({
     ? await guardarDeYoutube(videoId)
     : await prisma.cancion.findUnique({ where: { id: cancionId } });
   if (!cancion || !cancion.activa) throw noEncontrado('Canción');
+  if (cancion.bloqueadaEn) {
+    throw new AppError(
+      'Esa canción no se puede reproducir aquí: YouTube no deja ponerla fuera de su página. Elige otra versión.',
+      422,
+      'CANCION_BLOQUEADA'
+    );
+  }
 
   // Ya esperando o sonando: no se encola dos veces, la pida quien la pida.
   const enCola = await prisma.pedidoMusica.findFirst({
@@ -424,20 +472,6 @@ export async function pedirCancion({
         : 'Esa canción ya está en la cola.',
       409,
       'CANCION_YA_EN_COLA'
-    );
-  }
-
-  // Sono hace poco: se deja descansar. Sin esto, tres personas pueden dejar la
-  // tarde entera dando vueltas sobre las mismas canciones.
-  const desde = new Date(Date.now() - HORAS_SIN_REPETIR * 3600_000);
-  const reciente = await prisma.pedidoMusica.findFirst({
-    where: { cancionId: cancion.id, estado: 'SONO', sonoEn: { gte: desde } },
-  });
-  if (reciente) {
-    throw new AppError(
-      'Esa canción sonó hace poco. Elige otra y vuelve a intentarlo más tarde.',
-      409,
-      'CANCION_YA_SONO'
     );
   }
 
@@ -540,7 +574,7 @@ export async function estadoReproduccion() {
   // Lo sonado hace poco, para que la automatica no lo repita. Se mira una
   // ventana y no todo el historial: el gimnasio lleva meses abierto y la lista
   // completa no cabria en una URL.
-  const desde = new Date(Date.now() - HORAS_SIN_REPETIR * 3600_000);
+  const desde = new Date(Date.now() - HORAS_DE_MEMORIA * 3600_000);
   const recientes = await prisma.pedidoMusica.findMany({
     where: { estado: 'SONO', sonoEn: { gte: desde } },
     include: { cancion: { select: { videoId: true } } },

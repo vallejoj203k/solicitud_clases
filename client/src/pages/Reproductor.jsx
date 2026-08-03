@@ -37,14 +37,23 @@ import { cargarApiYoutube, duracion } from '../lib/youtube.js';
  * fila de más, y las canciones se saltaban sin sonar.
  */
 
-// Cuántas canciones recordar para no repetir. Con tope, porque sin él la lista
-// de exclusiones acabaría vaciando las sugerencias.
-const MAX_RECORDADAS = 120;
+// Cuántas canciones recordar para variar un poco. NO es una prohibición de
+// repetir: es la lista que se manda como preferencia, y el servidor la afloja
+// solo si con ella no le sale nada. Se bajó de 120 a 20 justamente para eso:
+// con una lista propia de treinta canciones, recordar ciento veinte significaba
+// excluirla entera y andar siempre por el camino de emergencia.
+const MAX_RECORDADAS = 20;
 
 // Estados del reproductor de YouTube que importan aquí.
 const TERMINADO = 0;
 const EN_COLA = 5;
 const SIN_EMPEZAR = -1;
+
+// Errores del reproductor incrustado que NO se arreglan reintentando: el vídeo
+// ya no existe (100) o su dueño no deja ponerlo fuera de YouTube (101 y 150,
+// que son el mismo caso). Con estos la canción se marca para no volver a
+// proponerla; con cualquier otro se pasa a la siguiente y ya.
+const ERRORES_DEFINITIVOS = [100, 101, 150];
 
 export default function Reproductor() {
   const queryClient = useQueryClient();
@@ -65,6 +74,10 @@ export default function Reproductor() {
 
   const [semilla, setSemilla] = useState(null);
   const [error, setError] = useState(null);
+  // Aviso propio para las canciones que YouTube rechaza. NO comparte estado con
+  // `error` porque poner la siguiente canción lo limpia, y entonces el aviso se
+  // borraba en el mismo instante en que aparecía: nadie llegaba a leerlo.
+  const [descartada, setDescartada] = useState(null);
   const [automatica, setAutomatica] = useState(null);
   // Las recomendaciones que se enseñan en el panel. La primera es la que sonará
   // sola cuando termine lo de ahora; las demás están para que quien atiende la
@@ -209,6 +222,27 @@ export default function Reproductor() {
   }, [apartarProxima, ponerSugerida, cargar]);
 
   /**
+   * YouTube se negó a poner el vídeo.
+   *
+   * Si el motivo es definitivo -no existe, o el dueño no deja incrustarlo- se
+   * avisa al servidor para que esa canción no se vuelva a proponer nunca. Es la
+   * única forma de saberlo: la API de datos dice que se deja incrustar y luego
+   * el reproductor la rechaza, y pasa justo con lo más conocido (los sellos
+   * grandes bloquean sus vídeos fuera de YouTube).
+   */
+  const fallo = useCallback(async (codigo) => {
+    const video = reproducidas.current[reproducidas.current.length - 1];
+    if (!ERRORES_DEFINITIVOS.includes(codigo) || !video) return;
+
+    const { titulo } = await api.admin.noSuena(video).catch(() => ({}));
+    setDescartada(titulo || 'Esa canción');
+    // Se cae de las sugerencias apartadas por si estaba en la tanda.
+    sugeridasRef.current = sugeridasRef.current.filter((c) => c.videoId !== video);
+    setSugeridas(sugeridasRef.current);
+    refrescar();
+  }, [refrescar]);
+
+  /**
    * Terminó lo que sonaba: primero lo pedido, si no, la automática.
    *
    * Este es el ÚNICO punto donde la fila avanza, y por eso una canción pedida
@@ -255,14 +289,24 @@ export default function Reproductor() {
     ].filter(Boolean);
   }, [data]);
 
+  // La pantalla pasa el día sin que nadie la toque: el aviso se retira solo
+  // para no quedarse ahí hasta mañana.
+  useEffect(() => {
+    if (!descartada) return undefined;
+    const t = setTimeout(() => setDescartada(null), 60_000);
+    return () => clearTimeout(t);
+  }, [descartada]);
+
   // Los callbacks de YouTube se registran una sola vez al montar, así que leen
   // la versión viva a través de una ref en vez de capturarla.
   const refAvanzar = useRef(avanzar);
   const refApartar = useRef(apartarProxima);
+  const refFallo = useRef(fallo);
   useEffect(() => {
     refAvanzar.current = avanzar;
     refApartar.current = apartarProxima;
-  }, [avanzar, apartarProxima]);
+    refFallo.current = fallo;
+  }, [avanzar, apartarProxima, fallo]);
 
   // --- Montaje del reproductor ---------------------------------------------
   useEffect(() => {
@@ -295,10 +339,10 @@ export default function Reproductor() {
             onStateChange: (e) => {
               if (e.data === TERMINADO) refAvanzar.current();
             },
-            onError: () => {
+            onError: (e) => {
               // Un vídeo que falla no puede congelar la pantalla: se pasa al
-              // siguiente. Ya quedó marcado como reproducido, así que la
-              // sugerencia no lo va a proponer otra vez.
+              // siguiente pase lo que pase.
+              refFallo.current(e?.data);
               refAvanzar.current();
             },
           },
@@ -349,6 +393,21 @@ export default function Reproductor() {
       {error && (
         <div className="shrink-0 px-5 pt-3">
           <Aviso tono="info">{error}</Aviso>
+        </div>
+      )}
+
+      {descartada && (
+        <div className="shrink-0 px-5 pt-3">
+          <Aviso tono="peligro">
+            <strong>{descartada}</strong>: YouTube no la deja sonar fuera de su página, así que
+            se saltó y ya no se va a proponer. Queda marcada en Música.{' '}
+            <button
+              onClick={() => setDescartada(null)}
+              className="underline font-semibold"
+            >
+              Entendido
+            </button>
+          </Aviso>
         </div>
       )}
 
