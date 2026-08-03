@@ -32,7 +32,7 @@ import {
   quitarPedido,
   MOMENTOS,
 } from '../services/musica.service.js';
-import { buscar as buscarEnYoutube } from '../services/youtube.service.js';
+import { buscar as buscarEnYoutube, sugerir } from '../services/youtube.service.js';
 import {
   dashboard,
   buscarReservas,
@@ -382,6 +382,22 @@ adminRouter.get(
   asyncHandler(async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q : '';
     res.json(await buscarEnYoutube(q));
+  })
+);
+
+/**
+ * Qué poner cuando nadie ha pedido nada.
+ *
+ * El reproductor manda lo que acaba de sonar y todo lo que ya sonó, y recibe
+ * una canción nueva. Es lo que mantiene la pantalla sonando sola sin pedidos.
+ */
+adminRouter.get(
+  '/musica/sugerida',
+  asyncHandler(async (req, res) => {
+    const desde = typeof req.query.desde === 'string' ? req.query.desde : null;
+    const excluir =
+      typeof req.query.excluir === 'string' ? req.query.excluir.split(',').filter(Boolean) : [];
+    res.json((await sugerir({ desde, excluir })) ?? null);
   })
 );
 

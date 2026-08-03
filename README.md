@@ -296,23 +296,59 @@ incrustado oficial de YouTube (IFrame Player API), que va con su publicidad y su
 
 ### El reproductor
 
-Va en el televisor o la tablet conectada a los parlantes. Arranca con un botón grande de
-**Empezar** que se toca **una vez al abrir el gimnasio**: los navegadores no dejan iniciar
-audio sin un gesto del usuario y no hay forma de saltárselo, así que en vez de fallar en
-silencio la pantalla lo pide de frente. De ahí en adelante encadena sola.
+Va en el televisor o la tablet conectada a los parlantes. El flujo es:
 
-Toma **la clase que se esté dictando en ese momento** —el servidor la resuelve con
-`claseEnCurso()`—, así que no hay que reconfigurarla cada hora.
+1. quien abre la pantalla **elige la primera canción** buscando en YouTube,
+2. de ahí en adelante **encadena sola**,
+3. si un cliente pide algo, entra **en cuanto termine** la que está sonando,
+4. si hay varias pedidas van una tras otra, y al agotarse vuelve la automática.
 
-**Cuando la fila se vacía no se para la música**, que es lo peor que puede pasar en un
-salón. Se intenta, en orden:
+Elegir la primera a mano no es un paso de más: los navegadores no dejan iniciar audio sin
+un gesto de quien está delante, así que ese toque hace falta igual. Aprovecharlo para
+escoger por dónde empieza es mejor que un botón que no elige nada.
 
-1. la **mezcla de YouTube** a partir de la última canción (`loadPlaylist({list: 'RD'+id})`),
-   que es lo más cercano a «que YouTube siga sugiriendo» que expone el reproductor
-   incrustado —la API de vídeos relacionados fue retirada en 2023, no hay forma oficial;
-2. si eso tampoco arranca, una canción **de la casa** al azar.
+**No hace falta que nadie pida nada** para que la pantalla funcione, y tampoco hace falta
+que haya una clase en curso: los pedidos son un añadido, no el motor.
 
-Si alguien pide algo mientras suena el relleno, se atiende sin esperar a que termine.
+#### Nada de mezclas «RD»
+
+El primer intento fue `loadPlaylist({list: 'RD'+videoId})` —la mezcla que YouTube arma
+alrededor de un vídeo, literalmente «lo que YouTube encadena»—. **No funciona incrustado**:
+el reproductor responde *«Se produjo un error»* y la música se para. Además, una mezcla
+`RD` empieza siempre por el vídeo que la siembra, o sea que repetía la canción que acababa
+de sonar.
+
+Lo que sigue ahora sale de `GET /api/admin/musica/sugerida`: el reproductor manda lo último
+que sonó y todo lo que ya puso, y el servidor busca a partir del canal de esa canción y
+devuelve una al azar de entre las que no han sonado. Tiene dos ventajas sobre la mezcla:
+todo lo que sale **ya pasó el filtro** de incrustable, no bloqueado y de duración
+razonable, y `buscar` cachea 12 horas, así que encadenar canciones del mismo hilo **no
+vuelve a gastar cuota** —una búsqueda de 100 unidades da para unas veinte canciones—.
+
+Si la sugerencia no encuentra nada, se tira de las canciones **de la casa**; si tampoco
+hay, la pantalla lo dice en vez de quedarse muda sin explicación.
+
+#### Lo pedido suena; lo automático no repite
+
+Son dos reglas distintas a propósito:
+
+- **La automática nunca repite** dentro de la sesión: el reproductor lleva la cuenta de
+  todo lo que ha puesto y lo manda como exclusión.
+- **Lo que pide una persona suena siempre**, aunque la automática lo hubiera puesto antes.
+  Si alguien lo pidió es porque lo quiere oír; el «no repetir» vale para lo que elige la
+  máquina, no para lo que elige alguien.
+
+Aparte, el servidor no deja **pedir dos veces** la misma canción en una clase: una vez que
+sonó, no vuelve a la cola (`409 CANCION_YA_SONO`).
+
+#### Qué hace avanzar la fila
+
+Solo dos cosas, las dos explícitas: **la canción terminó**, o **falló**. El sondeo del
+estado no decide nada, solo pinta la cola.
+
+Cuando sí decidía, traía una foto de hasta diez segundos antes y adelantaba la fila de
+más: el servidor daba por sonada la canción que acababa de empezar y saltaba a la
+siguiente. Se pedían dos y sonaba una.
 
 ### La cuota es el límite real
 
@@ -584,6 +620,7 @@ zona con horario de verano.
 | `POST` | `/api/admin/canciones/importar` | Carga masiva pegando enlaces o una lista de YouTube |
 | `PATCH/DELETE` | `/api/admin/canciones/:id` | Editar / sacar del catálogo |
 | `GET` | `/api/admin/musica/buscar?q=` | Buscar en YouTube desde el panel |
+| `GET` | `/api/admin/musica/sugerida?desde=&excluir=` | Qué poner cuando nadie ha pedido nada |
 | `POST` | `/api/admin/musica/agregar` | Agregar un vídeo al catálogo (`{videoId}`) |
 | `POST` | `/api/admin/musica/siguiente` | **El reproductor avanza la fila** |
 | `GET` | `/api/admin/clases/:id/musica` | Fila de la clase |

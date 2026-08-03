@@ -227,6 +227,49 @@ export async function catalogo() {
   return grupos;
 }
 
+/**
+ * Qué poner a continuación cuando nadie ha pedido nada.
+ *
+ * NO SE USAN LAS MEZCLAS "RD" DE YOUTUBE. Parecían lo ideal -son literalmente
+ * lo que YouTube encadena- pero el reproductor incrustado las rechaza: en la
+ * pantalla salía "Se produjo un error" y la música se paraba.
+ *
+ * Lo que sí funciona es buscar a partir de lo que acaba de sonar y elegir al
+ * azar entre los resultados. Tiene dos ventajas sobre la mezcla: todo lo que
+ * sale ya pasó el filtro de incrustable, no bloqueado y de duración razonable,
+ * y `buscar` cachea doce horas, así que encadenar canciones del mismo hilo no
+ * vuelve a gastar cuota. Una búsqueda de 100 unidades da para unas veinte
+ * canciones.
+ */
+export async function sugerir({ desde = null, excluir = [] } = {}) {
+  const fuera = new Set(excluir.filter(Boolean));
+  const candidatos = [];
+
+  if (desde) {
+    const semilla = await detalle(desde).catch(() => null);
+    // Se busca por el canal -el artista, casi siempre- porque es lo que mejor
+    // mantiene el hilo de lo que estaba sonando.
+    if (semilla?.canal) candidatos.push(...(await buscar(semilla.canal).catch(() => [])));
+  }
+
+  // Las listas que configure el gimnasio entran siempre a la baraja: cuestan
+  // 1 unidad y dan variedad cuando el artista se agota.
+  if (env.youtube.listas.length) {
+    const grupos = await catalogo().catch(() => []);
+    for (const g of grupos) candidatos.push(...g.canciones);
+  }
+
+  const vistos = new Set();
+  const libres = candidatos.filter((c) => {
+    if (fuera.has(c.videoId) || vistos.has(c.videoId)) return false;
+    vistos.add(c.videoId);
+    return true;
+  });
+
+  if (!libres.length) return null;
+  return libres[Math.floor(Math.random() * libres.length)];
+}
+
 /** Detalle de un video suelto, para cuando el cliente elige uno. */
 export async function detalle(videoId) {
   const id = String(videoId || '').trim();
