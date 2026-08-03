@@ -4,7 +4,8 @@ import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 import {
   detalle as detalleYoutube,
   detallesDe,
-  sugerencias as sugerenciasYoutube,
+  deListas,
+  populares,
   videosDeLista,
 } from './youtube.service.js';
 
@@ -255,62 +256,116 @@ export async function cancionesDeLaCasa(limite = 50) {
   return canciones.map(serializarCancion);
 }
 
-/** Cualquier cancion reproducible que ya haya pasado por aqui. */
-async function delCatalogoLocal(excluir = [], limite = 12) {
+/** Todo lo reproducible que hay guardado, de la casa o no. */
+async function delCatalogoLocal(limite = 300) {
   const canciones = await prisma.cancion.findMany({
-    where: {
-      activa: true,
-      videoId: { not: null, ...(excluir.length ? { notIn: excluir } : {}) },
-    },
-    take: 200,
+    where: { activa: true, videoId: { not: null } },
+    take: limite,
   });
-  // Se baraja para no proponer siempre las mismas primeras.
-  for (let i = canciones.length - 1; i > 0; i -= 1) {
+  return canciones.map(serializarCancion);
+}
+
+// Cuantas canciones puede aportar un mismo canal a una tanda. Sin tope, un
+// artista con mucho catalogo se come la lista entera y el panel se ve monotono.
+// Es una PREFERENCIA, no una regla: si con el tope no se llena la tanda, se
+// vuelve a pasar sin el (ver `sugerenciasParaReproductor`).
+const MAX_POR_CANAL = 2;
+
+const barajar = (lista) => {
+  const c = [...lista];
+  for (let i = c.length - 1; i > 0; i -= 1) {
     const k = Math.floor(Math.random() * (i + 1));
-    [canciones[i], canciones[k]] = [canciones[k], canciones[i]];
+    [c[i], c[k]] = [c[k], c[i]];
   }
-  return canciones.slice(0, limite).map(serializarCancion);
+  return c;
+};
+
+/**
+ * Va tomando de `pozo` hasta `cuantas`, saltando lo excluido, lo ya elegido y
+ * lo que pasaria del tope por canal.
+ */
+function tomar(pozo, cuantas, fuera, elegidas, maxPorCanal = MAX_POR_CANAL) {
+  const puestas = new Set(elegidas.map((c) => c.videoId));
+  const porCanal = new Map();
+  for (const c of elegidas) porCanal.set(c.canal, (porCanal.get(c.canal) ?? 0) + 1);
+
+  const salida = [];
+  for (const c of pozo) {
+    if (salida.length >= cuantas) break;
+    if (!c?.videoId || fuera.has(c.videoId) || puestas.has(c.videoId)) continue;
+    const n = porCanal.get(c.canal) ?? 0;
+    if (n >= maxPorCanal) continue;
+    puestas.add(c.videoId);
+    porCanal.set(c.canal, n + 1);
+    salida.push(c);
+  }
+  return salida;
 }
 
 /**
- * Que poner a continuacion. NUNCA DEVUELVE VACIO SI HAY ALGO QUE PONER.
+ * Que poner a continuacion cuando nadie ha pedido nada.
  *
- * La pantalla del gimnasio no se puede quedar muda, asi que esto baja por una
- * escalera de respaldos en vez de rendirse en el primer hueco:
+ * SOLO SUENA LA MUSICA DEL GIMNASIO. Las sugerencias salen unicamente de lo que
+ * hay en el panel (/admin/musica): lo que se importo pegando enlaces o listas de
+ * YouTube, mas las listas configuradas en `YOUTUBE_LISTAS`. YouTube NO propone
+ * nada por su cuenta.
  *
- *   1. YouTube -canal de la ultima + lo popular + las listas- sin lo ya sonado;
- *   2. lo mismo AFLOJANDO las exclusiones: tras un par de horas todo lo que
- *      YouTube ofrece ya sono, y filtrar por eso deja la lista en cero;
- *   3. el catalogo local -todo lo que alguna vez se pidio o se importo-, que no
- *      necesita a YouTube y por tanto sobrevive a un corte o a la cuota agotada;
- *   4. el catalogo local sin exclusiones.
+ * Antes se mezclaba el ranking de Colombia y el canal de lo que estaba sonando,
+ * y el resultado era que la pantalla ponia musica que el gimnasio no habia
+ * elegido. Ahora esas fuentes solo entran en un caso: que no haya NI UNA cancion
+ * guardada, para que la pantalla no arranque muda el primer dia.
  *
- * Solo se queda sin nada si el gimnasio no tiene ni una cancion guardada y
- * ademas YouTube no responde; de eso se encarga el reproductor, que en ese caso
- * repite antes que callar.
+ * La pantalla tampoco se puede quedar en silencio, asi que si con las
+ * exclusiones no sale nada se afloja: primero a las ultimas cinco -cuando ya
+ * sono la lista entera hay que repetir, y que sea lo mas viejo- y despues sin
+ * exclusiones, o sea la lista dando la vuelta.
  */
-export async function sugerenciasParaReproductor({ desde = null, excluir = [], limite = 12 } = {}) {
-  // Al aflojar no se tiran TODAS las exclusiones: se conservan las ULTIMAS
-  // CINCO. Si toca repetir algo, que sea lo mas viejo y nunca lo que acaba de
-  // sonar. Guardar mas -veinte, por ejemplo- no sirve de nada cuando el
-  // catalogo es pequeno: serian todas otra vez, y volveriamos a quedarnos sin
-  // nada que proponer.
-  const recientes = excluir.slice(-5);
+export async function sugerenciasParaReproductor({ excluir = [], limite = 12 } = {}) {
+  const [listas, local] = await Promise.all([
+    deListas().catch(() => []),
+    delCatalogoLocal().catch(() => []),
+  ]);
+
+  // Lo marcado "de la casa" va primero: es lo que el gimnasio importo a
+  // proposito, frente a lo que entro suelto porque alguien lo pidio una vez.
+  const propias = [
+    ...barajar([...listas, ...local.filter((c) => c.deLaCasa)]),
+    ...barajar(local.filter((c) => !c.deLaCasa)),
+  ];
+
+  /**
+   * Una tanda: primero con el tope por artista, que es lo que da variedad, y si
+   * asi no se llena se completa SIN el tope. Una lista de un solo artista es
+   * una decision valida del gimnasio, no un motivo para devolver media tanda;
+   * lo variado queda arriba, que es lo que se ve y lo que suena primero.
+   */
+  const componer = (fuera) => {
+    const elegidas = tomar(propias, limite, fuera, []);
+    if (elegidas.length < limite) {
+      elegidas.push(...tomar(propias, limite - elegidas.length, fuera, elegidas, Infinity));
+    }
+    return elegidas;
+  };
 
   const intentos = [
-    () => sugerenciasYoutube({ desde, excluir, limite }),
-    () => sugerenciasYoutube({ desde, excluir: recientes, limite }),
-    () => delCatalogoLocal(excluir, limite),
-    () => delCatalogoLocal(recientes, limite),
-    () => delCatalogoLocal([], limite),
+    () => componer(new Set(excluir.filter(Boolean))),
+    () => componer(new Set(excluir.slice(-5).filter(Boolean))),
+    () => componer(new Set()),
   ];
 
   for (const intento of intentos) {
-    const lista = await intento().catch(() => []);
-    if (lista?.length) return lista;
+    const lista = intento();
+    if (lista.length) return lista;
   }
-  return [];
+
+  // Red de seguridad del primer dia: sin catalogo no hay nada que proponer, y
+  // dejar la pantalla muda es peor que sonar el ranking del pais. En cuanto el
+  // gimnasio importe su primera cancion, este camino deja de usarse.
+  if (propias.length) return [];
+  const populacho = barajar(await populares().catch(() => []));
+  return tomar(populacho, limite, new Set(excluir.slice(-5).filter(Boolean)), []);
 }
+
 
 /* ----------------------------------------------------------------- Fila */
 

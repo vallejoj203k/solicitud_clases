@@ -185,11 +185,11 @@ export const api = {
     // El reproductor del gimnasio avanza la fila.
     siguienteCancion: (clase = null) =>
       pedir('/admin/musica/siguiente', { metodo: 'POST', cuerpo: { clase }, tipoToken: 'admin' }),
-    // Qué poner cuando nadie ha pedido nada. Devuelve varias para que la
-    // pantalla pueda enseñarlas y el administrador escoger.
-    sugeridas: (desde, excluir = [], limite = 12) => {
+    // Qué poner cuando nadie ha pedido nada. Sale del catálogo del gimnasio, y
+    // devuelve varias para que la pantalla pueda enseñarlas y el administrador
+    // escoger.
+    sugeridas: (excluir = [], limite = 12) => {
       const q = new URLSearchParams({ limite: String(limite) });
-      if (desde) q.set('desde', desde);
       // Se recorta la lista de excluidas: la URL tiene un límite y con las
       // últimas basta para que no se repita nada reciente.
       if (excluir.length) q.set('excluir', excluir.slice(-60).join(','));

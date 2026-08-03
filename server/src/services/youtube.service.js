@@ -256,59 +256,14 @@ export async function populares(limite = 40) {
 }
 
 /**
- * Varias opciones para lo que sigue, no una sola.
+ * Las canciones de las listas que configuro el gimnasio (`YOUTUBE_LISTAS`).
  *
- * MEZCLA FUENTES A PROPOSITO. Buscar por el canal de la ultima cancion mantiene
- * el hilo, pero si se usa solo eso la pantalla acaba poniendo el mismo artista
- * una hora seguida. Asi que se junta con lo mas popular del momento y con las
- * listas que configure el gimnasio, y ademas se limita cuantas pueden salir del
- * mismo canal.
+ * Es la fuente que representa su gusto musical, y la mas barata: 1 unidad de
+ * cuota por lista, cacheada 6 horas.
  */
-const MAX_POR_CANAL = 2;
-
-export async function sugerencias({ desde = null, excluir = [], limite = 12 } = {}) {
-  const fuera = new Set(excluir.filter(Boolean));
-  const candidatos = [];
-
-  if (desde) {
-    const semilla = await detalle(desde).catch(() => null);
-    // `buscar` cachea 12 h, asi que seguir el hilo de un artista no vuelve a
-    // gastar cuota.
-    if (semilla?.canal) candidatos.push(...(await buscar(semilla.canal).catch(() => [])));
-  }
-
-  candidatos.push(...(await populares().catch(() => [])));
-
-  if (env.youtube.listas.length) {
-    const grupos = await catalogo().catch(() => []);
-    for (const g of grupos) candidatos.push(...g.canciones);
-  }
-
-  const vistos = new Set();
-  const porCanal = new Map();
-  const libres = [];
-  for (const c of candidatos) {
-    if (fuera.has(c.videoId) || vistos.has(c.videoId)) continue;
-    const cuantas = porCanal.get(c.canal) ?? 0;
-    if (cuantas >= MAX_POR_CANAL) continue;
-    vistos.add(c.videoId);
-    porCanal.set(c.canal, cuantas + 1);
-    libres.push(c);
-  }
-
-  // Se barajan para que la pantalla no proponga siempre lo mismo en el mismo
-  // orden.
-  for (let i = libres.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [libres[i], libres[j]] = [libres[j], libres[i]];
-  }
-  return libres.slice(0, limite);
-}
-
-/** Qué poner a continuación: la primera de la lista diversificada. */
-export async function sugerir({ desde = null, excluir = [] } = {}) {
-  const [primera] = await sugerencias({ desde, excluir, limite: 1 });
-  return primera ?? null;
+export async function deListas() {
+  const grupos = await catalogo().catch(() => []);
+  return grupos.flatMap((g) => g.canciones);
 }
 
 /** Detalle de un video suelto, para cuando el cliente elige uno. */

@@ -10,8 +10,9 @@ import { duracion } from '../../lib/youtube.js';
 /**
  * Música del gimnasio.
  *
- * Lo que se administra aquí son las canciones **de la casa**: las que suenan
- * cuando nadie ha pedido nada. Las que piden los clientes entran solas al
+ * ESTA ES LA LISTA QUE SUENA. El reproductor encadena solo con lo que hay
+ * aquí -las canciones **de la casa**- cuando nadie ha pedido nada; YouTube no
+ * propone nada por su cuenta. Las que piden los clientes entran solas al
  * catálogo, así que esta pantalla no es para cargarlas todas.
  *
  * La app no aloja audio: guarda el id del video de YouTube y lo pone con el
@@ -55,7 +56,7 @@ export default function AdminMusica() {
     <div>
       <CabeceraAdmin
         titulo="Música"
-        descripcion={`${deLaCasa} canciones de la casa · suenan cuando nadie pide.`}
+        descripcion={`${deLaCasa} canciones de la casa · es lo que suena cuando nadie pide.`}
         acciones={
           <>
             <Link to="/musica/reproductor">
