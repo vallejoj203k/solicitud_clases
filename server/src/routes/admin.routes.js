@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/prisma.js';
-import { asyncHandler, noEncontrado } from '../utils/errores.js';
+import { AppError, asyncHandler, noEncontrado } from '../utils/errores.js';
 import { requiereAdmin } from '../middleware/auth.js';
 import { layoutSchema, expandirLayout } from '../utils/layout.js';
 import { aCsv } from '../utils/csv.js';
@@ -23,6 +23,7 @@ import {
   buscarCanciones,
   crearCancion,
   importarDeYoutube,
+  marcarNoSuena,
   guardarDeYoutube,
   actualizarCancion,
   eliminarCancion,
@@ -399,6 +400,25 @@ adminRouter.get(
       typeof req.query.excluir === 'string' ? req.query.excluir.split(',').filter(Boolean) : [];
     const limite = Math.min(Number(req.query.limite) || 12, 25);
     res.json(await sugerenciasParaReproductor({ excluir, limite }));
+  })
+);
+
+/**
+ * El reproductor avisa de que una canción no suena.
+ *
+ * YouTube dice que muchos vídeos se dejan incrustar y luego el reproductor los
+ * rechaza. Cuando eso pasa, la pantalla lo reporta aquí y la canción deja de
+ * proponerse: es la única forma de saberlo, porque no se puede consultar por
+ * adelantado.
+ */
+adminRouter.post(
+  '/musica/no-suena',
+  asyncHandler(async (req, res) => {
+    const videoId = String(req.body?.videoId || '').trim();
+    if (!/^[\w-]{11}$/.test(videoId)) {
+      throw new AppError('Falta el vídeo.', 422, 'VIDEO_INVALIDO');
+    }
+    res.json(await marcarNoSuena(videoId));
   })
 );
 

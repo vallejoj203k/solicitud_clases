@@ -114,7 +114,13 @@ export default function AdminMusica() {
 
         <ul className="space-y-2">
           {lista.map((c) => (
-            <li key={c.id} className={cx('tarjeta p-3 flex items-center gap-3', !c.activa && 'opacity-50')}>
+            <li
+              key={c.id}
+              className={cx(
+                'tarjeta p-3 flex items-center gap-3',
+                (!c.activa || c.bloqueadaEn) && 'opacity-50'
+              )}
+            >
               {c.miniatura ? (
                 <img src={c.miniatura} alt="" className="w-16 h-12 rounded-xl object-cover shrink-0" />
               ) : (
@@ -131,6 +137,11 @@ export default function AdminMusica() {
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {c.deLaCasa && <Insignia tono="exito">De la casa</Insignia>}
                   {!c.videoId && <Insignia tono="aviso">Sin video · no suena</Insignia>}
+                  {/* La descubre el reproductor al intentar ponerla: YouTube
+                      dice que se deja incrustar y luego la rechaza. */}
+                  {c.bloqueadaEn && (
+                    <Insignia tono="peligro">YouTube no la deja sonar fuera de su página</Insignia>
+                  )}
                   {!c.activa && <Insignia tono="peligro">Fuera del catálogo</Insignia>}
                 </div>
               </div>

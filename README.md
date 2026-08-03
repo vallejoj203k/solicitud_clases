@@ -91,7 +91,7 @@ Reserva     id, codigo(único), claseId, usuarioId, puestoCodigo,
             estadoPago(PENDIENTE|PAGADO|RECHAZADO), montoCop, metodoPago?, pagoRef?,
             pagoPayload?, pagoActualizadoEn?, creadoEn, canceladoEn?
 Cancion       id, titulo, artista?, videoId(único)?, canal?, duracionSeg?, miniatura?,
-              momento?, deLaCasa, activa, creadoEn
+              momento?, deLaCasa, activa, bloqueadaEn?, creadoEn
 PedidoMusica  id, cancionId, claseId?, usuarioId?, dispositivoId?, nombre?, turno,
               estado(EN_FILA|SONANDO|SONO), creadoEn, sonoEn?
               (único parcial: cancionId donde estado IN (EN_FILA, SONANDO))
@@ -371,18 +371,41 @@ si nunca ha sonado nada, y para eso está la pantalla de elegir la primera.
 La lista de «ya sonadas» está **acotada a 120**: sin tope acabaría excluyendo el catálogo
 entero y las sugerencias volverían vacías por su propia culpa.
 
-#### Lo pedido suena; lo automático no repite
+#### Repetir está permitido
 
-Son dos reglas distintas a propósito:
+**No hay ninguna prohibición de repetir.** La hubo —una canción no podía volver a pedirse
+hasta tres horas después de sonar— y el gimnasio pidió quitarla: si alguien la quiere oír
+otra vez, ese es justo el punto.
 
-- **La automática nunca repite** dentro de la sesión: el reproductor lleva la cuenta de
-  todo lo que ha puesto y lo manda como exclusión.
-- **Lo que pide una persona suena siempre**, aunque la automática lo hubiera puesto antes.
-  Si alguien lo pidió es porque lo quiere oír; el «no repetir» vale para lo que elige la
-  máquina, no para lo que elige alguien.
+Lo que queda es una **preferencia**: el reproductor manda las últimas 20 que puso para que
+la automática varíe, y el servidor las respeta *si puede*. Si con ellas no le sale nada,
+las afloja. Nunca bloquea.
 
-Aparte, el servidor no deja **pedir dos veces** la misma canción en una clase: una vez que
-sonó, no vuelve a la cola (`409 CANCION_YA_SONO`).
+El único freno que sí es una regla: la misma canción no puede estar **dos veces a la vez**
+en la cola (`409 CANCION_YA_EN_COLA`, respaldado por un índice único parcial). Dos veces
+seguidas la misma no es repetir, es un error.
+
+> Las 20 recordadas eran 120. Con una lista propia de treinta canciones eso significaba
+> excluir el catálogo entero en cada tanda y andar siempre por el camino de emergencia.
+
+#### Lo que YouTube dice que se puede incrustar… y luego no
+
+`videos.list` trae un campo `status.embeddable` y se filtra por él, pero **miente de forma
+sistemática con los sellos grandes**: *Muerte en Hawaii* (Calle 13) o *Bandolero* (Don
+Omar) dicen que sí y después el reproductor incrustado responde con el error **150** —«el
+propietario no permite reproducirlo en otros sitios»—. El síntoma es una canción que se
+salta sola.
+
+No hay forma de saberlo por adelantado, así que **se aprende del primer intento**: cuando
+el reproductor recibe un error 100, 101 o 150 avisa a `POST /api/admin/musica/no-suena`, la
+canción queda marcada con la fecha (`Cancion.bloqueadaEn`) y a partir de ahí no se propone,
+no se puede pedir (`422 CANCION_BLOQUEADA`) y sale de la cola si estaba esperando. En el
+panel aparece con la insignia *«YouTube no la deja sonar fuera de su página»*, y la pantalla
+del gimnasio lo dice en un aviso que se retira solo al minuto.
+
+Se guarda la **fecha** y no un booleano porque YouTube cambia de opinión: así se puede
+revisar cuál se cayó y cuándo. Los demás códigos de error (2, 5) son pasajeros y solo hacen
+pasar a la siguiente.
 
 #### Qué hace avanzar la fila
 
@@ -433,8 +456,9 @@ pide esa persona en esa clase; se ordena por `turno` y, dentro de cada ronda, po
 Cada persona puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
 **No hace falta reserva ni sesión**: quien está en el salón quiere poner música sin haber
 reservado por la app. Los frenos son otros: una canción no entra dos veces a la fila aunque
-la pidan dos personas distintas, no vuelve a pedirse hasta tres horas después de sonar, y
-los turnos se reparten por persona —o por navegador, si no hay sesión—.
+la pidan dos personas distintas, y los turnos se reparten por persona —o por navegador, si
+no hay sesión—, de modo que quien pide diez no deja sin sonar a quien pidió una. Repetir
+algo que ya sonó **sí** se puede.
 
 Estados de un pedido: `EN_FILA` → `SONANDO` → `SONO`. `SONANDO` existe como estado propio
 —en vez de deducirlo de «la primera de la cola»— para que el reproductor sepa desde dónde
@@ -687,6 +711,7 @@ zona con horario de verano.
 | `GET` | `/api/admin/musica/buscar?q=` | Buscar en YouTube desde el panel |
 | `GET` | `/api/admin/musica/sugeridas?excluir=&limite=` | Propuestas para el reproductor, del catálogo del gimnasio |
 | `POST` | `/api/admin/musica/agregar` | Agregar un vídeo al catálogo (`{videoId}`) |
+| `POST` | `/api/admin/musica/no-suena` | El reproductor avisa de un vídeo que YouTube rechaza |
 | `POST` | `/api/admin/musica/siguiente` | **El reproductor avanza la fila** |
 | `GET` | `/api/admin/musica/cola` | La cola, con lo ya sonado |
 | `POST` | `/api/admin/musica/:pedidoId/sono` | Marcar que sonó (o devolverla a la fila) |
