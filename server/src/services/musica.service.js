@@ -400,6 +400,22 @@ async function otrasVersiones(cancion, limite = 4) {
   return encontradas.filter((c) => !fuera.has(c.videoId)).slice(0, limite);
 }
 
+/**
+ * La version que si suena de una cancion bloqueada, guardada y lista para
+ * encolar. Si no hay ninguna, se rinde con un motivo entendible.
+ */
+async function otraVersionDe(bloqueada) {
+  const alternativas = await otrasVersiones(bloqueada).catch(() => []);
+  if (!alternativas.length) {
+    throw new AppError(
+      `No encontramos ninguna versión de "${bloqueada.titulo}" que YouTube deje sonar aquí. Prueba con otra canción.`,
+      422,
+      'CANCION_BLOQUEADA'
+    );
+  }
+  return guardarDeYoutube(alternativas[0].videoId);
+}
+
 /** Las que pone el gimnasio cuando nadie pidio nada. Solo las reproducibles. */
 export async function cancionesDeLaCasa(limite = 50) {
   const canciones = await prisma.cancion.findMany({
@@ -566,17 +582,17 @@ export async function pedirCancion({
   dispositivoId = null,
   claseId = null,
 }) {
-  const cancion = videoId
+  const pedida = videoId
     ? await guardarDeYoutube(videoId)
     : await prisma.cancion.findUnique({ where: { id: cancionId } });
-  if (!cancion || !cancion.activa) throw noEncontrado('Canción');
-  if (cancion.bloqueadaEn) {
-    throw new AppError(
-      'Esa canción no se puede reproducir aquí: YouTube no deja ponerla fuera de su página. Elige otra versión.',
-      422,
-      'CANCION_BLOQUEADA'
-    );
-  }
+  if (!pedida || !pedida.activa) throw noEncontrado('Canción');
+
+  // Si la que eligio no se deja poner, SE BUSCA OTRA VERSION DE LA MISMA, no se
+  // le devuelve el problema. Quien esta en la clase no tiene por que saber que
+  // el sello bloqueo ese video ni ponerse a cazar cual de las subidas funciona:
+  // eso lo sabe el software. Solo se rinde si de verdad no hay ninguna.
+  const cancion = pedida.bloqueadaEn ? await otraVersionDe(pedida) : pedida;
+  const sustituida = cancion.id !== pedida.id ? pedida.titulo : null;
 
   // Ya esperando o sonando: no se encola dos veces, la pida quien la pida.
   const enCola = await prisma.pedidoMusica.findFirst({
@@ -620,7 +636,9 @@ export async function pedirCancion({
     },
     include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
   });
-  return serializarPedido(pedido);
+  // `sustituida` lleva el titulo de lo que pidio, para que la pantalla pueda
+  // decirle que suena otra version y no parezca que se equivoco al elegir.
+  return { ...serializarPedido(pedido), sustituida };
 }
 
 /** Quitar un pedido propio mientras no haya sonado ni este sonando. */

@@ -323,6 +323,16 @@ function Confirmacion({ pedido, onIr }) {
         Entró a la cola. Suena en los parlantes del salón cuando le toque el turno.
       </p>
 
+      {/* Se cambió la versión por detrás. Decirlo evita que la persona crea que
+          se equivocó al elegir, y de paso explica por qué el nombre no es
+          exactamente el que tocó. */}
+      {pedido.sustituida && (
+        <p className="mt-3 max-w-xs text-xs text-humo-500 leading-relaxed">
+          YouTube no deja poner la versión que elegiste fuera de su página, así que pusimos
+          esta otra de <strong className="text-humo-300">{pedido.sustituida}</strong>.
+        </p>
+      )}
+
       <p className="mt-8 text-xs text-humo-500">Volviendo al inicio…</p>
     </button>
   );

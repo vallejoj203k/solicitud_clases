@@ -489,8 +489,14 @@ El salto no es inmediato a propósito: saltar en el acto deja a la persona sin s
 canción entró. Se puede tocar la confirmación para no esperar, y ocupa la pantalla entera
 también para que un segundo toque por inercia no pida otra canción de más.
 
-**Si el pedido falla no se va a ningún lado**: se queda con el motivo a la vista (`409` si
-ya estaba en la cola, `422` si YouTube no la deja sonar) para poder elegir otra.
+**Si el cliente pide una canción bloqueada, se le cambia la versión por detrás.** No se le
+devuelve el problema: quien está en la clase no tiene por qué saber que el sello bloqueó ese
+vídeo ni ponerse a cazar cuál de las subidas funciona. La confirmación se lo cuenta —«pusimos
+esta otra de *Bandolero*»— para que no parezca que se equivocó al elegir. Solo se rinde
+(`422`) si de verdad no hay ninguna versión utilizable.
+
+**Si el pedido falla no se va a ningún lado**: se queda con el motivo a la vista (`409` si ya
+estaba en la cola) para poder elegir otra.
 
 ### La fila
 
