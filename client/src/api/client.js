@@ -1,4 +1,4 @@
-import { leerToken } from '../lib/sesion.js';
+import { idDispositivo, leerToken } from '../lib/sesion.js';
 
 // En produccion el frontend y la API comparten dominio, asi que basta con rutas
 // relativas. VITE_API_URL solo hace falta si se despliegan por separado.
@@ -17,6 +17,10 @@ async function pedir(ruta, { metodo = 'GET', cuerpo, tipoToken = 'cliente' } = {
   const cabeceras = { Accept: 'application/json' };
   const token = leerToken(tipoToken);
   if (token) cabeceras.Authorization = `Bearer ${token}`;
+  // Identifica al navegador para pedir musica sin sesion: reparte los turnos y
+  // permite quitar lo propio.
+  const dispositivo = idDispositivo();
+  if (dispositivo) cabeceras['X-Dispositivo'] = dispositivo;
   if (cuerpo !== undefined) cabeceras['Content-Type'] = 'application/json';
 
   const respuesta = await fetch(`${BASE}/api${ruta}`, {
@@ -92,13 +96,12 @@ export const api = {
   // --- Musica --------------------------------------------------------------
   buscarMusica: (q) => pedir(`/musica/buscar?q=${encodeURIComponent(q)}`),
   catalogoMusica: () => pedir('/musica/catalogo'),
-  // Que suena ahora en el gimnasio. Sin `clase` usa la que se este dictando.
-  musicaAhora: (claseId) => pedir(`/musica/ahora${claseId ? `?clase=${claseId}` : ''}`),
+  // Que suena ahora en los parlantes del gimnasio.
+  musicaAhora: () => pedir('/musica/ahora'),
   canciones: (q) => pedir(`/canciones${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   cancionesDeLaCasa: () => pedir('/canciones/de-la-casa'),
-  musicaDeClase: (claseId) => pedir(`/clases/${claseId}/musica`),
-  pedirCancion: (claseId, cuerpo) =>
-    pedir(`/clases/${claseId}/musica`, { metodo: 'POST', cuerpo }),
+  cola: () => pedir('/musica/cola'),
+  pedirCancion: (cuerpo) => pedir('/musica/pedir', { metodo: 'POST', cuerpo }),
   quitarPedido: (pedidoId) => pedir(`/musica/${pedidoId}`, { metodo: 'DELETE' }),
 
   // --- Admin ---------------------------------------------------------------
@@ -194,7 +197,7 @@ export const api = {
       pedir(`/admin/canciones/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     eliminarCancion: (id) =>
       pedir(`/admin/canciones/${id}`, { metodo: 'DELETE', tipoToken: 'admin' }),
-    musicaDeClase: (id) => pedir(`/admin/clases/${id}/musica`, { tipoToken: 'admin' }),
+    colaMusica: () => pedir('/admin/musica/cola', { tipoToken: 'admin' }),
     marcarSono: (pedidoId, sono = true) =>
       pedir(`/admin/musica/${pedidoId}/sono`, { metodo: 'POST', cuerpo: { sono }, tipoToken: 'admin' }),
     quitarPedidoMusica: (pedidoId) =>

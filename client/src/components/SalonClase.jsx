@@ -187,7 +187,7 @@ export default function SalonClase({ claseId, onVolver }) {
             </div>
           </>
         ) : (
-          <FilaMusica claseId={claseId} acento={clase.tipoClase.color} />
+          <FilaMusica acento={clase.tipoClase.color} />
         )}
       </div>
 

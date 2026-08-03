@@ -26,7 +26,7 @@ import {
   guardarDeYoutube,
   actualizarCancion,
   eliminarCancion,
-  filaDeClase,
+  colaActual,
   marcarSono,
   siguienteCancion,
   quitarPedido,
@@ -433,11 +433,11 @@ adminRouter.delete(
   })
 );
 
-/** La fila de una clase, para que el instructor sepa que sigue. */
+/** La cola del gimnasio, para que recepcion sepa que sigue. */
 adminRouter.get(
-  '/clases/:id/musica',
-  asyncHandler(async (req, res) => {
-    res.json(await filaDeClase(req.params.id));
+  '/musica/cola',
+  asyncHandler(async (_req, res) => {
+    res.json(await colaActual({ incluirSonadas: true }));
   })
 );
 
@@ -450,9 +450,8 @@ adminRouter.get(
  */
 adminRouter.post(
   '/musica/siguiente',
-  asyncHandler(async (req, res) => {
-    const { clase } = z.object({ clase: z.string().nullish() }).parse(req.body ?? {});
-    res.json(await siguienteCancion(clase ?? null));
+  asyncHandler(async (_req, res) => {
+    res.json(await siguienteCancion());
   })
 );
 

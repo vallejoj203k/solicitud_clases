@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api, descargar } from '../api/client.js';
-import PedirMusica from '../components/PedirMusica.jsx';
 import { Aviso, Boton, Cargando, Insignia, Vacio } from '../components/ui.jsx';
 import { IconoCalendario, IconoCheck, IconoFlecha, IconoMusica } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
@@ -18,7 +17,6 @@ export default function Reserva() {
   const queryClient = useQueryClient();
   const esNueva = params.get('nueva') === '1';
   const [qr, setQr] = useState(null);
-  const [musicaAbierta, setMusicaAbierta] = useState(false);
 
   // Wompi devuelve al cliente con el id de la transacción en la URL. Se lo
   // pasamos al servidor para que le pregunte directamente a Wompi en vez de
@@ -219,17 +217,15 @@ export default function Reserva() {
               </Boton>
             </Link>
           )}
-          {/* La app no reproduce nada: esto arma la lista que el instructor lee
-              para saber qué poner después de la canción que está sonando. */}
+          {/* Pedir música ya no depende de la reserva -cualquiera puede-, así
+              que esto es solo un atajo a la pantalla de música. */}
           {!yaTermino && (
-            <Boton
-              variante="secundario"
-              className="w-full"
-              onClick={() => setMusicaAbierta(true)}
-            >
-              <IconoMusica />
-              Pedir música para esta clase
-            </Boton>
+            <Link to="/musica" className="block">
+              <Boton variante="secundario" className="w-full">
+                <IconoMusica />
+                Pedir música
+              </Boton>
+            </Link>
           )}
           <Boton
             variante="secundario"
@@ -255,13 +251,6 @@ export default function Reserva() {
           Volver al inicio
         </Link>
       </div>
-
-      <PedirMusica
-        claseId={reserva.clase.id}
-        acento={acento}
-        abierta={musicaAbierta}
-        onCerrar={() => setMusicaAbierta(false)}
-      />
     </div>
   );
 }

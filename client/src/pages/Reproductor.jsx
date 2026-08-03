@@ -52,10 +52,18 @@ export default function Reproductor() {
   const ultimoVideo = useRef(null);
   // Todo lo que ya sonó, para no repetir nada en la misma sesión.
   const reproducidas = useRef(new Set());
+  // Lo que está esperando en la cola. La automática también lo tiene que
+  // esquivar: proponer algo que ya está pedido lo haría sonar dos veces.
+  const enCola = useRef([]);
 
   const [semilla, setSemilla] = useState(null);
   const [error, setError] = useState(null);
   const [automatica, setAutomatica] = useState(null);
+  // La recomendación que ya está reservada para cuando termine la de ahora.
+  // Se pide por adelantado para poder enseñarla en el panel y para que el
+  // cambio de canción no tenga que esperar a la red.
+  const [proxima, setProxima] = useState(null);
+  const proximaRef = useRef(null);
 
   const { data } = useQuery({
     queryKey: ['musicaAhora'],
@@ -84,36 +92,57 @@ export default function Reproductor() {
   }, []);
 
   /**
-   * Sigue sola: algo parecido a lo último que sonó y que no haya sonado ya.
+   * Aparta la siguiente recomendación sin ponerla todavía.
    *
-   * Si la sugerencia falla se tira de las canciones de la casa, y si tampoco
-   * hay se dice en pantalla en vez de quedarse en silencio sin explicación.
+   * Se pide en cuanto arranca una canción, por dos motivos: el panel de la
+   * derecha puede enseñar qué viene, y cuando la canción termina el cambio es
+   * inmediato en vez de esperar a que responda la red.
    */
-  const ponerAutomatica = useCallback(async () => {
+  const apartarProxima = useCallback(async () => {
     const sugerida = await api.admin
-      .sugerida(ultimoVideo.current, [...reproducidas.current])
+      // Se excluye lo ya sonado Y lo que está esperando en la cola: si no, la
+      // automática proponía justo la canción que un cliente acababa de pedir y
+      // sonaba dos veces seguidas.
+      .sugerida(ultimoVideo.current, [...reproducidas.current, ...enCola.current])
       .catch(() => null);
 
     if (sugerida?.videoId) {
-      setAutomatica(sugerida);
-      setError(null);
-      cargar(sugerida.videoId);
+      proximaRef.current = sugerida;
+      setProxima(sugerida);
       return;
     }
 
+    // Sin sugerencia, la red de seguridad son las canciones de la casa.
     const casa = await api.cancionesDeLaCasa().catch(() => []);
-    const libre = casa.find((c) => c.videoId && !reproducidas.current.has(c.videoId));
-    if (libre) {
-      setAutomatica(libre);
-      setError(null);
-      cargar(libre.videoId);
+    const libre = casa.find((c) => c.videoId && !reproducidas.current.has(c.videoId)) ?? null;
+    proximaRef.current = libre;
+    setProxima(libre);
+  }, []);
+
+  /** Pone la recomendación que estaba apartada, o busca una al vuelo. */
+  const ponerAutomatica = useCallback(async () => {
+    let elegida = proximaRef.current;
+    if (!elegida) {
+      await apartarProxima();
+      elegida = proximaRef.current;
+    }
+
+    proximaRef.current = null;
+    setProxima(null);
+
+    if (!elegida?.videoId) {
+      setError(
+        'No encontramos con qué seguir. Busca una canción arriba para retomar, o agrega canciones de la casa en Panel → Música.'
+      );
       return;
     }
 
-    setError(
-      'No encontramos con qué seguir. Busca una canción arriba para retomar, o agrega canciones de la casa en Panel → Música.'
-    );
-  }, [cargar]);
+    setAutomatica(elegida);
+    setError(null);
+    cargar(elegida.videoId);
+    // Ya se puede ir buscando la de después.
+    apartarProxima();
+  }, [cargar, apartarProxima]);
 
   /**
    * Terminó lo que sonaba: primero lo pedido, si no, la automática.
@@ -136,6 +165,7 @@ export default function Reproductor() {
         setAutomatica(null);
         setError(null);
         cargar(sonando.cancion.videoId);
+        // La recomendación apartada sigue valiendo para cuando la cola se vacíe.
         return;
       }
       await ponerAutomatica();
@@ -144,12 +174,23 @@ export default function Reproductor() {
     }
   }, [refrescar, cargar, ponerAutomatica]);
 
+  // La cola se refleja en una ref para que las funciones de arriba la vean sin
+  // tener que rehacerse en cada sondeo.
+  useEffect(() => {
+    enCola.current = [
+      ...(data?.fila ?? []).map((p) => p.cancion.videoId),
+      data?.sonando?.cancion.videoId,
+    ].filter(Boolean);
+  }, [data]);
+
   // Los callbacks de YouTube se registran una sola vez al montar, así que leen
   // la versión viva a través de una ref en vez de capturarla.
   const refAvanzar = useRef(avanzar);
+  const refApartar = useRef(apartarProxima);
   useEffect(() => {
     refAvanzar.current = avanzar;
-  }, [avanzar]);
+    refApartar.current = apartarProxima;
+  }, [avanzar, apartarProxima]);
 
   // --- Montaje del reproductor ---------------------------------------------
   useEffect(() => {
@@ -175,6 +216,11 @@ export default function Reproductor() {
             playsinline: 1,
           },
           events: {
+            onReady: () => {
+              // Con la primera ya sonando se busca qué viene, para poder
+              // enseñarlo en el panel desde el minuto uno.
+              refApartar.current();
+            },
             onStateChange: (e) => {
               if (e.data === TERMINADO) refAvanzar.current();
             },
@@ -241,46 +287,81 @@ export default function Reproductor() {
         </div>
 
         <aside className="shrink-0 lg:w-[340px] border-t lg:border-t-0 lg:border-l border-carbon-700 overflow-y-auto max-h-[38vh] lg:max-h-none">
-          <div className="p-4">
-            <p className="etiqueta mb-2">
-              {fila.length > 0 ? `Siguen (${fila.length})` : 'Nadie ha pedido'}
-            </p>
+          <div className="p-4 space-y-4">
+            {fila.length > 0 && (
+              <div>
+                <p className="etiqueta mb-2">Pedidas ({fila.length})</p>
+                <ul className="space-y-2">
+                  {fila.map((p, i) => (
+                    <li
+                      key={p.id}
+                      className={cx(
+                        'flex items-center gap-3 rounded-2xl border px-3 py-2',
+                        i === 0
+                          ? 'border-carbon-500 bg-carbon-700'
+                          : 'border-carbon-600 bg-carbon-800'
+                      )}
+                    >
+                      <span className="w-6 text-center text-xs font-bold text-humo-500 tabular-nums">
+                        {i + 1}
+                      </span>
+                      {p.cancion.miniatura && (
+                        <img
+                          src={p.cancion.miniatura}
+                          alt=""
+                          className="w-12 h-9 rounded-lg object-cover shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold truncate">{p.cancion.titulo}</p>
+                        <p className="text-[11px] text-humo-500 truncate">
+                          {duracion(p.cancion.duracionSeg)}
+                          {p.pidio?.nombre ? ` · ${p.pidio.nombre}` : ''}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Qué viene cuando se acabe lo pedido. Se aparta por adelantado
+                justo para poder enseñarlo aquí. */}
+            <div>
+              <p className="etiqueta mb-2">
+                {fila.length > 0 ? 'Y después, automática' : 'A continuación'}
+              </p>
+              {proxima ? (
+                <div className="flex items-center gap-3 rounded-2xl border border-dashed border-carbon-600 px-3 py-2">
+                  {proxima.miniatura && (
+                    <img
+                      src={proxima.miniatura}
+                      alt=""
+                      className="w-12 h-9 rounded-lg object-cover shrink-0 opacity-80"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold truncate">{proxima.titulo}</p>
+                    <p className="text-[11px] text-humo-500 truncate">
+                      {proxima.canal ?? proxima.artista ?? 'YouTube'}
+                      {proxima.duracionSeg ? ` · ${duracion(proxima.duracionSeg)}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-semibold text-humo-500 shrink-0">
+                    sugerida
+                  </span>
+                </div>
+              ) : (
+                <p className="text-sm text-humo-500">Buscando qué poner…</p>
+              )}
+            </div>
 
             {fila.length === 0 && (
-              <p className="text-sm text-humo-500">
+              <p className="text-xs text-humo-500">
                 Sigue sonando sola. Lo que pidan los clientes entra aquí y suena en cuanto
                 termine la de ahora.
               </p>
             )}
-
-            <ul className="space-y-2">
-              {fila.map((p, i) => (
-                <li
-                  key={p.id}
-                  className={cx(
-                    'flex items-center gap-3 rounded-2xl border px-3 py-2',
-                    i === 0 ? 'border-carbon-500 bg-carbon-700' : 'border-carbon-600 bg-carbon-800'
-                  )}
-                >
-                  <span className="w-6 text-center text-xs font-bold text-humo-500 tabular-nums">
-                    {i + 1}
-                  </span>
-                  {p.cancion.miniatura && (
-                    <img
-                      src={p.cancion.miniatura}
-                      alt=""
-                      className="w-12 h-9 rounded-lg object-cover shrink-0"
-                    />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold truncate">{p.cancion.titulo}</p>
-                    <p className="text-[11px] text-humo-500 truncate">
-                      {duracion(p.cancion.duracionSeg)} · {p.pidio?.nombre ?? 'la casa'}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
           </div>
         </aside>
       </div>

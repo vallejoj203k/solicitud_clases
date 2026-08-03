@@ -15,18 +15,17 @@ import { useState } from 'react';
  * cada quien, después la segunda de cada quien. Así el que pide diez no tapa al
  * que pidió una.
  */
-export default function FilaMusica({ claseId, acento = '#C8F751' }) {
+export default function FilaMusica({ acento = '#C8F751' }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['adminMusicaClase', claseId],
-    queryFn: () => api.admin.musicaDeClase(claseId),
+    queryKey: ['adminColaMusica'],
+    queryFn: api.admin.colaMusica,
     refetchInterval: 20_000,
   });
 
-  const refrescar = () =>
-    queryClient.invalidateQueries({ queryKey: ['adminMusicaClase', claseId] });
+  const refrescar = () => queryClient.invalidateQueries({ queryKey: ['adminColaMusica'] });
 
   const sono = useMutation({
     mutationFn: ({ id, valor }) => api.admin.marcarSono(id, valor),
@@ -40,7 +39,7 @@ export default function FilaMusica({ claseId, acento = '#C8F751' }) {
     onError: (e) => setError(e.message),
   });
 
-  const pedidos = data?.pedidos ?? [];
+  const pedidos = data ?? [];
   const sonando = pedidos.find((p) => p.estado === 'SONANDO') ?? null;
   const enFila = pedidos.filter((p) => p.estado === 'EN_FILA');
   const sonadas = pedidos.filter((p) => p.estado === 'SONO');
@@ -114,7 +113,7 @@ export default function FilaMusica({ claseId, acento = '#C8F751' }) {
                     {p.cancion.titulo}
                   </p>
                   <p className="text-xs text-humo-500 truncate">
-                    {p.cancion.artista ?? 'Sin artista'} · pidió {p.pidio.nombre}
+                    {p.cancion.artista ?? 'Sin artista'} · pidió {p.pidio?.nombre ?? 'alguien'}
                   </p>
                 </div>
                 <button

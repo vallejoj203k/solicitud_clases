@@ -5,8 +5,8 @@ import { buscar, catalogo, hayYoutube } from '../services/youtube.service.js';
 import {
   buscarCanciones,
   cancionesDeLaCasa,
+  colaActual,
   estadoReproduccion,
-  filaDeClase,
   pedirCancion,
   quitarPedido,
 } from '../services/musica.service.js';
@@ -14,26 +14,34 @@ import {
 /**
  * Musica para el cliente.
  *
- * Lo que solo se mira -que suena ahora, la fila, el catalogo- es publico: la
- * pantalla del gimnasio y cualquier telefono lo cargan sin pedir nada. Buscar y
- * pedir SI exigen el token del cliente:
+ * PEDIR NO EXIGE RESERVA NI SESION. El gimnasio lo pidio asi: quien esta en el
+ * salon quiere poner musica sin haber reservado por la app. Lo que identifica a
+ * quien pide es su sesion de cliente si la tiene y, si no, un identificador que
+ * el navegador genera y guarda: sirve para repartir los turnos y para que cada
+ * quien pueda quitar lo suyo.
  *
- *  - buscar, porque cada busqueda gasta 100 unidades de la cuota diaria de
- *    YouTube y son 10.000 al dia para todo el gimnasio;
- *  - pedir, porque solo debe poner musica quien tiene reserva en esa clase.
+ * Buscar SI pide algo mas: cada busqueda gasta 100 unidades de la cuota diaria
+ * de YouTube, y son 10.000 al dia para todo el gimnasio. Basta con mandar el
+ * identificador de dispositivo, que cualquier navegador tiene: no cierra la
+ * puerta, pero evita que un script anonimo agote la cuota en un minuto.
  */
 export const musicaRouter = Router();
 
-const exigirSesion = (req) => {
-  if (!req.usuario?.sub) throw new AppError('Sesión no encontrada.', 401, 'NO_AUTENTICADO');
-  return req.usuario.sub;
+/** Identificador del navegador que pide, si lo manda. */
+const dispositivoDe = (req) => {
+  const cabecera = req.get('X-Dispositivo');
+  return typeof cabecera === 'string' && cabecera.length >= 8 && cabecera.length <= 64
+    ? cabecera
+    : null;
 };
 
 /** Buscar en todo YouTube. */
 musicaRouter.get(
   '/musica/buscar',
   asyncHandler(async (req, res) => {
-    exigirSesion(req);
+    if (!req.usuario?.sub && !dispositivoDe(req)) {
+      throw new AppError('Recarga la página e inténtalo de nuevo.', 400, 'SIN_DISPOSITIVO');
+    }
     const q = typeof req.query.q === 'string' ? req.query.q : '';
     res.json(await buscar(q));
   })
@@ -56,9 +64,16 @@ musicaRouter.get(
 /** Que suena ahora en el gimnasio y que viene. */
 musicaRouter.get(
   '/musica/ahora',
-  asyncHandler(async (req, res) => {
-    const claseId = typeof req.query.clase === 'string' ? req.query.clase : null;
-    res.json(await estadoReproduccion(claseId));
+  asyncHandler(async (_req, res) => {
+    res.json(await estadoReproduccion());
+  })
+);
+
+/** La cola completa. */
+musicaRouter.get(
+  '/musica/cola',
+  asyncHandler(async (_req, res) => {
+    res.json(await colaActual());
   })
 );
 
@@ -78,15 +93,6 @@ musicaRouter.get(
   })
 );
 
-musicaRouter.get(
-  '/clases/:id/musica',
-  asyncHandler(async (req, res) => {
-    res.json(await filaDeClase(req.params.id));
-  })
-);
-
-// Se acepta el video de YouTube o, para lo que quedo del catalogo de texto, el
-// id interno de la cancion.
 const pedidoSchema = z
   .object({
     videoId: z
@@ -97,25 +103,31 @@ const pedidoSchema = z
   })
   .refine((d) => d.videoId || d.cancionId, { message: 'Falta la canción.' });
 
+/** Pedir una cancion para los parlantes. */
 musicaRouter.post(
-  '/clases/:id/musica',
+  '/musica/pedir',
   asyncHandler(async (req, res) => {
-    const usuarioId = exigirSesion(req);
     const { videoId, cancionId } = pedidoSchema.parse(req.body);
     const pedido = await pedirCancion({
-      claseId: req.params.id,
       videoId,
       cancionId,
-      usuarioId,
+      usuarioId: req.usuario?.rol === 'CLIENTE' ? req.usuario.sub : null,
+      dispositivoId: dispositivoDe(req),
     });
     res.status(201).json(pedido);
   })
 );
 
+/** Quitar lo propio mientras no haya sonado ni este sonando. */
 musicaRouter.delete(
   '/musica/:pedidoId',
   asyncHandler(async (req, res) => {
-    const usuarioId = exigirSesion(req);
-    res.json(await quitarPedido({ pedidoId: req.params.pedidoId, usuarioId }));
+    res.json(
+      await quitarPedido({
+        pedidoId: req.params.pedidoId,
+        usuarioId: req.usuario?.rol === 'CLIENTE' ? req.usuario.sub : null,
+        dispositivoId: dispositivoDe(req),
+      })
+    );
   })
 );

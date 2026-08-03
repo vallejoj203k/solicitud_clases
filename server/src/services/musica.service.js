@@ -47,7 +47,11 @@ const serializarPedido = (p) => ({
   creadoEn: p.creadoEn.toISOString(),
   sonoEn: p.sonoEn?.toISOString() ?? null,
   cancion: serializarCancion(p.cancion),
-  pidio: p.usuario ? { id: p.usuario.id, nombre: p.usuario.nombre } : null,
+  pidio: p.usuario
+    ? { id: p.usuario.id, nombre: p.usuario.nombre }
+    : p.nombre
+      ? { id: null, nombre: p.nombre }
+      : null,
 });
 
 /* ------------------------------------------------------------- Catalogo */
@@ -253,113 +257,124 @@ export async function cancionesDeLaCasa(limite = 50) {
 /* ----------------------------------------------------------------- Fila */
 
 /**
- * La fila de una clase, en el orden en que va a sonar.
+ * La cola del gimnasio, en el orden en que va a sonar.
  *
  * POR RONDAS: primero la primera cancion de cada quien, despues la segunda de
  * cada quien, y asi. Cada persona puede pedir las que quiera sin dejar a los
  * demas sin sonar, que es lo que pasaria con un orden de llegada estricto.
  */
-export async function filaDeClase(claseId, { incluirSonadas = true } = {}) {
-  const clase = await prisma.clase.findUnique({
-    where: { id: claseId },
-    include: { tipoClase: true },
-  });
-  if (!clase) throw noEncontrado('Clase');
-
+export async function colaActual({ incluirSonadas = false, limiteSonadas = 20 } = {}) {
   const pedidos = await prisma.pedidoMusica.findMany({
-    where: {
-      claseId,
-      ...(incluirSonadas ? {} : { estado: { in: ['EN_FILA', 'SONANDO'] } }),
-    },
+    where: incluirSonadas ? {} : { estado: { in: ['EN_FILA', 'SONANDO'] } },
     include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
     orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
+    ...(incluirSonadas ? { take: limiteSonadas } : {}),
   });
-
-  return {
-    clase: {
-      id: clase.id,
-      tipoClase: clase.tipoClase.nombre,
-      color: clase.tipoClase.color,
-      inicioEn: clase.inicioEn.toISOString(),
-    },
-    pedidos: pedidos.map(serializarPedido),
-  };
+  return pedidos.map(serializarPedido);
 }
 
+/** Cuanto tiempo tiene que pasar para que una cancion pueda repetirse. */
+const HORAS_SIN_REPETIR = 3;
+
 /**
- * Pedir una cancion para una clase.
+ * Pedir una cancion para los parlantes.
  *
- * Solo puede pedir quien tenga una reserva firme en esa clase: es el filtro que
- * evita que un desconocido desde internet llene de canciones los parlantes del
- * gimnasio.
+ * NO HACE FALTA RESERVA NI SESION. El gimnasio lo pidio asi: quien esta en el
+ * salon quiere poner musica sin tener que haber reservado por la app. A cambio
+ * quedan dos frenos, que son los que de verdad importan:
+ *
+ *  - la misma cancion no puede estar dos veces en la cola, ni volver a pedirse
+ *    hasta unas horas despues de haber sonado;
+ *  - los turnos se reparten por persona -o por navegador, si no hay sesion-, de
+ *    modo que quien pide diez no deja sin sonar a quien pidio una.
  */
-export async function pedirCancion({ claseId, videoId, cancionId, usuarioId }) {
-  const clase = await prisma.clase.findUnique({ where: { id: claseId } });
-  if (!clase) throw noEncontrado('Clase');
-  if (clase.estado !== 'ACTIVA') {
-    throw new AppError('Esta clase fue cancelada.', 409, 'CLASE_CANCELADA');
-  }
-  const fin = clase.inicioEn.getTime() + clase.duracionMin * 60_000;
-  if (fin < Date.now()) {
-    throw new AppError('Esta clase ya terminó.', 409, 'CLASE_TERMINADA');
-  }
-
-  const reserva = await prisma.reserva.findFirst({
-    where: { claseId, usuarioId, estado: { in: ESTADOS_CONFIRMADOS } },
-  });
-  if (!reserva) {
-    throw new AppError(
-      'Solo puedes pedir música en las clases que ya tienes reservadas.',
-      403,
-      'SIN_RESERVA'
-    );
-  }
-
-  // El pedido llega con el video de YouTube; el id interno solo lo usa lo que
-  // quedo del catalogo de texto anterior.
+export async function pedirCancion({
+  videoId,
+  cancionId,
+  usuarioId = null,
+  dispositivoId = null,
+  claseId = null,
+}) {
   const cancion = videoId
     ? await guardarDeYoutube(videoId)
     : await prisma.cancion.findUnique({ where: { id: cancionId } });
   if (!cancion || !cancion.activa) throw noEncontrado('Canción');
 
-  // UNA CANCION SUENA UNA SOLA VEZ POR CLASE. No importa quien la pida ni si ya
-  // sono: si existe cualquier pedido suyo en esta clase, no vuelve a entrar. Sin
-  // esto, en cuanto una terminaba cualquiera podia volver a ponerla y la clase
-  // se quedaba dando vueltas sobre las mismas tres canciones.
-  const yaEstuvo = await prisma.pedidoMusica.findFirst({
-    where: { claseId, cancionId: cancion.id },
-    include: { usuario: { select: { nombre: true } } },
+  // Ya esperando o sonando: no se encola dos veces, la pida quien la pida.
+  const enCola = await prisma.pedidoMusica.findFirst({
+    where: { cancionId: cancion.id, estado: { in: ['EN_FILA', 'SONANDO'] } },
   });
-  if (yaEstuvo) {
-    if (yaEstuvo.estado === 'SONO') {
-      throw new AppError('Esa canción ya sonó en esta clase.', 409, 'CANCION_YA_SONO');
-    }
-    if (yaEstuvo.usuarioId === usuarioId) {
-      throw new AppError('Ya pediste esa canción para esta clase.', 409, 'CANCION_REPETIDA');
-    }
+  if (enCola) {
     throw new AppError(
-      `${yaEstuvo.usuario.nombre.split(' ')[0]} ya la pidió: está en la fila.`,
+      enCola.estado === 'SONANDO'
+        ? 'Esa canción está sonando ahora mismo.'
+        : 'Esa canción ya está en la cola.',
       409,
-      'CANCION_YA_EN_FILA'
+      'CANCION_YA_EN_COLA'
     );
   }
 
-  // El turno es cuantas lleva pedidas esta persona en esta clase: define en que
-  // ronda suena.
-  const suyas = await prisma.pedidoMusica.count({ where: { claseId, usuarioId } });
+  // Sono hace poco: se deja descansar. Sin esto, tres personas pueden dejar la
+  // tarde entera dando vueltas sobre las mismas canciones.
+  const desde = new Date(Date.now() - HORAS_SIN_REPETIR * 3600_000);
+  const reciente = await prisma.pedidoMusica.findFirst({
+    where: { cancionId: cancion.id, estado: 'SONO', sonoEn: { gte: desde } },
+  });
+  if (reciente) {
+    throw new AppError(
+      'Esa canción sonó hace poco. Elige otra y vuelve a intentarlo más tarde.',
+      409,
+      'CANCION_YA_SONO'
+    );
+  }
+
+  const usuario = usuarioId
+    ? await prisma.usuario.findUnique({ where: { id: usuarioId } })
+    : null;
+
+  // El turno es cuantas lleva pedidas QUIEN pide, contando solo lo que sigue
+  // vivo: al vaciarse la cola todos vuelven a empezar en la ronda 1.
+  const quien = usuario
+    ? { usuarioId: usuario.id }
+    : dispositivoId
+      ? { dispositivoId }
+      : null;
+  const suyas = quien
+    ? await prisma.pedidoMusica.count({
+        where: { ...quien, estado: { in: ['EN_FILA', 'SONANDO'] } },
+      })
+    : 0;
 
   const pedido = await prisma.pedidoMusica.create({
-    data: { claseId, cancionId: cancion.id, usuarioId, turno: suyas + 1 },
+    data: {
+      cancionId: cancion.id,
+      usuarioId: usuario?.id ?? null,
+      dispositivoId,
+      nombre: usuario?.nombre ?? null,
+      claseId,
+      turno: suyas + 1,
+    },
     include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
   });
   return serializarPedido(pedido);
 }
 
 /** Quitar un pedido propio mientras no haya sonado ni este sonando. */
-export async function quitarPedido({ pedidoId, usuarioId, porAdmin = false }) {
+export async function quitarPedido({
+  pedidoId,
+  usuarioId = null,
+  dispositivoId = null,
+  porAdmin = false,
+}) {
   const pedido = await prisma.pedidoMusica.findUnique({ where: { id: pedidoId } });
   if (!pedido) throw noEncontrado('Pedido');
-  if (!porAdmin && pedido.usuarioId !== usuarioId) {
+
+  // Es suyo si coincide la sesion o, cuando no hay sesion, el navegador desde
+  // el que se pidio.
+  const esSuyo =
+    (usuarioId && pedido.usuarioId === usuarioId) ||
+    (dispositivoId && pedido.dispositivoId === dispositivoId);
+  if (!porAdmin && !esSuyo) {
     throw new AppError('Ese pedido no es tuyo.', 403, 'SIN_PERMISO');
   }
   if (pedido.estado === 'SONO') {
@@ -396,72 +411,74 @@ export async function claseEnCurso() {
  * Lo que suena ahora y lo que viene, para la pantalla del gimnasio y para los
  * telefonos de los clientes.
  *
- * Sin `claseId` se usa la clase que se este dictando: es lo que hace que el
- * reproductor no haya que reconfigurarlo cada hora.
+ * Es UNA SOLA cola para todo el gimnasio. La clase en curso se informa solo
+ * para poder enseñarla en pantalla; no filtra nada.
  */
-export async function estadoReproduccion(claseId = null) {
-  const clase = claseId
-    ? await prisma.clase.findUnique({ where: { id: claseId }, include: { tipoClase: true } })
-    : await claseEnCurso();
+export async function estadoReproduccion() {
+  const [pedidos, clase] = await Promise.all([
+    prisma.pedidoMusica.findMany({
+      where: { estado: { in: ['EN_FILA', 'SONANDO'] } },
+      include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
+      orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
+    }),
+    claseEnCurso(),
+  ]);
 
-  if (!clase) return { clase: null, sonando: null, fila: [], sonadas: 0 };
-
-  const pedidos = await prisma.pedidoMusica.findMany({
-    where: { claseId: clase.id },
-    include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
-    orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
+  // Lo sonado hace poco, para que la automatica no lo repita. Se mira una
+  // ventana y no todo el historial: el gimnasio lleva meses abierto y la lista
+  // completa no cabria en una URL.
+  const desde = new Date(Date.now() - HORAS_SIN_REPETIR * 3600_000);
+  const recientes = await prisma.pedidoMusica.findMany({
+    where: { estado: 'SONO', sonoEn: { gte: desde } },
+    include: { cancion: { select: { videoId: true } } },
+    orderBy: { sonoEn: 'desc' },
+    take: 60,
   });
 
   const sonando = pedidos.find((p) => p.estado === 'SONANDO') ?? null;
 
   return {
-    clase: {
-      id: clase.id,
-      tipoClase: clase.tipoClase.nombre,
-      color: clase.tipoClase.color,
-      inicioEn: clase.inicioEn.toISOString(),
-      terminaEn: new Date(clase.inicioEn.getTime() + clase.duracionMin * 60_000).toISOString(),
-    },
+    clase: clase
+      ? {
+          id: clase.id,
+          tipoClase: clase.tipoClase.nombre,
+          color: clase.tipoClase.color,
+          inicioEn: clase.inicioEn.toISOString(),
+          terminaEn: new Date(
+            clase.inicioEn.getTime() + clase.duracionMin * 60_000
+          ).toISOString(),
+        }
+      : null,
     sonando: sonando ? serializarPedido(sonando) : null,
     fila: pedidos.filter((p) => p.estado === 'EN_FILA').map(serializarPedido),
-    sonadas: pedidos.filter((p) => p.estado === 'SONO').length,
-    // Lo que ya sono en esta clase, para que el relleno no lo repita. La mezcla
-    // de YouTube arranca por la cancion que la siembra, asi que sin esta lista
-    // lo primero que hacia al vaciarse la fila era volver a poner la ultima.
-    reproducidas: pedidos
-      .filter((p) => p.estado !== 'EN_FILA' && p.cancion.videoId)
-      .map((p) => p.cancion.videoId),
+    sonadas: recientes.length,
+    reproducidas: recientes.map((p) => p.cancion.videoId).filter(Boolean),
   };
 }
 
 /**
  * El reproductor pide la siguiente.
  *
- * Cierra la que estaba sonando y promueve la primera de la fila. Devuelve
- * `null` cuando no queda nada pedido: ahi el reproductor sigue solo con lo que
- * YouTube encadena a partir de la ultima.
+ * Cierra la que estaba sonando y promueve la primera de la cola. Devuelve
+ * `sonando: null` cuando no queda nada pedido: ahi la pantalla sigue sola con
+ * lo que sugiere el servidor.
  */
-export async function siguienteCancion(claseId = null) {
-  const clase = claseId
-    ? await prisma.clase.findUnique({ where: { id: claseId } })
-    : await claseEnCurso();
-  if (!clase) return { sonando: null, motivo: 'SIN_CLASE' };
-
+export async function siguienteCancion() {
   return prisma.$transaction(async (tx) => {
     // Cierra lo que estuviera puesto. Si hubiera dos pantallas abiertas y las
     // dos pidieran "siguiente" casi al tiempo, como esto va dentro de la
     // transaccion la segunda ya no encuentra nada SONANDO y no salta dos.
     await tx.pedidoMusica.updateMany({
-      where: { claseId: clase.id, estado: 'SONANDO' },
-      data: { estado: 'SONO' },
+      where: { estado: 'SONANDO' },
+      data: { estado: 'SONO', sonoEn: new Date() },
     });
 
     const siguiente = await tx.pedidoMusica.findFirst({
-      where: { claseId: clase.id, estado: 'EN_FILA' },
+      where: { estado: 'EN_FILA' },
       orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
     });
 
-    if (!siguiente) return { sonando: null, motivo: 'FILA_VACIA' };
+    if (!siguiente) return { sonando: null, motivo: 'COLA_VACIA' };
 
     const puesta = await tx.pedidoMusica.update({
       where: { id: siguiente.id },
