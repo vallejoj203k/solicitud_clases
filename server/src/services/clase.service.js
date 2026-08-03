@@ -6,6 +6,7 @@ import {
   desdeFechaHoraLocal,
   sumarDias,
   fechaISOLocal,
+  horaLocal,
   inicioDelDia,
   finDelDia,
 } from '../utils/fechas.js';
@@ -227,6 +228,17 @@ export async function actualizarPrecioTipo(id, { precioCop, aplicarAProximas = f
  *   - las que tienen historial se pueden cancelar (`cancelarResto`), que las
  *     saca de la vista del cliente sin perder el registro.
  *
+ * `horas` acota el rango a unos horarios concretos: "borra los de las 6:00 de
+ * esta semana" sin llevarse por delante los de la tarde. Vacío = todas, que es
+ * como se comportaba antes.
+ *
+ * El filtro por hora se hace EN MEMORIA y no en la consulta. `inicioEn` está en
+ * UTC y el gimnasio opera en America/Bogota, así que "las 06:00" no es una
+ * franja fija de la columna: habría que convertir en SQL. Sobre las clases de
+ * un rango -decenas, no miles- comparar la hora local ya calculada es más
+ * simple y no puede desalinearse con lo que ve el administrador en pantalla,
+ * que sale de ese mismo `horaLocal`.
+ *
  * `simular` devuelve solo las cuentas: la pantalla las muestra ANTES de tocar
  * nada, porque borrar treinta clases no es una acción que deba sorprender.
  */
@@ -234,16 +246,22 @@ export async function eliminarClasesEnLote({
   desde,
   hasta,
   tipoSlug,
+  horas = [],
   cancelarResto = false,
   simular = false,
 }) {
-  const clases = await prisma.clase.findMany({
+  const enRango = await prisma.clase.findMany({
     where: {
       inicioEn: { gte: inicioDelDia(desde), lt: finDelDia(hasta) },
       ...(tipoSlug ? { tipoClase: { slug: tipoSlug } } : {}),
     },
-    select: { id: true },
+    select: { id: true, inicioEn: true },
   });
+
+  const soloEstas = new Set(horas);
+  const clases = soloEstas.size
+    ? enRango.filter((c) => soloEstas.has(horaLocal(c.inicioEn)))
+    : enRango;
 
   const vacio = { total: 0, eliminables: 0, conHistorial: 0, eliminadas: 0, canceladas: 0 };
   if (clases.length === 0) return vacio;

@@ -252,10 +252,23 @@ sale quién lo reservó y se puede marcar asistencia o cobrar ahí mismo. Esa vi
 pestaña **Lista** es la de siempre: crear, editar, cancelar y borrar.
 
 **Borrar un rango.** Un lote semanal deja treinta clases y borrarlas de a una es absurdo,
-así que el calendario tiene «Borrar rango»: fechas, disciplina opcional y una **simulación**
-que dice en números qué va a pasar antes de tocar nada (`simular: true`). Las que tengan
-reservas confirmadas o pagos no se borran nunca; se ofrece cancelarlas, que las saca de la
-vista del cliente sin perder el registro.
+así que el calendario tiene «Borrar rango»: fechas, disciplina opcional, **horarios**
+opcionales y una **simulación** que dice en números qué va a pasar antes de tocar nada
+(`simular: true`). Las que tengan reservas confirmadas o pagos no se borran nunca; se ofrece
+cancelarlas, que las saca de la vista del cliente sin perder el registro.
+
+El filtro de **horarios** evita el todo o nada: «borra los de las 6:00 de esta semana» sin
+llevarse por delante los de la tarde. Sin ninguno marcado entran todos, que es como se
+comportaba antes. Las horas que se ofrecen son las que **de verdad existen** en el rango
+elegido, cada una con cuántas clases tiene —así se ve de un vistazo que filtrar por las 6:00
+son 5 clases y no 30—, y una que deja de existir al mover las fechas se descarta sola: si se
+quedara marcada, el filtro no coincidiría con nada y parecería que el borrado falló.
+
+El filtro por hora se aplica **en memoria**, no en la consulta. `inicioEn` está en UTC y el
+gimnasio opera en `America/Bogota`, así que «las 06:00» no es una franja fija de la columna;
+sobre las clases de un rango —decenas, no miles— comparar la hora local ya calculada es más
+simple y no puede desalinearse con lo que el administrador ve en pantalla, que sale de ese
+mismo `horaLocal`.
 
 **Las canceladas se ven en el panel, no en la app.** `listarClases` filtra por `ACTIVA`
 salvo que se le pase `incluirCanceladas`, que solo hace la ruta del admin. Antes el panel
@@ -749,6 +762,7 @@ zona con horario de verano.
 | `GET` | `/api/admin/dashboard` | Métricas del día, próximas clases y alertas |
 | `GET/POST` | `/api/admin/clases` | Listar / crear |
 | `POST` | `/api/admin/clases/lote` | Crear una programación semanal completa |
+| `POST` | `/api/admin/clases/eliminar-lote` | Borrar un rango (filtrable por disciplina y horarios; `simular` cuenta sin tocar) |
 | `PATCH/DELETE` | `/api/admin/clases/:id` | Editar / eliminar (solo sin reservas) |
 | `POST` | `/api/admin/clases/:id/cancelar` | Cancelar clase y sus reservas |
 | `GET` | `/api/admin/clases/:id/reservas` | Inscritos con puesto y estado de pago |
