@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 import {
+  buscar as buscarEnYoutube,
   detalle as detalleYoutube,
   detallesDe,
   deListas,
@@ -264,23 +265,74 @@ export async function importarDeYoutube(texto, { deLaCasa = true } = {}) {
  * para saber cual se cayo y cuando, y para poder revisarlas mas adelante.
  */
 export async function marcarNoSuena(videoId) {
-  const cancion = await prisma.cancion.findUnique({ where: { videoId } });
-  // Puede no estar guardada: el reproductor tambien pone cosas que vienen
-  // directas de una busqueda y nunca pasaron por el catalogo.
-  if (!cancion) return { ok: true, marcada: false };
-  if (cancion.bloqueadaEn) return { ok: true, marcada: true };
+  let cancion = await prisma.cancion.findUnique({ where: { videoId } });
 
-  await prisma.cancion.update({
-    where: { id: cancion.id },
-    data: { bloqueadaEn: new Date() },
+  if (!cancion) {
+    // Puede no estar guardada: el reproductor tambien pone cosas que vienen
+    // directas del buscador del panel. Se guarda igual, ya marcada, para no
+    // volver a toparse con ella si algun dia entra al catalogo.
+    const v = await detalleYoutube(videoId).catch(() => null);
+    if (!v) return { ok: true, marcada: false, alternativas: [] };
+    cancion = await prisma.cancion.create({
+      data: {
+        videoId: v.videoId,
+        titulo: v.titulo,
+        artista: v.canal,
+        canal: v.canal,
+        duracionSeg: v.duracionSeg,
+        miniatura: v.miniatura,
+        bloqueadaEn: new Date(),
+      },
+    });
+  } else if (!cancion.bloqueadaEn) {
+    cancion = await prisma.cancion.update({
+      where: { id: cancion.id },
+      data: { bloqueadaEn: new Date() },
+    });
+    // Si estaba esperando en la cola se saca: no va a sonar y solo estorbaria.
+    await prisma.pedidoMusica.deleteMany({
+      where: { cancionId: cancion.id, estado: 'EN_FILA' },
+    });
+  }
+
+  return {
+    ok: true,
+    marcada: true,
+    titulo: cancion.titulo,
+    artista: cancion.artista ?? cancion.canal ?? null,
+    alternativas: await otrasVersiones(cancion).catch(() => []),
+  };
+}
+
+/**
+ * Otras subidas de la misma cancion que si se dejan poner.
+ *
+ * Que el sello bloquee SU video no quiere decir que la cancion no este en
+ * YouTube de otra forma: casi siempre estan el canal "- Topic" -el que genera
+ * YouTube solo-, el audio oficial o alguna version en vivo, y esas suelen
+ * dejarse incrustar. Buscar por titulo y artista las encuentra.
+ *
+ * Se filtran las que YA sabemos que no suenan, incluida la que acaba de fallar:
+ * ofrecer de reemplazo algo que tambien va a saltarse seria peor que no ofrecer
+ * nada.
+ */
+async function otrasVersiones(cancion, limite = 4) {
+  const texto = [cancion.titulo, cancion.artista ?? cancion.canal].filter(Boolean).join(' ');
+  if (!texto) return [];
+
+  const encontradas = await buscarEnYoutube(texto);
+  if (!encontradas.length) return [];
+
+  const yaFallaron = await prisma.cancion.findMany({
+    where: {
+      bloqueadaEn: { not: null },
+      videoId: { in: encontradas.map((c) => c.videoId) },
+    },
+    select: { videoId: true },
   });
 
-  // Si estaba esperando en la cola se saca: no va a sonar y solo estorbaria.
-  await prisma.pedidoMusica.deleteMany({
-    where: { cancionId: cancion.id, estado: 'EN_FILA' },
-  });
-
-  return { ok: true, marcada: true, titulo: cancion.titulo };
+  const fuera = new Set([cancion.videoId, ...yaFallaron.map((c) => c.videoId)]);
+  return encontradas.filter((c) => !fuera.has(c.videoId)).slice(0, limite);
 }
 
 /** Las que pone el gimnasio cuando nadie pidio nada. Solo las reproducibles. */

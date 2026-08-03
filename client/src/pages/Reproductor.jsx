@@ -234,13 +234,33 @@ export default function Reproductor() {
     const video = reproducidas.current[reproducidas.current.length - 1];
     if (!ERRORES_DEFINITIVOS.includes(codigo) || !video) return;
 
-    const { titulo } = await api.admin.noSuena(video).catch(() => ({}));
-    setDescartada(titulo || 'Esa canción');
+    const info = await api.admin.noSuena(video).catch(() => ({}));
+    setDescartada({
+      titulo: info.titulo || 'Esa canción',
+      // Otras subidas de la misma canción que sí se dejan poner. Casi siempre
+      // hay: lo que bloquea el sello es SU vídeo, no la canción.
+      alternativas: info.alternativas ?? [],
+    });
     // Se cae de las sugerencias apartadas por si estaba en la tanda.
     sugeridasRef.current = sugeridasRef.current.filter((c) => c.videoId !== video);
     setSugeridas(sugeridasRef.current);
     refrescar();
   }, [refrescar]);
+
+  /**
+   * Poner la versión que sí suena en lugar de la que YouTube rechazó.
+   *
+   * Entra a la lista del gimnasio -la bloqueada estaba ahí y su hueco hay que
+   * llenarlo- y además suena en el acto, que es lo que quiere quien la toca.
+   */
+  const reemplazarPor = useCallback(
+    async (cancion) => {
+      setDescartada(null);
+      await api.admin.agregarDeYoutube(cancion.videoId).catch(() => {});
+      ponerSugerida(cancion);
+    },
+    [ponerSugerida]
+  );
 
   /**
    * Terminó lo que sonaba: primero lo pedido, si no, la automática.
@@ -399,14 +419,59 @@ export default function Reproductor() {
       {descartada && (
         <div className="shrink-0 px-5 pt-3">
           <Aviso tono="peligro">
-            <strong>{descartada}</strong>: YouTube no la deja sonar fuera de su página, así que
-            se saltó y ya no se va a proponer. Queda marcada en Música.{' '}
-            <button
-              onClick={() => setDescartada(null)}
-              className="underline font-semibold"
-            >
-              Entendido
-            </button>
+            <div className="flex items-start gap-3">
+              <p className="flex-1">
+                <strong>{descartada.titulo}</strong>: YouTube no la deja sonar fuera de su
+                página, así que se saltó y ya no se va a proponer. Queda marcada en Música.
+              </p>
+              <button
+                onClick={() => setDescartada(null)}
+                className="shrink-0 underline font-semibold"
+              >
+                Entendido
+              </button>
+            </div>
+
+            {/* Lo que bloquea el sello es SU vídeo, no la canción: casi siempre
+                está subida por otro lado y esa sí se deja poner. Tocar una la
+                guarda en la lista del gimnasio y la pone a sonar, que es lo que
+                se quiere hacer con ella. */}
+            {descartada.alternativas.length > 0 && (
+              <>
+                <p className="mt-3 font-semibold text-humo-100">
+                  Estas versiones sí se pueden poner. Toca una para cambiarla en tu lista:
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {descartada.alternativas.map((c) => (
+                    <li key={c.videoId}>
+                      <button
+                        onClick={() => reemplazarPor(c)}
+                        className="w-full flex items-center gap-3 rounded-2xl border border-carbon-600 bg-carbon-800 px-2.5 py-2 text-left hover:border-carbon-500 transition-colors"
+                      >
+                        {c.miniatura && (
+                          <img
+                            src={c.miniatura}
+                            alt=""
+                            className="w-14 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold truncate text-humo-100">
+                            {c.titulo}
+                          </p>
+                          <p className="text-[11px] text-humo-500 truncate">
+                            {c.canal} · {duracion(c.duracionSeg)}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-bold text-volt-500 shrink-0">
+                          CAMBIAR
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </Aviso>
         </div>
       )}

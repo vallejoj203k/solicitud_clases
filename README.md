@@ -407,6 +407,22 @@ Se guarda la **fecha** y no un booleano porque YouTube cambia de opinión: así 
 revisar cuál se cayó y cuándo. Los demás códigos de error (2, 5) son pasajeros y solo hacen
 pasar a la siguiente.
 
+**No se puede evitar, pero casi siempre hay salida.** Lo que el sello bloquea es *su* vídeo,
+no la canción: la misma suele estar subida por el canal «— Topic» que genera YouTube, como
+audio oficial o en vivo, y esas versiones normalmente sí se dejan incrustar. Por eso, al
+marcar una, el servidor busca la canción por título y artista y devuelve hasta cuatro
+alternativas —descartando la que acaba de fallar y cualquiera que ya hubiera fallado antes—.
+La pantalla las ofrece en el mismo aviso: tocar una la **guarda en la lista del gimnasio y
+la pone a sonar**, así el hueco que dejó la bloqueada queda tapado sin ir al panel.
+
+La búsqueda cuesta 100 unidades de cuota, pero solo ocurre cuando una canción falla de
+verdad, y una vez por canción: a partir de ahí queda marcada y no se vuelve a intentar.
+
+> Ninguna de estas dos cosas hace sonar el vídeo bloqueado. Eso no se puede desde la app —lo
+> decide el dueño del vídeo y lo hace cumplir YouTube en sus servidores—, y los métodos que
+> «lo logran» se saltan los términos de YouTube. Aparte, la música en un local abierto al
+> público se licencia por su cuenta (en Colombia, Sayco/Acinpro).
+
 #### Qué hace avanzar la fila
 
 Solo dos cosas, las dos explícitas: **la canción terminó**, o **falló**. El sondeo del
