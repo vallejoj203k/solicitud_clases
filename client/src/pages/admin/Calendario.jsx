@@ -343,6 +343,11 @@ function HojaDelDia({ fecha, clases, onCerrar, onAbrirClase }) {
  *
  * Las clases con reservas confirmadas o pagos no se borran nunca; se ofrece
  * cancelarlas, que las saca de la vista del cliente sin perder el registro.
+ *
+ * SE PUEDE ACOTAR A UNOS HORARIOS. "Borra los de las 6:00 de esta semana" sin
+ * llevarse por delante los de la tarde. Las horas que se ofrecen son las que de
+ * verdad existen en el rango elegido, no una lista fija: así no se puede filtrar
+ * por una hora que no tiene nada y creer que el filtro no sirve.
  */
 function HojaBorrarRango({ desdeSugerido, hastaSugerido, onCerrar }) {
   const queryClient = useQueryClient();
@@ -351,12 +356,43 @@ function HojaBorrarRango({ desdeSugerido, hastaSugerido, onCerrar }) {
   const [desde, setDesde] = useState(desdeSugerido);
   const [hasta, setHasta] = useState(hastaSugerido);
   const [tipoSlug, setTipoSlug] = useState('');
+  const [horas, setHoras] = useState([]);
   const [cancelarResto, setCancelarResto] = useState(false);
   const [previo, setPrevio] = useState(null);
   const [resultado, setResultado] = useState(null);
   const [error, setError] = useState(null);
 
-  const datos = () => ({ desde, hasta, tipoSlug: tipoSlug || undefined });
+  // Las clases del rango, solo para saber qué horarios ofrecer y cuántas hay en
+  // cada uno. La cuenta importa: es lo que deja ver de un vistazo que filtrar
+  // por las 6:00 son 5 clases y no 30.
+  const { data: enRango } = useQuery({
+    queryKey: ['adminClases', desde, hasta, tipoSlug, 'borrado'],
+    queryFn: () =>
+      api.admin.clases({ desde, hasta, tipo: tipoSlug || undefined, incluirPasadas: true }),
+    enabled: Boolean(desde && hasta && hasta >= desde),
+  });
+
+  const horarios = [...new Set((enRango ?? []).map((c) => c.hora))]
+    .sort()
+    .map((hora) => ({ hora, cuantas: (enRango ?? []).filter((c) => c.hora === hora).length }));
+
+  // Una hora que deja de existir al cambiar el rango no puede quedarse marcada:
+  // el filtro no coincidiría con nada y parecería que el borrado falló.
+  const vivas = horas.filter((h) => horarios.some((x) => x.hora === h));
+
+  const alternarHora = (hora) => {
+    setPrevio(null);
+    setHoras((antes) =>
+      antes.includes(hora) ? antes.filter((h) => h !== hora) : [...antes, hora]
+    );
+  };
+
+  const datos = () => ({
+    desde,
+    hasta,
+    tipoSlug: tipoSlug || undefined,
+    horas: vivas.length ? vivas : undefined,
+  });
 
   const revisar = useMutation({
     mutationFn: () => api.admin.eliminarClasesEnLote({ ...datos(), simular: true }),
@@ -430,6 +466,61 @@ function HojaBorrarRango({ desdeSugerido, hastaSugerido, onCerrar }) {
           </Seleccion>
         </Campo>
 
+        {/* Horarios del rango. Sin ninguno marcado entran todos, que es el
+            comportamiento de siempre; marcar uno acota el borrado a esa hora. */}
+        {/* No va dentro de `Campo`: ese componente es un <label>, y un <label>
+            que envuelve botones les presta su texto como nombre accesible -el
+            lector de pantalla anunciaba "Horarios (1 elegido) 7:00 a.m."- y
+            además hace que tocar el rótulo active un control. */}
+        {horarios.length > 0 && (
+          <div role="group" aria-label="Horarios a borrar">
+            <span className="etiqueta block mb-1.5">
+              Horarios ({vivas.length ? `${vivas.length} elegido${vivas.length === 1 ? '' : 's'}` : 'todos'})
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {horarios.map(({ hora, cuantas }) => {
+                const marcada = vivas.includes(hora);
+                return (
+                  <button
+                    key={hora}
+                    type="button"
+                    onClick={() => alternarHora(hora)}
+                    aria-pressed={marcada}
+                    className={cx(
+                      'px-3 py-2 rounded-xl text-sm font-semibold tabular-nums border transition-colors',
+                      marcada
+                        ? 'bg-volt-500 text-carbon-900 border-volt-500'
+                        : 'bg-carbon-700 text-humo-300 border-carbon-600 hover:border-carbon-500'
+                    )}
+                  >
+                    {hora12(hora)}
+                    <span
+                      className={cx(
+                        'ml-1.5 text-[11px] font-bold',
+                        marcada ? 'text-carbon-900/60' : 'text-humo-500'
+                      )}
+                    >
+                      {cuantas}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {vivas.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setHoras([]);
+                  setPrevio(null);
+                }}
+                className="mt-2 text-xs font-semibold text-humo-500 hover:text-humo-100"
+              >
+                Quitar el filtro de horarios
+              </button>
+            )}
+          </div>
+        )}
+
         {error && <Aviso>{error}</Aviso>}
 
         {!previo ? (
@@ -447,8 +538,21 @@ function HojaBorrarRango({ desdeSugerido, hastaSugerido, onCerrar }) {
           <div className="space-y-3">
             <div className="rounded-2xl border border-carbon-600 bg-carbon-700/50 p-4 space-y-1.5 text-sm">
               <p>
-                En ese rango hay <span className="font-bold">{previo.total}</span> clase
-                {previo.total === 1 ? '' : 's'}.
+                {vivas.length > 0 ? (
+                  <>
+                    A las{' '}
+                    <span className="font-bold">
+                      {[...vivas].sort().map(hora12).join(', ')}
+                    </span>{' '}
+                    de ese rango hay <span className="font-bold">{previo.total}</span> clase
+                    {previo.total === 1 ? '' : 's'}.
+                  </>
+                ) : (
+                  <>
+                    En ese rango hay <span className="font-bold">{previo.total}</span> clase
+                    {previo.total === 1 ? '' : 's'}.
+                  </>
+                )}
               </p>
               <p className="text-humo-300">
                 Se pueden borrar <span className="font-extrabold text-alerta">{previo.eliminables}</span>.

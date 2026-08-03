@@ -125,6 +125,8 @@ const borradoEnLoteSchema = z.object({
   desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   tipoSlug: z.string().min(1).optional(),
+  // Horarios concretos dentro del rango. Vacío o ausente = todos.
+  horas: z.array(z.string().regex(/^\d{2}:\d{2}$/)).optional(),
   cancelarResto: z.boolean().optional(),
   simular: z.boolean().optional(),
 });
