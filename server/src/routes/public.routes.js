@@ -138,15 +138,21 @@ publicRouter.post(
   '/reservas',
   asyncHandler(async (req, res) => {
     const datos = nuevaReserva.parse(req.body);
-    // Si el dispositivo ya tiene sesion de cliente reusamos su usuario y no le
-    // volvemos a pedir nombre ni telefono.
-    const usuarioId = req.usuario?.rol === 'CLIENTE' ? req.usuario.sub : undefined;
 
-    if (!usuarioId && (!datos.nombre || !datos.telefono)) {
+    // SIEMPRE se piden nombre y telefono, aunque el dispositivo ya tenga sesion
+    // de cliente. Antes se reusaba esa sesion y se saltaba el formulario, que
+    // ahorraba escribir pero acababa mal en el caso real del gimnasio: la
+    // tablet del mostrador -o el celular que se pasa a un amigo- reservaba a
+    // nombre de quien lo hubiera usado antes.
+    //
+    // Quien resuelve la identidad es el TELEFONO: `upsertCliente` busca por el,
+    // asi que volver a reservar con el mismo numero reusa la misma persona sin
+    // duplicarla, y si escribe el nombre distinto se le respeta el nuevo.
+    if (!datos.nombre || !datos.telefono) {
       throw new AppError('Necesitamos tu nombre y tu teléfono.', 422, 'DATOS_INCOMPLETOS');
     }
-    // Ley 1581: sin autorizacion explicita no se guardan los datos de alguien nuevo.
-    if (!usuarioId && !datos.aceptaDatos) {
+    // Ley 1581: sin autorizacion explicita no se guardan los datos.
+    if (!datos.aceptaDatos) {
       throw new AppError(
         'Necesitamos tu autorización para guardar tus datos.',
         422,
@@ -157,7 +163,7 @@ publicRouter.post(
     // El puesto queda apartado -no confirmado- cuando hay que pagar antes, sea
     // por pasarela o por transferencia. Si falta la configuración del modo se
     // sigue cobrando en recepción en vez de dejar la app sin reservar.
-    const reserva = await crearReserva({ ...datos, usuarioId, pagoEnLinea: cobroPrevio() });
+    const reserva = await crearReserva({ ...datos, pagoEnLinea: cobroPrevio() });
 
     // Con pago previo el cupo todavía no es firme: la confirmación se envía
     // cuando el pago entre (Wompi) o cuando recepción lo verifique.
