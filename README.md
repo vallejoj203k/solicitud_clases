@@ -407,13 +407,29 @@ Se guarda la **fecha** y no un booleano porque YouTube cambia de opinión: así 
 revisar cuál se cayó y cuándo. Los demás códigos de error (2, 5) son pasajeros y solo hacen
 pasar a la siguiente.
 
-**No se puede evitar, pero casi siempre hay salida.** Lo que el sello bloquea es *su* vídeo,
-no la canción: la misma suele estar subida por el canal «— Topic» que genera YouTube, como
-audio oficial o en vivo, y esas versiones normalmente sí se dejan incrustar. Por eso, al
-marcar una, el servidor busca la canción por título y artista y devuelve hasta cuatro
-alternativas —descartando la que acaba de fallar y cualquiera que ya hubiera fallado antes—.
-La pantalla las ofrece en el mismo aviso: tocar una la **guarda en la lista del gimnasio y
-la pone a sonar**, así el hueco que dejó la bloqueada queda tapado sin ir al panel.
+**No se puede evitar, pero se arregla solo.** Lo que el sello bloquea es *su* vídeo, no la
+canción: la misma suele estar subida por el canal «— Topic» que genera YouTube, como audio
+oficial o en vivo, y esas versiones normalmente sí se dejan incrustar. Así que al marcar una,
+el servidor **elige el reemplazo y lo instala sin preguntar**:
+
+1. busca la canción por título y artista, descartando la que acaba de fallar y cualquiera
+   que ya hubiera fallado antes —proponer un reemplazo que también se va a saltar sería peor
+   que no proponer nada—;
+2. guarda la primera en el catálogo y le pasa el sitio de la bloqueada: si era **de la casa**,
+   la nueva también, o el hueco en la lista se quedaría sin tapar;
+3. si la bloqueada estaba **pedida**, mueve ese pedido a la nueva. Conserva turno, hora y
+   quién lo pidió: para esa persona no cambia nada salvo que ahora sí suena;
+4. la pantalla la reproduce. Lo único que se ve es un aviso contando qué pasó, que se retira
+   solo al minuto y no pide nada.
+
+Nadie está delante de la pantalla a media clase, y ese es justo el punto: antes esto ofrecía
+las alternativas y esperaba un toque que nunca llegaba.
+
+**El reemplazo es optimista**, porque tampoco hay forma de saber si suena sin ponerlo. Si
+falla, se vuelve a entrar por aquí, esa queda marcada también y se prueba la siguiente
+versión, hasta `MAX_REEMPLAZOS` (3) sin que ninguna llegue a sonar; el contador vuelve a cero
+en cuanto un vídeo arranca de verdad. Como cada vuelta descarta una versión, la cadena
+termina.
 
 La búsqueda cuesta 100 unidades de cuota, pero solo ocurre cuando una canción falla de
 verdad, y una vez por canción: a partir de ahí queda marcada y no se vuelve a intentar.

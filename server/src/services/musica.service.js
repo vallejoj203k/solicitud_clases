@@ -267,12 +267,21 @@ export async function importarDeYoutube(texto, { deLaCasa = true } = {}) {
 export async function marcarNoSuena(videoId) {
   let cancion = await prisma.cancion.findUnique({ where: { videoId } });
 
+  // OJO CON EL ORDEN: el pedido se mira ANTES de tocar nada. Si alguien la
+  // estaba esperando, su sitio en la cola es lo que hereda el reemplazo, y
+  // buscarlo despues de limpiar la cola lo dejaba siempre en null.
+  const pedido = cancion
+    ? await prisma.pedidoMusica.findFirst({
+        where: { cancionId: cancion.id, estado: { in: ['EN_FILA', 'SONANDO'] } },
+      })
+    : null;
+
   if (!cancion) {
     // Puede no estar guardada: el reproductor tambien pone cosas que vienen
     // directas del buscador del panel. Se guarda igual, ya marcada, para no
     // volver a toparse con ella si algun dia entra al catalogo.
     const v = await detalleYoutube(videoId).catch(() => null);
-    if (!v) return { ok: true, marcada: false, alternativas: [] };
+    if (!v) return { ok: true, marcada: false, reemplazo: null, enCola: false };
     cancion = await prisma.cancion.create({
       data: {
         videoId: v.videoId,
@@ -289,10 +298,16 @@ export async function marcarNoSuena(videoId) {
       where: { id: cancion.id },
       data: { bloqueadaEn: new Date() },
     });
-    // Si estaba esperando en la cola se saca: no va a sonar y solo estorbaria.
-    await prisma.pedidoMusica.deleteMany({
-      where: { cancionId: cancion.id, estado: 'EN_FILA' },
-    });
+  }
+
+  const alternativas = await otrasVersiones(cancion).catch(() => []);
+  const reemplazo = alternativas.length
+    ? await ponerEnLugarDe(cancion, alternativas[0], pedido).catch(() => null)
+    : null;
+
+  // Sin con que reemplazarla, un pedido que espera solo estorba: no va a sonar.
+  if (!reemplazo && pedido?.estado === 'EN_FILA') {
+    await prisma.pedidoMusica.delete({ where: { id: pedido.id } });
   }
 
   return {
@@ -300,8 +315,58 @@ export async function marcarNoSuena(videoId) {
     marcada: true,
     titulo: cancion.titulo,
     artista: cancion.artista ?? cancion.canal ?? null,
-    alternativas: await otrasVersiones(cancion).catch(() => []),
+    // La que se puso en su lugar, YA GUARDADA y ya metida en la cola si hacia
+    // falta. La pantalla solo tiene que reproducirla: la decision esta tomada.
+    reemplazo,
+    // Si estaba pedida, el reemplazo heredo su sitio y la pantalla no debe
+    // tratarlo como musica automatica.
+    enCola: Boolean(pedido),
   };
+}
+
+/**
+ * Mete la version que si suena en el sitio que dejo la bloqueada.
+ *
+ * SIN PREGUNTARLE A NADIE. La pantalla esta al fondo del salon y no hay quien
+ * toque un boton a media clase, asi que se elige la primera alternativa -las
+ * devuelve `buscar`, que ya vienen ordenadas por relevancia- y se da por buena.
+ *
+ * Es optimista a proposito: no hay forma de comprobar que una version se deja
+ * incrustar sin intentar ponerla. Si esta tampoco suena, el reproductor vuelve
+ * por aqui, esta queda marcada tambien y se prueba la siguiente. Se arregla
+ * solo, y como cada vuelta descarta una version, termina.
+ */
+async function ponerEnLugarDe(bloqueada, alternativa, pedido) {
+  const nueva = await guardarDeYoutube(alternativa.videoId);
+
+  // Hereda el sitio de la bloqueada: si era de la lista del gimnasio, la de
+  // reemplazo tambien, o el hueco se quedaria sin tapar.
+  const guardada = bloqueada.deLaCasa
+    ? await prisma.cancion.update({
+        where: { id: nueva.id },
+        data: { deLaCasa: true, activa: true },
+      })
+    : nueva;
+
+  if (pedido) {
+    // La cola no admite la misma cancion dos veces (indice unico parcial). Si
+    // el reemplazo YA estaba esperando, el pedido de la bloqueada sobra.
+    const yaEsperaba = await prisma.pedidoMusica.findFirst({
+      where: { cancionId: guardada.id, estado: { in: ['EN_FILA', 'SONANDO'] } },
+    });
+    if (yaEsperaba) {
+      await prisma.pedidoMusica.delete({ where: { id: pedido.id } });
+    } else {
+      // Conserva turno, hora y quien lo pidio: para esa persona no cambia nada
+      // salvo que ahora si suena.
+      await prisma.pedidoMusica.update({
+        where: { id: pedido.id },
+        data: { cancionId: guardada.id },
+      });
+    }
+  }
+
+  return serializarCancion(guardada);
 }
 
 /**

@@ -55,6 +55,16 @@ const SIN_EMPEZAR = -1;
 // proponerla; con cualquier otro se pasa a la siguiente y ya.
 const ERRORES_DEFINITIVOS = [100, 101, 150];
 
+// Cuántos reemplazos seguidos se prueban antes de rendirse y pasar a otra cosa.
+// El reemplazo es optimista -no hay forma de saber si suena sin ponerlo-, así
+// que puede fallar también; con el tope, tres versiones malas seguidas no dejan
+// la pantalla dando vueltas.
+const MAX_REEMPLAZOS = 3;
+
+// El vídeo empezó a sonar de verdad. Sirve para dar por buena la cadena de
+// reemplazos: si suena, lo anterior se resolvió.
+const REPRODUCIENDO = 1;
+
 export default function Reproductor() {
   const queryClient = useQueryClient();
   const esAdmin = Boolean(leerToken('admin'));
@@ -67,6 +77,9 @@ export default function Reproductor() {
   // sugerencias volverían vacías.
   const reproducidas = useRef([]);
   const reintento = useRef(null);
+  // Reemplazos encadenados sin que ninguno llegue a sonar. Vuelve a cero en
+  // cuanto un vídeo arranca de verdad.
+  const reemplazos = useRef(0);
   const apartando = useRef(false);
   // Lo que está esperando en la cola. La automática también lo tiene que
   // esquivar: proponer algo que ya está pedido lo haría sonar dos veces.
@@ -222,44 +235,58 @@ export default function Reproductor() {
   }, [apartarProxima, ponerSugerida, cargar]);
 
   /**
-   * YouTube se negó a poner el vídeo.
+   * YouTube se negó a poner el vídeo. SE RESUELVE SOLO.
    *
-   * Si el motivo es definitivo -no existe, o el dueño no deja incrustarlo- se
-   * avisa al servidor para que esa canción no se vuelva a proponer nunca. Es la
-   * única forma de saberlo: la API de datos dice que se deja incrustar y luego
-   * el reproductor la rechaza, y pasa justo con lo más conocido (los sellos
-   * grandes bloquean sus vídeos fuera de YouTube).
-   */
-  const fallo = useCallback(async (codigo) => {
-    const video = reproducidas.current[reproducidas.current.length - 1];
-    if (!ERRORES_DEFINITIVOS.includes(codigo) || !video) return;
-
-    const info = await api.admin.noSuena(video).catch(() => ({}));
-    setDescartada({
-      titulo: info.titulo || 'Esa canción',
-      // Otras subidas de la misma canción que sí se dejan poner. Casi siempre
-      // hay: lo que bloquea el sello es SU vídeo, no la canción.
-      alternativas: info.alternativas ?? [],
-    });
-    // Se cae de las sugerencias apartadas por si estaba en la tanda.
-    sugeridasRef.current = sugeridasRef.current.filter((c) => c.videoId !== video);
-    setSugeridas(sugeridasRef.current);
-    refrescar();
-  }, [refrescar]);
-
-  /**
-   * Poner la versión que sí suena en lugar de la que YouTube rechazó.
+   * Nadie está delante de esta pantalla a media clase, así que no se pregunta
+   * nada: el servidor marca la canción para no volver a proponerla, busca otra
+   * subida de la MISMA canción -lo que bloquea el sello es su vídeo, no la
+   * canción; casi siempre está el canal «— Topic», el audio oficial o una
+   * versión en vivo-, la guarda en lugar de la bloqueada y la pantalla la pone.
+   * Lo único que se ve es un aviso contando qué pasó, y se retira solo.
    *
-   * Entra a la lista del gimnasio -la bloqueada estaba ahí y su hueco hay que
-   * llenarlo- y además suena en el acto, que es lo que quiere quien la toca.
+   * El reemplazo es optimista: tampoco se puede saber si suena sin ponerlo. Si
+   * falla, se vuelve a entrar aquí y se prueba la siguiente versión, hasta
+   * `MAX_REEMPLAZOS`. Cada vuelta descarta una, así que la cadena termina.
    */
-  const reemplazarPor = useCallback(
-    async (cancion) => {
-      setDescartada(null);
-      await api.admin.agregarDeYoutube(cancion.videoId).catch(() => {});
-      ponerSugerida(cancion);
+  const fallo = useCallback(
+    async (codigo) => {
+      const video = reproducidas.current[reproducidas.current.length - 1];
+      reemplazos.current += 1;
+
+      // Los errores pasajeros (2, 5) y las cadenas que se alargan de más no
+      // merecen reemplazo: se pasa a lo siguiente y ya.
+      if (
+        !ERRORES_DEFINITIVOS.includes(codigo) ||
+        !video ||
+        reemplazos.current > MAX_REEMPLAZOS
+      ) {
+        refAvanzar.current();
+        return;
+      }
+
+      const info = await api.admin.noSuena(video).catch(() => ({}));
+
+      // Se cae de las sugerencias apartadas por si estaba en la tanda.
+      sugeridasRef.current = sugeridasRef.current.filter((c) => c.videoId !== video);
+      setSugeridas(sugeridasRef.current);
+
+      setDescartada({ titulo: info.titulo || 'Esa canción', reemplazo: info.reemplazo ?? null });
+
+      if (!info.reemplazo?.videoId) {
+        // Sin con qué reemplazarla, sigue lo que tocaba.
+        refAvanzar.current();
+        return;
+      }
+
+      // Si la bloqueada estaba pedida, el servidor ya movió el pedido a la de
+      // reemplazo: sigue siendo la canción de esa persona, no música
+      // automática, y el sondeo la va a pintar como tal.
+      setAutomatica(info.enCola ? null : info.reemplazo);
+      setError(null);
+      cargar(info.reemplazo.videoId);
+      refrescar();
     },
-    [ponerSugerida]
+    [refrescar, cargar]
   );
 
   /**
@@ -357,13 +384,14 @@ export default function Reproductor() {
               refApartar.current();
             },
             onStateChange: (e) => {
+              // Que suene es la señal de que la cadena de reemplazos funcionó.
+              if (e.data === REPRODUCIENDO) reemplazos.current = 0;
               if (e.data === TERMINADO) refAvanzar.current();
             },
             onError: (e) => {
-              // Un vídeo que falla no puede congelar la pantalla: se pasa al
-              // siguiente pase lo que pase.
+              // `fallo` decide qué sigue: la versión de reemplazo, o lo que
+              // tocaba. Lo que no puede es dejar la pantalla congelada.
               refFallo.current(e?.data);
-              refAvanzar.current();
             },
           },
         });
@@ -416,14 +444,31 @@ export default function Reproductor() {
         </div>
       )}
 
+      {/* Aviso de lo que pasó. NO pide nada: el cambio ya se hizo solo. Está
+          para que quien pase por la pantalla entienda por qué sonó otra versión
+          y sepa que su lista quedó corregida. */}
       {descartada && (
         <div className="shrink-0 px-5 pt-3">
           <Aviso tono="peligro">
             <div className="flex items-start gap-3">
-              <p className="flex-1">
-                <strong>{descartada.titulo}</strong>: YouTube no la deja sonar fuera de su
-                página, así que se saltó y ya no se va a proponer. Queda marcada en Música.
-              </p>
+              <div className="flex-1">
+                <p>
+                  <strong>{descartada.titulo}</strong>: YouTube no la deja sonar fuera de su
+                  página.
+                </p>
+                {descartada.reemplazo ? (
+                  <p className="mt-1 text-humo-100">
+                    Se cambió sola por{' '}
+                    <strong>{descartada.reemplazo.titulo}</strong>
+                    {descartada.reemplazo.canal ? ` (${descartada.reemplazo.canal})` : ''}, que
+                    queda en tu lista en su lugar.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-humo-100">
+                    No encontramos otra versión que se deje poner, así que siguió la siguiente.
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setDescartada(null)}
                 className="shrink-0 underline font-semibold"
@@ -431,47 +476,6 @@ export default function Reproductor() {
                 Entendido
               </button>
             </div>
-
-            {/* Lo que bloquea el sello es SU vídeo, no la canción: casi siempre
-                está subida por otro lado y esa sí se deja poner. Tocar una la
-                guarda en la lista del gimnasio y la pone a sonar, que es lo que
-                se quiere hacer con ella. */}
-            {descartada.alternativas.length > 0 && (
-              <>
-                <p className="mt-3 font-semibold text-humo-100">
-                  Estas versiones sí se pueden poner. Toca una para cambiarla en tu lista:
-                </p>
-                <ul className="mt-2 space-y-1.5">
-                  {descartada.alternativas.map((c) => (
-                    <li key={c.videoId}>
-                      <button
-                        onClick={() => reemplazarPor(c)}
-                        className="w-full flex items-center gap-3 rounded-2xl border border-carbon-600 bg-carbon-800 px-2.5 py-2 text-left hover:border-carbon-500 transition-colors"
-                      >
-                        {c.miniatura && (
-                          <img
-                            src={c.miniatura}
-                            alt=""
-                            className="w-14 h-10 rounded-lg object-cover shrink-0"
-                          />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold truncate text-humo-100">
-                            {c.titulo}
-                          </p>
-                          <p className="text-[11px] text-humo-500 truncate">
-                            {c.canal} · {duracion(c.duracionSeg)}
-                          </p>
-                        </div>
-                        <span className="text-[10px] font-bold text-volt-500 shrink-0">
-                          CAMBIAR
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
           </Aviso>
         </div>
       )}
