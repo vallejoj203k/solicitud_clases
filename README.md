@@ -184,6 +184,16 @@ fila en la base.
 
 ## Operación
 
+**El formulario se pide siempre.** Aunque el aparato ya tenga sesión de cliente, cada
+reserva vuelve a pedir nombre, teléfono y la autorización de datos. Recordarlos ahorraba
+escribir, pero en el caso real del gimnasio salía caro: la tablet del mostrador —o el
+celular que se le pasa a un amigo— reservaba a nombre de quien lo hubiera usado antes.
+
+Quien resuelve la identidad es el **teléfono**: `upsertCliente` busca por él, así que
+volver a reservar con el mismo número reutiliza a la misma persona sin duplicarla, y si
+escribe el nombre distinto se le respeta el nuevo. El dispositivo sigue guardando el
+**token** —hace falta para ver y cancelar sin contraseña— pero ya no el nombre.
+
 **Recuperar una reserva.** El cliente no tiene contraseña: su sesión vive en el navegador.
 En `/recuperar` la recupera con **código + teléfono**. Se piden los dos a propósito: con el
 teléfono solo se podrían enumerar números y ver quién va a qué clase; con el código solo,

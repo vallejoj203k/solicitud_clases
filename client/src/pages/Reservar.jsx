@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client.js';
-import { guardarCliente, guardarToken, leerCliente } from '../lib/sesion.js';
+import { guardarToken, leerToken } from '../lib/sesion.js';
 import { hoyISO, hora12, fechaLarga, pesos } from '../lib/formato.js';
 import CalendarioDias, { semanasDelMes } from '../components/CalendarioDias.jsx';
 import TarjetaHorario from '../components/TarjetaHorario.jsx';
@@ -18,7 +18,7 @@ import {
   Vacio,
   cx,
 } from '../components/ui.jsx';
-import { IconoAtras, IconoCheck, IconoReloj, IconoUsuario } from '../components/Iconos.jsx';
+import { IconoAtras, IconoCheck, IconoReloj } from '../components/Iconos.jsx';
 
 /**
  * Flujo de reserva completo en una sola pantalla, con dos pasos visibles
@@ -45,9 +45,11 @@ export default function Reservar() {
   const [confirmando, setConfirmando] = useState(false);
   const [errorReserva, setErrorReserva] = useState(null);
 
-  const cliente = leerCliente();
-  const [nombre, setNombre] = useState(cliente?.nombre ?? '');
-  const [telefono, setTelefono] = useState(cliente?.telefono ?? '');
+  // El aparato recuerda la SESIÓN -para ver y cancelar reservas- pero no
+  // quién es: el formulario se llena de cero en cada reserva.
+  const haySesion = Boolean(leerToken('cliente'));
+  const [nombre, setNombre] = useState('');
+  const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
   const [aceptaDatos, setAceptaDatos] = useState(false);
   const [nombreInvitado, setNombreInvitado] = useState('');
@@ -98,7 +100,7 @@ export default function Reservar() {
   const { data: misReservas } = useQuery({
     queryKey: ['misReservas'],
     queryFn: api.misReservas,
-    enabled: Boolean(cliente && claseId),
+    enabled: Boolean(haySesion && claseId),
     staleTime: 5_000,
   });
 
@@ -121,18 +123,16 @@ export default function Reservar() {
         claseId,
         puestoCodigo: puesto,
         nombreInvitado: nombreInvitado.trim() || undefined,
-        ...(cliente
-          ? {}
-          : {
-              nombre: nombre.trim(),
-              telefono: telefono.trim(),
-              email: email.trim() || undefined,
-              aceptaDatos,
-            }),
+        nombre: nombre.trim(),
+        telefono: telefono.trim(),
+        email: email.trim() || undefined,
+        aceptaDatos,
       }),
-    onSuccess: ({ reserva, token, cliente: perfil, checkout }) => {
+    onSuccess: ({ reserva, token, checkout }) => {
+      // El token sí se guarda: permite ver y cancelar la reserva sin contraseña.
+      // El nombre no, para que el siguiente que use el aparato no se encuentre
+      // con los datos del anterior.
       guardarToken('cliente', token);
-      guardarCliente(perfil);
       queryClient.invalidateQueries({ queryKey: ['inicio'] });
       // El mapa acaba de cambiar: sin esto, quien vuelve enseguida a tomar otro
       // puesto para su acompañante vería el suyo todavía libre y chocaría contra
@@ -294,7 +294,6 @@ export default function Reservar() {
         onCerrar={() => setConfirmando(false)}
         clase={claseActual}
         puesto={puesto}
-        cliente={cliente}
         nombre={nombre}
         setNombre={setNombre}
         telefono={telefono}
@@ -492,7 +491,6 @@ function HojaConfirmacion({
   onCerrar,
   clase,
   puesto,
-  cliente,
   nombre,
   setNombre,
   telefono,
@@ -513,8 +511,7 @@ function HojaConfirmacion({
   if (!clase) return null;
 
   const datosCompletos =
-    cliente ||
-    (nombre.trim().length >= 2 && telefono.replace(/\D/g, '').length >= 7 && aceptaDatos);
+    nombre.trim().length >= 2 && telefono.replace(/\D/g, '').length >= 7 && aceptaDatos;
 
   return (
     <Hoja abierta={abierta} onCerrar={onCerrar} titulo="Confirma tu reserva">
@@ -539,8 +536,6 @@ function HojaConfirmacion({
           </div>
         </div>
 
-        {/* El formulario solo aparece la primera vez. Después el dispositivo ya
-            tiene la sesión del cliente y se salta este bloque completo. */}
         {/* Puestos para acompañantes: quien reserva y paga es el mismo, pero
             recepción necesita saber a quién está recibiendo en cada puesto. El
             nombre es opcional: si no lo ponen, el puesto queda a nombre de quien
@@ -560,20 +555,10 @@ function HojaConfirmacion({
           </Campo>
         )}
 
-        {cliente ? (
-          <div className="flex items-center gap-3 rounded-2xl bg-carbon-700/60 border border-carbon-600 px-4 py-3">
-            <span className="p-2 rounded-xl bg-carbon-600 text-humo-300">
-              <IconoUsuario className="w-4 h-4" />
-            </span>
-            <div className="min-w-0">
-              <p className="font-semibold truncate">
-                {paraAcompanante ? `Reserva y paga: ${cliente.nombre}` : cliente.nombre}
-              </p>
-              <p className="text-xs text-humo-500">{cliente.telefono}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
+        {/* El formulario aparece SIEMPRE, también si ya se reservó antes desde
+            este aparato: en el mostrador, recordar los datos acababa reservando
+            a nombre de quien pasó antes. */}
+        <div className="space-y-3">
             <Campo etiqueta="Tu nombre">
               <Entrada
                 autoFocus
@@ -625,9 +610,8 @@ function HojaConfirmacion({
                 </Link>
                 .
               </span>
-            </label>
-          </div>
-        )}
+          </label>
+        </div>
 
         <div className="flex items-center justify-between px-1">
           <span className="text-sm text-humo-500">Total a pagar</span>
