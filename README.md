@@ -319,9 +319,9 @@ el reproductor responde *«Se produjo un error»* y la música se para. Además,
 `RD` empieza siempre por el vídeo que la siembra, o sea que repetía la canción que acababa
 de sonar.
 
-Lo que sigue ahora sale de `GET /api/admin/musica/sugerida`: el reproductor manda lo último
-que sonó y todo lo que ya puso, y el servidor busca a partir del canal de esa canción y
-devuelve una al azar de entre las que no han sonado. Tiene dos ventajas sobre la mezcla:
+Lo que sigue ahora sale de `GET /api/admin/musica/sugeridas`: el reproductor manda lo último
+que sonó y todo lo que ya puso, y el servidor devuelve una lista barajada mezclando el canal
+de esa canción, el ranking del momento y las listas configuradas. Tiene dos ventajas sobre la mezcla:
 todo lo que sale **ya pasó el filtro** de incrustable, no bloqueado y de duración
 razonable, y `buscar` cachea 12 horas, así que encadenar canciones del mismo hilo **no
 vuelve a gastar cuota** —una búsqueda de 100 unidades da para unas veinte canciones—.
@@ -399,11 +399,18 @@ retomar si alguien recarga la pantalla a mitad de canción.
 
 #### El panel de la derecha
 
-Enseña **lo que viene**: las pedidas primero y, debajo, la que va a sonar por recomendación
-cuando se agoten. Esa recomendación se pide **por adelantado**, en cuanto arranca cada
-canción, por dos motivos: se puede enseñar, y el cambio de canción no tiene que esperar a
-que responda la red. Excluye tanto lo ya sonado como **lo que está esperando en la cola**;
-sin eso proponía justo la canción que un cliente acababa de pedir.
+Enseña **lo que viene**: las pedidas primero y, debajo, una **lista de sugeridas** de la que
+se puede escoger tocando. La primera lleva la marca `SIGUE` porque es la que sonará sola si
+nadie hace nada; tocar cualquier otra la pone en el acto.
+
+Las sugerencias se piden **por adelantado**, en cuanto arranca cada canción, por dos
+motivos: se pueden enseñar, y el cambio de canción no tiene que esperar a la red. Excluyen
+tanto lo ya sonado como **lo que está esperando en la cola** —sin eso proponían justo la
+canción que un cliente acababa de pedir—.
+
+**Mezclan fuentes a propósito y limitan a 2 canciones por canal.** Buscar por el canal de la
+última mantiene el hilo, pero usado solo acababa poniendo el mismo artista una hora seguida;
+por eso se junta con el ranking del momento y con las listas configuradas.
 
 ### Antes de encenderlo
 
@@ -600,6 +607,7 @@ zona con horario de verano.
 | `GET` | `/api/mis-reservas` | Reservas del dispositivo (token de cliente) |
 | `POST` | `/api/reservas/:codigo/cancelar` | Cancelar la propia reserva |
 | `GET` | `/api/musica/buscar?q=` | Buscar en YouTube (token de cliente: protege la cuota) |
+| `GET` | `/api/musica/populares` | Lo más escuchado del momento (ranking de YouTube) |
 | `GET` | `/api/musica/catalogo` | Listas configuradas + canciones de la casa |
 | `GET` | `/api/musica/ahora` | Qué suena y qué viene |
 | `GET` | `/api/musica/cola` | La cola completa |
@@ -629,7 +637,7 @@ zona con horario de verano.
 | `POST` | `/api/admin/canciones/importar` | Carga masiva pegando enlaces o una lista de YouTube |
 | `PATCH/DELETE` | `/api/admin/canciones/:id` | Editar / sacar del catálogo |
 | `GET` | `/api/admin/musica/buscar?q=` | Buscar en YouTube desde el panel |
-| `GET` | `/api/admin/musica/sugerida?desde=&excluir=` | Qué poner cuando nadie ha pedido nada |
+| `GET` | `/api/admin/musica/sugeridas?desde=&excluir=&limite=` | Lista de propuestas para el reproductor |
 | `POST` | `/api/admin/musica/agregar` | Agregar un vídeo al catálogo (`{videoId}`) |
 | `POST` | `/api/admin/musica/siguiente` | **El reproductor avanza la fila** |
 | `GET` | `/api/admin/musica/cola` | La cola, con lo ya sonado |

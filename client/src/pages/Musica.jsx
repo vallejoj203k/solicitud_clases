@@ -41,7 +41,16 @@ export default function Musica() {
     refetchInterval: 15_000,
   });
 
-  const { data: catalogo, isLoading: cargandoCatalogo } = useQuery({
+  // Lo más escuchado ahora mismo, que es con lo que abre la pantalla. Sale del
+  // ranking de música de YouTube para Colombia, así que cambia cuando ellos lo
+  // cambian; y cuesta 1 unidad de cuota, no 100 como una búsqueda.
+  const { data: populares, isLoading: cargandoPopulares } = useQuery({
+    queryKey: ['popularesMusica'],
+    queryFn: api.popularesMusica,
+    staleTime: 30 * 60_000,
+  });
+
+  const { data: catalogo } = useQuery({
     queryKey: ['catalogoMusica'],
     queryFn: api.catalogoMusica,
     staleTime: 30 * 60_000,
@@ -83,11 +92,13 @@ export default function Musica() {
   // Lo que ya está en la cola no se vuelve a ofrecer.
   const yaEnCola = new Set([sonando, ...cola].filter(Boolean).map((p) => p.cancion.videoId));
 
-  const listaDeCatalogo = [
+  // Primero lo popular; las listas del gimnasio y las de la casa completan.
+  const paraEmpezar = [
+    ...(populares ?? []),
     ...(catalogo?.grupos ?? []).flatMap((g) => g.canciones),
     ...(catalogo?.deLaCasa ?? []),
   ];
-  const mostrando = consulta.length >= 2 ? resultados : listaDeCatalogo;
+  const mostrando = consulta.length >= 2 ? resultados : paraEmpezar;
 
   return (
     <div className="min-h-dvh pb-16">
@@ -197,11 +208,11 @@ export default function Musica() {
 
         <div>
           <p className="etiqueta mb-2">
-            {consulta.length >= 2 ? `Resultados de "${consulta}"` : 'Para empezar'}
+            {consulta.length >= 2 ? `Resultados de "${consulta}"` : 'Populares ahora'}
           </p>
 
           <div className="space-y-1.5">
-            {(buscando || cargandoCatalogo) && !mostrando?.length && <Cargando texto="Buscando…" />}
+            {(buscando || cargandoPopulares) && !mostrando?.length && <Cargando texto="Buscando…" />}
 
             {!buscando && mostrando?.length === 0 && (
               <p className="py-6 text-center text-sm text-humo-500">
