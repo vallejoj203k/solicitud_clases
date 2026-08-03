@@ -36,6 +36,10 @@ import { cargarApiYoutube, duracion } from '../lib/youtube.js';
  * fila de más, y las canciones se saltaban sin sonar.
  */
 
+// Cuántas canciones recordar para no repetir. Con tope, porque sin él la lista
+// de exclusiones acabaría vaciando las sugerencias.
+const MAX_RECORDADAS = 120;
+
 // Estados del reproductor de YouTube que importan aquí.
 const TERMINADO = 0;
 const EN_COLA = 5;
@@ -50,8 +54,12 @@ export default function Reproductor() {
   const avanzando = useRef(false);
   // Lo último que se puso: es la semilla de la siguiente sugerencia.
   const ultimoVideo = useRef(null);
-  // Todo lo que ya sonó, para no repetir nada en la misma sesión.
-  const reproducidas = useRef(new Set());
+  // Todo lo que ya sonó, en orden y ACOTADO. El tope importa: si la lista
+  // creciera sin freno, al cabo de unas horas excluiría todo lo que YouTube
+  // puede ofrecer y las sugerencias volverían vacías.
+  const reproducidas = useRef([]);
+  const reintento = useRef(null);
+  const apartando = useRef(false);
   // Lo que está esperando en la cola. La automática también lo tiene que
   // esquivar: proponer algo que ya está pedido lo haría sonar dos veces.
   const enCola = useRef([]);
@@ -83,7 +91,9 @@ export default function Reproductor() {
   /** Pone un vídeo y se asegura de que arranque. */
   const cargar = useCallback((videoId) => {
     ultimoVideo.current = videoId;
-    reproducidas.current.add(videoId);
+    reproducidas.current = [...reproducidas.current.filter((v) => v !== videoId), videoId].slice(
+      -MAX_RECORDADAS
+    );
     reproductor.current?.loadVideoById(videoId);
     // `loadVideoById` normalmente reproduce solo, pero si el navegador lo deja
     // en cola la pantalla se quedaría muda sin que nadie se entere.
@@ -101,24 +111,36 @@ export default function Reproductor() {
    * inmediato en vez de esperar a que responda la red.
    */
   const apartarProxima = useCallback(async () => {
-    const lista = await api.admin
-      // Se excluye lo ya sonado Y lo que está esperando en la cola: si no, la
-      // automática proponía justo la canción que un cliente acababa de pedir y
-      // sonaba dos veces seguidas.
-      .sugeridas(ultimoVideo.current, [...reproducidas.current, ...enCola.current], 12)
-      .catch(() => []);
+    // Dos peticiones a la vez se pisarían: la que responde segunda gana aunque
+    // se haya calculado con datos más viejos.
+    if (apartando.current) return;
+    apartando.current = true;
+    try {
+      const lista = await api.admin
+        // Se excluye lo ya sonado Y lo que está esperando en la cola: si no, la
+        // automática proponía justo la canción que un cliente acababa de pedir y
+        // sonaba dos veces seguidas.
+        .sugeridas(ultimoVideo.current, [...reproducidas.current, ...enCola.current], 12)
+        .catch(() => []);
 
-    if (lista?.length) {
-      sugeridasRef.current = lista;
-      setSugeridas(lista);
-      return;
+      if (lista?.length) {
+        sugeridasRef.current = lista;
+        setSugeridas(lista);
+        return;
+      }
+
+      // Sin sugerencias, la red de seguridad son las canciones de la casa.
+      const casa = await api.cancionesDeLaCasa().catch(() => []);
+      const libres = casa.filter((c) => c.videoId && !reproducidas.current.includes(c.videoId));
+      if (libres.length) {
+        sugeridasRef.current = libres;
+        setSugeridas(libres);
+      }
+      // Si tampoco hay, NO se pisa lo que ya había: una lista buena vale más
+      // que una vacía recién traída.
+    } finally {
+      apartando.current = false;
     }
-
-    // Sin sugerencias, la red de seguridad son las canciones de la casa.
-    const casa = await api.cancionesDeLaCasa().catch(() => []);
-    const libres = casa.filter((c) => c.videoId && !reproducidas.current.has(c.videoId));
-    sugeridasRef.current = libres;
-    setSugeridas(libres);
   }, []);
 
   /** Pone una canción concreta y deja lista la siguiente tanda. */
@@ -136,19 +158,44 @@ export default function Reproductor() {
     [cargar, apartarProxima]
   );
 
-  /** Pone la primera recomendación, o busca una al vuelo si no hay. */
+  /**
+   * Pone la siguiente automática. NUNCA DEJA LA PANTALLA EN SILENCIO.
+   *
+   * El servidor ya baja por su propia escalera de respaldos y casi nunca
+   * devuelve vacío. Si aun así no hay nada -no hay internet, o el gimnasio
+   * acaba de estrenar la app y no tiene ni una canción guardada- se vuelve a
+   * poner algo de lo que ya sonó antes que callar, y se sigue reintentando por
+   * detrás. Un salón en silencio es peor que una canción repetida.
+   */
   const ponerAutomatica = useCallback(async () => {
-    if (!sugeridasRef.current.length) await apartarProxima();
+    // Se intenta dos veces: la primera puede toparse con una petición en vuelo
+    // que aún no ha dejado la lista puesta.
+    for (let i = 0; i < 2 && !sugeridasRef.current.length; i += 1) {
+      await apartarProxima();
+      if (!sugeridasRef.current.length) await new Promise((r) => setTimeout(r, 400));
+    }
     const elegida = sugeridasRef.current[0];
 
-    if (!elegida?.videoId) {
-      setError(
-        'No encontramos con qué seguir. Busca una canción arriba para retomar, o agrega canciones de la casa en Panel → Música.'
-      );
+    if (elegida?.videoId) {
+      ponerSugerida(elegida);
       return;
     }
-    ponerSugerida(elegida);
-  }, [apartarProxima, ponerSugerida]);
+
+    // Última red: repetir lo más antiguo de la sesión, que es lo que menos
+    // fresco suena.
+    const vieja = reproducidas.current[0];
+    if (vieja) {
+      setAutomatica(null);
+      setError('Sin conexión con YouTube: repitiendo mientras vuelve.');
+      cargar(vieja);
+    } else {
+      setError('Busca una canción arriba para arrancar.');
+    }
+
+    // Se sigue intentando por detrás para retomar en cuanto se pueda.
+    clearTimeout(reintento.current);
+    reintento.current = setTimeout(() => apartarProxima(), 20_000);
+  }, [apartarProxima, ponerSugerida, cargar]);
 
   /**
    * Terminó lo que sonaba: primero lo pedido, si no, la automática.
@@ -183,6 +230,14 @@ export default function Reproductor() {
   // La cola se refleja en una ref para que las funciones de arriba la vean sin
   // tener que rehacerse en cada sondeo.
   useEffect(() => {
+    // Lo que el servidor da por sonado se suma a lo que no debe repetirse.
+    // Importa al recargar la pantalla a media sesión: sin esto, el reproductor
+    // no sabría qué sonó antes de abrirla y volvería a ponerlo.
+    for (const id of data?.reproducidas ?? []) {
+      if (!reproducidas.current.includes(id)) reproducidas.current.push(id);
+    }
+    reproducidas.current = reproducidas.current.slice(-MAX_RECORDADAS);
+
     enCola.current = [
       ...(data?.fila ?? []).map((p) => p.cancion.videoId),
       data?.sonando?.cancion.videoId,
@@ -207,7 +262,7 @@ export default function Reproductor() {
       .then((YT) => {
         if (!vivo || !contenedor.current) return;
         ultimoVideo.current = semilla.videoId;
-        reproducidas.current.add(semilla.videoId);
+        reproducidas.current = [semilla.videoId];
 
         reproductor.current = new YT.Player(contenedor.current, {
           // El vídeo va en el constructor: crear el reproductor vacío hacía que

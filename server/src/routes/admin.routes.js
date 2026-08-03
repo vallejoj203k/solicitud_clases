@@ -29,10 +29,11 @@ import {
   colaActual,
   marcarSono,
   siguienteCancion,
+  sugerenciasParaReproductor,
   quitarPedido,
   MOMENTOS,
 } from '../services/musica.service.js';
-import { buscar as buscarEnYoutube, sugerencias } from '../services/youtube.service.js';
+import { buscar as buscarEnYoutube } from '../services/youtube.service.js';
 import {
   dashboard,
   buscarReservas,
@@ -398,7 +399,7 @@ adminRouter.get(
     const excluir =
       typeof req.query.excluir === 'string' ? req.query.excluir.split(',').filter(Boolean) : [];
     const limite = Math.min(Number(req.query.limite) || 12, 25);
-    res.json(await sugerencias({ desde, excluir, limite }));
+    res.json(await sugerenciasParaReproductor({ desde, excluir, limite }));
   })
 );
 
