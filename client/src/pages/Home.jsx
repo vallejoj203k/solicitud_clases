@@ -8,9 +8,12 @@ import {
   IconoCandado,
   IconoCalendario,
   IconoMusica,
+  IconoExpandir,
+  IconoContraer,
 } from '../components/Iconos.jsx';
 import { hora12 } from '../lib/formato.js';
 import { leerCliente } from '../lib/sesion.js';
+import { usePantallaCompleta } from '../lib/pantalla.js';
 
 /**
  * Pantalla principal: tres tarjetas —Spinning, Running y Música— y nada más.
@@ -28,6 +31,7 @@ import { leerCliente } from '../lib/sesion.js';
 export default function Home() {
   const navegar = useNavigate();
   const cliente = leerCliente();
+  const pantalla = usePantallaCompleta();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['inicio'],
@@ -49,6 +53,20 @@ export default function Home() {
           </h1>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {/* Pantalla completa. Solo aparece donde el navegador la tiene
+              -Android sí, el iPhone no-, porque un botón que no hace nada es
+              peor que ninguno. Va aquí y no en otra pantalla porque esta es la
+              que se deja puesta en la tablet del mostrador. */}
+          {pantalla.disponible && (
+            <button
+              onClick={pantalla.alternar}
+              aria-label={pantalla.activa ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              title={pantalla.activa ? 'Salir de pantalla completa' : 'Pantalla completa'}
+              className="p-2.5 rounded-2xl bg-carbon-700 border border-carbon-600 text-humo-300 hover:text-humo-100 active:scale-95 transition-all"
+            >
+              {pantalla.activa ? <IconoContraer /> : <IconoExpandir />}
+            </button>
+          )}
           <Link
             to="/mis-reservas"
             aria-label="Mis reservas"

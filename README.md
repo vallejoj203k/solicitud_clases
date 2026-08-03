@@ -943,6 +943,22 @@ tarjetas se reparten el espacio sobrante (`grid-rows-3` + `min-h-0` en cada una)
 tener alto propio: en un teléfono corto se encogen, pero siguen cabiendo las tres. En
 tablet horizontal pasan a `grid-cols-3`, una al lado de la otra.
 
+### Pantalla completa
+
+En la cabecera del inicio hay un botón que pone la app a pantalla completa (`lib/pantalla.js`).
+No es un adorno: la barra de direcciones de Chrome se come una franja de alto, y esta pantalla
+está calculada al milímetro para caber sin desplazarse. En la tablet del mostrador y en el
+televisor del salón, que pasan el día con la app abierta, esa franja sobra.
+
+**Solo aparece donde el navegador lo soporta.** En Android existe la API; en el iPhone no
+—Safari nunca la implementó fuera del vídeo—, así que ahí el botón no se dibuja: es mejor que
+uno que no hace nada. La comprobación mira `fullscreenEnabled` y no solo si el método existe,
+porque dentro de un iframe sin permiso el método está pero la llamada se rechaza.
+
+El icono se mantiene sincronizado escuchando `fullscreenchange`, no solo con lo que hace el
+botón: en Android se sale de pantalla completa con el botón atrás del sistema, y sin escuchar
+el evento el icono se quedaría al revés.
+
 El listado de horarios que antes vivía en esa pantalla se cambió por una sola pastilla con
 la próxima clase, que salta directo al mapa de puestos: reservar sigue siendo un toque
 desde el inicio. El resto de horarios está a un toque, en la disciplina. Las tarjetas

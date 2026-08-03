@@ -137,6 +137,24 @@ export function IconoMas({ className = 'w-5 h-5' }) {
   );
 }
 
+/** Cuatro esquinas hacia afuera: entrar a pantalla completa. */
+export function IconoExpandir({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M9 4H4v5M20 9V4h-5M15 20h5v-5M4 15v5h5" />
+    </svg>
+  );
+}
+
+/** Las mismas esquinas hacia adentro: salir. */
+export function IconoContraer({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M4 9h5V4M20 9h-5V4M20 15h-5v5M4 15h5v5" />
+    </svg>
+  );
+}
+
 export function IconoCerrar({ className = 'w-5 h-5' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} {...base}>
