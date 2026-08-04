@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { api, descargar } from '../api/client.js';
-import { Aviso, Boton, Cargando, Insignia, Vacio } from '../components/ui.jsx';
+import { Aviso, Boton, Campo, Cargando, Entrada, Insignia, Vacio } from '../components/ui.jsx';
 import { IconoCalendario, IconoCheck, IconoFlecha, IconoMusica } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
 
@@ -243,6 +243,8 @@ export default function Reserva() {
               <IconoFlecha />
             </Boton>
           </Link>
+
+          <CancelarPuesto reserva={reserva} />
         </div>
       )}
 
@@ -492,6 +494,114 @@ function EsperandoPago({ reserva, acento, notas }) {
       <p className="mt-8 text-xs text-humo-500">
         Si ya pagaste, espera unos segundos: la confirmación llega sola. No cierres esta
         página.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Soltar el puesto escribiendo el nombre.
+ *
+ * SE PIDE EL NOMBRE, NO LA SESIÓN. Desde que el gimnasio dejó de pedir teléfono,
+ * el nombre es lo único que se da al reservar; y como muchas reservas se hacen
+ * en la tablet del mostrador, la sesión se queda en un aparato que no es el de
+ * la persona. Sin esto no podía soltar su propio puesto.
+ *
+ * El nombre por sí solo no abre nada: hace falta estar en la página de ESTA
+ * reserva, o sea tener su código.
+ *
+ * El plazo lo decide el servidor y aquí solo se anticipa para no ofrecer un
+ * botón que va a fallar: pasado el límite se explica en vez de dejar intentarlo.
+ */
+function CancelarPuesto({ reserva }) {
+  const navegar = useNavigate();
+  const queryClient = useQueryClient();
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState('');
+  const [error, setError] = useState(null);
+  const [cancelando, setCancelando] = useState(false);
+
+  const { data: config } = useQuery({ queryKey: ['config'], queryFn: api.configuracion });
+  const horas = config?.horasLimiteCancelacion ?? 8;
+  const faltan = new Date(reserva.clase.inicioEn).getTime() - Date.now();
+  const aTiempo = faltan > horas * 3600_000;
+
+  const cancelar = async () => {
+    setError(null);
+    setCancelando(true);
+    try {
+      await api.cancelarReserva(reserva.codigo, nombre.trim());
+      queryClient.invalidateQueries();
+      navegar('/', { replace: true });
+    } catch (e) {
+      setError(e.message);
+      setCancelando(false);
+    }
+  };
+
+  if (!aTiempo) {
+    return (
+      <p className="pt-2 text-center text-xs text-humo-500">
+        Ya no se puede cancelar por la app: el plazo son {horas} horas antes de la clase. Habla
+        con recepción.
+      </p>
+    );
+  }
+
+  if (!abierto) {
+    return (
+      <button
+        onClick={() => setAbierto(true)}
+        className="w-full py-2 text-center text-sm text-humo-500 hover:text-alerta transition-colors"
+      >
+        Cancelar mi puesto
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-carbon-600 bg-carbon-700/50 p-4 space-y-3">
+      <p className="text-sm">
+        Escribe <strong>tu nombre</strong>, tal como reservaste, para soltar el puesto{' '}
+        <strong>{reserva.puestoCodigo}</strong>.
+      </p>
+
+      <Campo etiqueta="Tu nombre">
+        <Entrada
+          autoFocus
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && nombre.trim().length >= 2 && cancelar()}
+          placeholder="Nombre y apellido"
+          autoComplete="name"
+        />
+      </Campo>
+
+      {error && <Aviso>{error}</Aviso>}
+
+      <div className="flex gap-2">
+        <Boton
+          variante="peligro"
+          className="flex-1"
+          disabled={nombre.trim().length < 2}
+          cargando={cancelando}
+          onClick={cancelar}
+        >
+          Sí, cancelar
+        </Boton>
+        <Boton
+          variante="secundario"
+          onClick={() => {
+            setAbierto(false);
+            setError(null);
+          }}
+        >
+          Volver
+        </Boton>
+      </div>
+
+      <p className="text-xs text-humo-500">
+        Se puede hasta {horas} horas antes de la clase. Después hay que hablar con recepción.
       </p>
     </div>
   );

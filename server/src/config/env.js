@@ -68,7 +68,9 @@ export const env = {
   clientDist: path.join(rootDir, 'client/dist'),
   // Horas antes del inicio hasta las que el cliente puede cancelar solo.
   // Pasado ese punto tiene que hablar con recepcion; el admin siempre puede.
-  horasLimiteCancelacion: Number(process.env.HORAS_LIMITE_CANCELACION ?? 2),
+  // Ocho por decision del gimnasio: da margen a revender el puesto de una clase
+  // de la manana avisando la noche anterior.
+  horasLimiteCancelacion: Number(process.env.HORAS_LIMITE_CANCELACION ?? 8),
 
   // Cuantos puestos puede tomar una misma persona en una misma clase. Mas de
   // uno porque una pareja va junta y paga uno solo; con tope para que nadie

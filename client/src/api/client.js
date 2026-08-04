@@ -84,7 +84,10 @@ export const api = {
   crearReserva: (datos) => pedir('/reservas', { metodo: 'POST', cuerpo: datos }),
   reserva: (codigo) => pedir(`/reservas/${codigo}`),
   misReservas: () => pedir('/mis-reservas'),
-  cancelarReserva: (codigo) => pedir(`/reservas/${codigo}/cancelar`, { metodo: 'POST' }),
+  // El nombre vale como prueba de que la reserva es tuya cuando la sesión quedó
+  // en otro aparato (la tablet del mostrador, el celular de un amigo).
+  cancelarReserva: (codigo, nombre) =>
+    pedir(`/reservas/${codigo}/cancelar`, { metodo: 'POST', cuerpo: { nombre } }),
   recuperarReserva: (codigo, telefono) =>
     pedir('/reservas/recuperar', { metodo: 'POST', cuerpo: { codigo, telefono } }),
   configuracion: () => pedir('/configuracion'),

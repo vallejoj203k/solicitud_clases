@@ -290,6 +290,20 @@ exige la aplicación, no la columna.
 tildes ni mayúsculas). Antes solo valía el teléfono, y desde este cambio la mayoría de
 reservas no tienen ninguno. El código solo no basta, a propósito.
 
+**Cancelar también vale con el nombre.** Hasta ahora hacía falta la sesión del dispositivo, y
+eso dejaba fuera a quien reservó en la tablet del mostrador o en el celular de un amigo: la
+sesión se quedaba en aquel aparato. Ahora, desde la pantalla de la reserva, se escribe el
+nombre con el que se reservó y el puesto se suelta. El nombre por sí solo no abre nada —hay
+que estar en la página de esa reserva, o sea tener su código— y se compara ignorando tildes y
+mayúsculas, porque nadie escribe su propio nombre dos veces igual.
+
+El plazo es de **8 horas** antes del inicio (`HORAS_LIMITE_CANCELACION`, antes 2): da margen
+a revender el puesto de una clase de la mañana avisando la noche anterior. Pasado ese punto
+la pantalla ni siquiera ofrece el botón —explica el plazo y remite a recepción—, y el
+servidor lo rechaza igual con `409 FUERA_DE_PLAZO`. El admin no tiene límite. Un puesto
+apartado y **sin pagar** se suelta siempre, sin plazo: no hay nada que devolver y retenerlo
+solo le quita el cupo a quien sí va a pagar.
+
 **El teléfono era la identidad, y eso tuvo un filo.** `upsertCliente` hace un upsert sobre
 `Usuario.telefono`, que es único. Si dos personas distintas entran con el mismo número —lo
 típico al pasar al software reservas que estaban en papel, poniendo un número de relleno

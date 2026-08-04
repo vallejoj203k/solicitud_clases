@@ -269,11 +269,30 @@ publicRouter.get(
   })
 );
 
+/**
+ * Cancelar un puesto.
+ *
+ * Vale la sesión del dispositivo O el nombre con el que se reservó. Lo segundo
+ * hace falta desde que el gimnasio dejó de pedir teléfono: quien reservó en la
+ * tablet del mostrador no tiene sesión en su celular, y sin esto no podía soltar
+ * su puesto. El nombre solo no abre nada: va junto al código de la reserva.
+ */
 publicRouter.post(
   '/reservas/:codigo/cancelar',
   asyncHandler(async (req, res) => {
-    if (!req.usuario?.sub) throw new AppError('Sesión no encontrada.', 401, 'NO_AUTENTICADO');
-    const reserva = await cancelarReserva({ codigo: req.params.codigo, usuarioId: req.usuario.sub });
+    const { nombre } = z
+      .object({ nombre: z.string().trim().max(60).optional() })
+      .parse(req.body ?? {});
+
+    if (!req.usuario?.sub && !nombre) {
+      throw new AppError('Escribe tu nombre para cancelar.', 401, 'NO_AUTENTICADO');
+    }
+
+    const reserva = await cancelarReserva({
+      codigo: req.params.codigo,
+      usuarioId: req.usuario?.sub,
+      nombre,
+    });
     enviarCancelacion(reserva).catch(() => {});
     res.json(serializarReserva(reserva));
   })
@@ -285,7 +304,10 @@ publicRouter.post(
  */
 const recuperacion = z.object({
   codigo: z.string().trim().min(4).max(12),
-  telefono: z.string().trim().min(7).max(20),
+  // Se llama `telefono` por compatibilidad, pero acepta el nombre: el mínimo
+  // baja a 2 porque exigir 7 caracteres dejaba fuera a cualquiera con un nombre
+  // corto.
+  telefono: z.string().trim().min(2).max(60),
 });
 
 publicRouter.post(
