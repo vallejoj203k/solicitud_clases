@@ -69,6 +69,7 @@ Abre <http://localhost:5173>.
 | `npm run admin:listar` | Muestra los administradores que existen en la base |
 | `npm run admin:crear -- --telefono <tel> --password "<clave>"` | Crea un admin o le cambia la contraseña |
 | `node server/scripts/admin.mjs revisar-puestos` | Busca reservas cuyo puesto ya no existe en su salón |
+| `node server/scripts/admin.mjs revisar-nombres` | Busca personas distintas colapsadas bajo un mismo teléfono |
 | `npm run db:backup` | Copia comprimida de la base en `respaldos/` (requiere `pg_dump`) |
 
 > El `.env` vive en la raíz para compartirlo entre `client` y `server`. Como el CLI de
@@ -269,6 +270,24 @@ gimnasio opera en `America/Bogota`, así que «las 06:00» no es una franja fija
 sobre las clases de un rango —decenas, no miles— comparar la hora local ya calculada es más
 simple y no puede desalinearse con lo que el administrador ve en pantalla, que sale de ese
 mismo `horaLocal`.
+
+**El teléfono es la identidad, y eso tiene un filo.** `upsertCliente` hace un upsert sobre
+`Usuario.telefono`, que es único. Si dos personas distintas entran con el mismo número —lo
+típico al pasar al software reservas que estaban en papel, poniendo un número de relleno
+porque el gimnasio no lo pide— **quedan colgando del mismo cliente**, y como el upsert
+respeta el nombre nuevo que se escriba, cada reserva pisa el nombre de la anterior: al final
+todos los puestos muestran el último nombre tecleado. Además, a partir del quinto puesto la
+reserva se rechaza con `409 TOPE_POR_PERSONA`, porque para el sistema es una sola persona
+acaparando.
+
+`node server/scripts/admin.mjs revisar-nombres` diagnostica eso sin tocar nada. La señal que
+busca es **misma persona + misma clase**: veinte reservas repartidas en veinte clases es un
+cliente fiel, pero cuatro puestos en la clase del martes a las 6 son cuatro personas bajo un
+mismo número. Informa también de si las reservas traen `nombreInvitado`, que es el único
+sitio donde el nombre real de cada asistente sobrevive.
+
+Cuando pasa, lo que se pierde son los **nombres**; la clase, el puesto y el **orden**
+(`Reserva.creadoEn`) quedan intactos.
 
 **Las canceladas se ven en el panel, no en la app.** `listarClases` filtra por `ACTIVA`
 salvo que se le pase `incluirCanceladas`, que solo hace la ruta del admin. Antes el panel
