@@ -16,7 +16,7 @@ import {
   eliminarClasesEnLote,
 } from '../services/clase.service.js';
 import { actualizarEstadoPago } from '../services/pago.service.js';
-import { cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
+import { cambiarAsistente, cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
 import { enviarConfirmacionReserva } from '../services/notificaciones.service.js';
 import { generarIcs } from '../utils/ics.js';
 import {
@@ -200,6 +200,23 @@ adminRouter.post(
   '/reservas/:id/cancelar',
   asyncHandler(async (req, res) => {
     res.json(await cancelarReserva({ reservaId: req.params.id, porAdmin: true }));
+  })
+);
+
+/**
+ * Corregir de quién es un puesto.
+ *
+ * Se usa cuando varias personas quedaron bajo un mismo teléfono y comparten
+ * nombre: escribe el nombre en la reserva, no en la cuenta, para no arrastrar a
+ * las demás. Cadena vacía lo devuelve al nombre de la cuenta.
+ */
+adminRouter.patch(
+  '/reservas/:id/asistente',
+  asyncHandler(async (req, res) => {
+    const { nombre } = z
+      .object({ nombre: z.string().max(60).nullish() })
+      .parse(req.body);
+    res.json(await cambiarAsistente(req.params.id, nombre ?? null));
   })
 );
 
