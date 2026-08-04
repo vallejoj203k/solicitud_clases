@@ -330,14 +330,41 @@ export async function listarReservasDeUsuario(usuarioId) {
 }
 
 /** Cancela una reserva. Los clientes solo pueden cancelar las suyas y antes de la clase. */
-export async function cancelarReserva({ reservaId, codigo, usuarioId, porAdmin = false }) {
+export async function cancelarReserva({
+  reservaId,
+  codigo,
+  usuarioId,
+  nombre,
+  porAdmin = false,
+}) {
   const where = reservaId ? { id: reservaId } : { codigo: String(codigo).toUpperCase() };
   const reserva = await prisma.reserva.findUnique({ where, include: incluirCompleto });
   if (!reserva) throw noEncontrado('Reserva');
 
   if (!porAdmin) {
-    if (reserva.usuarioId !== usuarioId) {
-      throw new AppError('Esta reserva no es tuya.', 403, 'SIN_PERMISO');
+    // Dos formas de demostrar que la reserva es tuya:
+    //
+    //  - la SESION del dispositivo, que es la de siempre;
+    //  - el NOMBRE, que desde que el gimnasio dejo de pedir telefono es lo unico
+    //    que se da al reservar. Sin esto, quien reservo desde la tablet del
+    //    mostrador -o desde el celular de un amigo- no podia cancelar lo suyo,
+    //    porque la sesion se quedo en aquel aparato.
+    //
+    // El nombre por si solo no abre nada: hace falta ademas el CODIGO de la
+    // reserva, que solo tiene quien reservo.
+    const porSesion = Boolean(usuarioId) && reserva.usuarioId === usuarioId;
+    const escrito = nombre?.trim();
+    const porNombre =
+      Boolean(escrito) &&
+      (igualIgnorandoTildes(reserva.usuario.nombre, escrito) ||
+        (reserva.nombreInvitado && igualIgnorandoTildes(reserva.nombreInvitado, escrito)));
+
+    if (!porSesion && !porNombre) {
+      throw new AppError(
+        escrito ? 'Ese nombre no coincide con el de la reserva.' : 'Esta reserva no es tuya.',
+        403,
+        'SIN_PERMISO'
+      );
     }
     // El cliente cancela solo hasta N horas antes; despues el puesto ya no se
     // alcanza a revender y la cancelacion pasa por recepcion. El admin no tiene
