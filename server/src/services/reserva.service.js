@@ -52,6 +52,38 @@ export async function upsertCliente(tx, { nombre, telefono, email, aceptaDatos }
 }
 
 /**
+ * Corregir de quien es un puesto, sin tocar la reserva.
+ *
+ * PARA QUE EXISTE. La identidad del cliente es el telefono, y cuando varias
+ * personas entran con el mismo numero -pasar a la app las reservas que estaban
+ * en papel, con un numero de relleno- todas quedan colgando del mismo usuario y
+ * cada una pisa el nombre de la anterior. Los puestos, las clases, los pagos y
+ * el orden quedan bien; lo unico que queda mal es el nombre.
+ *
+ * Se escribe en `nombreInvitado`, que es justo "para quien es este puesto", y NO
+ * en `Usuario.nombre`: cambiar el usuario volveria a arrastrar a todas las demas
+ * reservas que comparten ese telefono, que es el problema de origen. Asi cada
+ * puesto lleva su nombre y son independientes.
+ *
+ * Vacio lo deja en null y el puesto vuelve a mostrar el nombre de la cuenta.
+ */
+export async function cambiarAsistente(reservaId, nombre) {
+  const reserva = await prisma.reserva.findUnique({ where: { id: reservaId } });
+  if (!reserva) throw noEncontrado('Reserva');
+
+  const limpio = nombre?.trim() || null;
+  if (limpio && limpio.length < 2) {
+    throw new AppError('El nombre es muy corto.', 422, 'NOMBRE_INVALIDO');
+  }
+
+  return prisma.reserva.update({
+    where: { id: reservaId },
+    data: { nombreInvitado: limpio },
+    include: incluirCompleto,
+  });
+}
+
+/**
  * Crea una reserva.
  *
  * MANEJO DE CONCURRENCIA (dos personas tocando el mismo puesto a la vez):

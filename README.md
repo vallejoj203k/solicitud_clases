@@ -287,7 +287,15 @@ mismo número. Informa también de si las reservas traen `nombreInvitado`, que e
 sitio donde el nombre real de cada asistente sobrevive.
 
 Cuando pasa, lo que se pierde son los **nombres**; la clase, el puesto y el **orden**
-(`Reserva.creadoEn`) quedan intactos.
+(`Reserva.creadoEn`) quedan intactos. Por eso **no hay que rehacer nada**: en la vista de la
+clase, cada inscrito lleva un botón *editar* que corrige de quién es ese puesto
+(`PATCH /api/admin/reservas/:id/asistente`).
+
+El nombre se escribe en `Reserva.nombreInvitado` y **no** en `Usuario.nombre`, a propósito:
+tocar el usuario volvería a arrastrar a todas las demás reservas que comparten ese teléfono,
+que es justo el problema de origen. Así cada puesto lleva su nombre y son independientes.
+Guardar con Enter, cancelar con Escape —son veinte puestos seguidos—, y vaciar el campo
+devuelve el puesto al nombre de la cuenta.
 
 **Las canceladas se ven en el panel, no en la app.** `listarClases` filtra por `ACTIVA`
 salvo que se le pase `incluirCanceladas`, que solo hace la ruta del admin. Antes el panel
@@ -787,6 +795,7 @@ zona con horario de verano.
 | `GET` | `/api/admin/clases/:id/reservas` | Inscritos con puesto y estado de pago |
 | `PATCH` | `/api/admin/reservas/:id/pago` | Marcar pago |
 | `POST` | `/api/admin/reservas/:id/cancelar` | Cancelar reserva |
+| `PATCH` | `/api/admin/reservas/:id/asistente` | Corregir de quién es el puesto (vacío = nombre de la cuenta) |
 | `POST` | `/api/admin/reservas/:id/asistencia` | Check-in |
 | `GET` | `/api/admin/reportes/pagos[.csv]` | Reporte filtrable y exportación |
 | `GET` | `/api/admin/clientes[/:id]` | Clientes e historial |

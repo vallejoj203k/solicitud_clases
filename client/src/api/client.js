@@ -133,6 +133,14 @@ export const api = {
       pedir(`/admin/reservas/${id}/pago`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
     cancelarReserva: (id) =>
       pedir(`/admin/reservas/${id}/cancelar`, { metodo: 'POST', tipoToken: 'admin' }),
+    // Corregir de quién es un puesto sin tocar la reserva. Nombre vacío lo
+    // devuelve al nombre de la cuenta.
+    cambiarAsistente: (id, nombre) =>
+      pedir(`/admin/reservas/${id}/asistente`, {
+        metodo: 'PATCH',
+        cuerpo: { nombre },
+        tipoToken: 'admin',
+      }),
     marcarAsistencia: (id, asistio) =>
       pedir(`/admin/reservas/${id}/asistencia`, { metodo: 'POST', cuerpo: { asistio }, tipoToken: 'admin' }),
     reportePagos: ({ desde, hasta, tipo, estadoPago } = {}) => {

@@ -7,6 +7,7 @@ import {
   BarraDisponibilidad,
   Boton,
   Cargando,
+  Entrada,
   Hoja,
   Insignia,
   Seleccion,
@@ -29,6 +30,9 @@ export default function AdminClaseDetalle() {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [pagoAbierto, setPagoAbierto] = useState(null);
+  // Id de la reserva cuyo nombre se está corrigiendo. Se edita de a una para no
+  // dejar media docena de campos abiertos sin guardar.
+  const [editando, setEditando] = useState(null);
   const [error, setError] = useState(null);
 
   const { data, isLoading } = useQuery({
@@ -56,6 +60,15 @@ export default function AdminClaseDetalle() {
   const marcarAsistencia = useMutation({
     mutationFn: ({ reservaId, asistio }) => api.admin.marcarAsistencia(reservaId, asistio),
     onSuccess: refrescar,
+    onError: (e) => setError(e.message),
+  });
+
+  const cambiarAsistente = useMutation({
+    mutationFn: ({ reservaId, nombre }) => api.admin.cambiarAsistente(reservaId, nombre),
+    onSuccess: () => {
+      setEditando(null);
+      refrescar();
+    },
     onError: (e) => setError(e.message),
   });
 
@@ -136,9 +149,32 @@ export default function AdminClaseDetalle() {
                         {r.puestoCodigo}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold truncate">
-                          {r.nombreInvitado ?? r.usuario.nombre}
-                        </p>
+                        {editando === r.id ? (
+                          <NombreDelPuesto
+                            inicial={r.nombreInvitado ?? r.usuario.nombre}
+                            guardando={cambiarAsistente.isPending}
+                            onGuardar={(nombre) =>
+                              cambiarAsistente.mutate({ reservaId: r.id, nombre })
+                            }
+                            onCancelar={() => setEditando(null)}
+                          />
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setError(null);
+                              setEditando(r.id);
+                            }}
+                            title="Corregir de quién es este puesto"
+                            className="group flex items-center gap-1.5 max-w-full text-left"
+                          >
+                            <span className="font-semibold truncate">
+                              {r.nombreInvitado ?? r.usuario.nombre}
+                            </span>
+                            <span className="shrink-0 text-[11px] font-bold text-humo-500 group-hover:text-volt-500 transition-colors">
+                              editar
+                            </span>
+                          </button>
+                        )}
                         <p className="text-xs text-humo-500">
                           {r.nombreInvitado && `reservó ${r.usuario.nombre} · `}
                           {r.usuario.telefono} · {r.codigo}
@@ -318,5 +354,50 @@ function HojaPago({ reserva, onCerrar, onGuardado }) {
         </div>
       </div>
     </Hoja>
+  );
+}
+
+/**
+ * Corregir de quién es un puesto.
+ *
+ * Existe por un caso muy concreto: cuando el gimnasio pasa a la app reservas
+ * que tenía en papel y escribe el mismo teléfono de relleno para todas, todas
+ * quedan bajo un mismo cliente y acaban mostrando el último nombre tecleado.
+ * Los puestos y el orden están bien; lo único que hay que arreglar es esto.
+ *
+ * Guarda con Enter y cancela con Escape: son veinte puestos seguidos y pasar
+ * por el ratón en cada uno sería el doble de trabajo.
+ */
+function NombreDelPuesto({ inicial, guardando, onGuardar, onCancelar }) {
+  const [texto, setTexto] = useState(inicial);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Entrada
+        value={texto}
+        autoFocus
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setTexto(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onGuardar(texto);
+          if (e.key === 'Escape') onCancelar();
+        }}
+        aria-label="Nombre de quien ocupa el puesto"
+        className="h-9 py-0 text-sm"
+      />
+      <button
+        onClick={() => onGuardar(texto)}
+        disabled={guardando}
+        className="shrink-0 px-2.5 h-9 rounded-xl bg-volt-500 text-carbon-900 text-xs font-bold disabled:opacity-40"
+      >
+        {guardando ? '…' : 'Guardar'}
+      </button>
+      <button
+        onClick={onCancelar}
+        className="shrink-0 px-2 h-9 rounded-xl text-xs font-semibold text-humo-500 hover:text-humo-100"
+      >
+        Cancelar
+      </button>
+    </div>
   );
 }
