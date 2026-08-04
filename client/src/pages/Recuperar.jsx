@@ -79,13 +79,16 @@ export default function Recuperar() {
                 autoFocus
               />
             </Campo>
-            <Campo etiqueta="Teléfono">
+            {/* Antes pedía el teléfono. Desde que el gimnasio dejó de pedirlo,
+                la mayoría de reservas no tienen ninguno, así que también vale el
+                nombre: es algo que sabe quien reservó y que, junto al código, no
+                se adivina desde fuera. */}
+            <Campo etiqueta="Tu nombre" ayuda="El mismo con el que reservaste. También vale tu teléfono, si lo diste.">
               <Entrada
                 value={telefono}
                 onChange={(e) => setTelefono(e.target.value)}
-                placeholder="300 123 4567"
-                inputMode="tel"
-                autoComplete="tel"
+                placeholder="Nombre y apellido"
+                autoComplete="name"
               />
             </Campo>
           </div>
@@ -100,7 +103,7 @@ export default function Recuperar() {
             type="submit"
             className="w-full mt-6"
             cargando={cargando}
-            disabled={codigo.trim().length < 4 || telefono.replace(/\D/g, '').length < 7}
+            disabled={codigo.trim().length < 4 || telefono.trim().length < 2}
           >
             Recuperar
           </Boton>

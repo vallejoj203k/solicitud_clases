@@ -233,12 +233,15 @@ function FichaPuesto({ puesto, acento, onCerrar, onAsistio, onCobrar, guardando 
             {r.nombreInvitado && (
               <p className="text-xs text-humo-500 truncate">reservó {r.usuario.nombre}</p>
             )}
-            <a
-              href={`tel:${r.usuario.telefono}`}
-              className="text-sm text-humo-500 hover:text-humo-100"
-            >
-              {r.usuario.telefono}
-            </a>
+            {/* Solo si lo dieron: el gimnasio ya no lo pide. */}
+            {r.usuario.telefono && (
+              <a
+                href={`tel:${r.usuario.telefono}`}
+                className="text-sm text-humo-500 hover:text-humo-100"
+              >
+                {r.usuario.telefono}
+              </a>
+            )}
           </div>
         </div>
 

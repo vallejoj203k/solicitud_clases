@@ -1,0 +1,18 @@
+-- El telefono deja de ser obligatorio.
+--
+-- POR QUE. El gimnasio no le pide el numero a nadie, asi que al pasar a la app
+-- las reservas que tenia en papel se escribio un numero de relleno para todas.
+-- Como el telefono es la identidad -`upsertCliente` hace upsert sobre el-,
+-- todas esas personas quedaron colgando del MISMO usuario y cada reserva fue
+-- pisando el nombre de la anterior: los puestos acabaron mostrando todos el
+-- ultimo nombre tecleado.
+--
+-- La solucion no es un mejor relleno: es dejar de exigir un dato que no existe.
+-- Sin telefono, cada reserva crea su propia persona y ya no hay nada por lo que
+-- dos desconocidos puedan fundirse.
+--
+-- El indice unico se queda: en Postgres varios NULL no chocan entre si, asi que
+-- sigue impidiendo dos cuentas con el MISMO numero -que es lo que protege- sin
+-- estorbar a las que no tienen ninguno. Los admin siguen necesitandolo para
+-- entrar, pero eso lo exige la aplicacion, no la columna.
+ALTER TABLE "Usuario" ALTER COLUMN "telefono" DROP NOT NULL;

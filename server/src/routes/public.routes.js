@@ -127,7 +127,9 @@ const nuevaReserva = z.object({
   claseId: z.string().min(1),
   puestoCodigo: z.string().min(1).max(6),
   nombre: z.string().trim().min(2, 'Escribe tu nombre').max(60).optional(),
-  telefono: z.string().trim().min(7, 'Teléfono inválido').max(20).optional(),
+  // Opcional: el gimnasio no lo pide. Si llega, sirve para reconocer a quien ya
+  // reservó antes; si no, la reserva se guarda igual.
+  telefono: z.string().trim().max(20).optional().or(z.literal('')),
   email: z.string().trim().email('Correo inválido').max(120).optional().or(z.literal('')),
   aceptaDatos: z.boolean().optional(),
   // Para quién es el puesto, cuando se reserva para un acompañante.
@@ -139,17 +141,19 @@ publicRouter.post(
   asyncHandler(async (req, res) => {
     const datos = nuevaReserva.parse(req.body);
 
-    // SIEMPRE se piden nombre y telefono, aunque el dispositivo ya tenga sesion
-    // de cliente. Antes se reusaba esa sesion y se saltaba el formulario, que
+    // SIEMPRE se pide el nombre, aunque el dispositivo ya tenga sesion de
+    // cliente. Antes se reusaba esa sesion y se saltaba el formulario, que
     // ahorraba escribir pero acababa mal en el caso real del gimnasio: la
     // tablet del mostrador -o el celular que se pasa a un amigo- reservaba a
     // nombre de quien lo hubiera usado antes.
     //
-    // Quien resuelve la identidad es el TELEFONO: `upsertCliente` busca por el,
-    // asi que volver a reservar con el mismo numero reusa la misma persona sin
-    // duplicarla, y si escribe el nombre distinto se le respeta el nuevo.
-    if (!datos.nombre || !datos.telefono) {
-      throw new AppError('Necesitamos tu nombre y tu teléfono.', 422, 'DATOS_INCOMPLETOS');
+    // EL TELEFONO YA NO SE PIDE. El gimnasio no lo usa, y exigirlo salia caro:
+    // recepcion escribia un numero de relleno igual para todos y, como el
+    // telefono era la identidad, todas esas personas acababan siendo el mismo
+    // cliente con el ultimo nombre tecleado. Sin numero, cada reserva es su
+    // propia persona y eso no puede volver a pasar.
+    if (!datos.nombre) {
+      throw new AppError('Necesitamos tu nombre.', 422, 'DATOS_INCOMPLETOS');
     }
     // Ley 1581: sin autorizacion explicita no se guardan los datos.
     if (!datos.aceptaDatos) {

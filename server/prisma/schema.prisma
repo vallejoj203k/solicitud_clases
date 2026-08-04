@@ -52,9 +52,14 @@ enum EstadoPedidoMusica {
 model Usuario {
   id           String   @id @default(cuid())
   nombre       String
-  // El telefono es el identificador natural del cliente: con el reconocemos a
-  // quien ya reservo antes y le evitamos volver a llenar el formulario.
-  telefono     String   @unique
+  // Opcional: el gimnasio no le pide el numero a nadie. Cuando lo hay sirve
+  // para reconocer a quien ya reservo antes; cuando no, cada reserva crea su
+  // propia persona y no hay forma de que dos desconocidos se fundan en una.
+  //
+  // Sigue siendo unico -en Postgres varios NULL no chocan-, asi que impide dos
+  // cuentas con el mismo numero sin estorbar a las que no tienen ninguno. Los
+  // admin si necesitan uno para entrar, pero eso lo exige la aplicacion.
+  telefono     String?  @unique
   email        String?
   rol          Rol      @default(CLIENTE)
   // Solo los admin tienen password. Los clientes no inician sesion.
