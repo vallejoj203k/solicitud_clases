@@ -141,6 +141,14 @@ export const api = {
         cuerpo: { nombre },
         tipoToken: 'admin',
       }),
+    // Corregir varios nombres de una clase de golpe. Las parejas van
+    // explícitas: el servidor no reparte por su cuenta.
+    cambiarAsistentes: (claseId, cambios) =>
+      pedir(`/admin/clases/${claseId}/asistentes`, {
+        metodo: 'PATCH',
+        cuerpo: { cambios },
+        tipoToken: 'admin',
+      }),
     marcarAsistencia: (id, asistio) =>
       pedir(`/admin/reservas/${id}/asistencia`, { metodo: 'POST', cuerpo: { asistio }, tipoToken: 'admin' }),
     reportePagos: ({ desde, hasta, tipo, estadoPago } = {}) => {

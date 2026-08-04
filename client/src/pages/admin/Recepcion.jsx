@@ -218,7 +218,7 @@ function PagosPorConfirmar() {
               <div className="min-w-0">
                 <p className="font-bold tracking-tight truncate">{p.usuario.nombre}</p>
                 <p className="text-xs text-humo-500">
-                  {p.usuario.telefono}
+                  {p.usuario.telefono ?? 'Sin teléfono'}
                   {p.nombreInvitado && ` · puesto para ${p.nombreInvitado}`}
                 </p>
                 <p className="mt-1.5 text-sm">
@@ -314,7 +314,7 @@ function ResultadosBusqueda({ resultados, cargando }) {
                 {r.nombreInvitado ?? r.usuario.nombre}
               </p>
               <p className="text-xs text-humo-500">
-                {r.usuario.telefono}
+                {r.usuario.telefono ?? 'Sin teléfono'}
                 {r.nombreInvitado && ` · reservó ${r.usuario.nombre}`}
               </p>
               <p className="mt-1.5 text-sm">

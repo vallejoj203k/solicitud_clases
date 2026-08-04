@@ -147,7 +147,7 @@ export default function AdminPagos() {
                             <td className="px-4 py-3 whitespace-nowrap">{f.tipoClase}</td>
                             <td className="px-4 py-3">
                               <p className="truncate max-w-[180px]">{f.cliente}</p>
-                              <p className="text-xs text-humo-500">{f.telefono}</p>
+                              {f.telefono && <p className="text-xs text-humo-500">{f.telefono}</p>}
                             </td>
                             <td className="px-4 py-3">
                               <p className="truncate max-w-[160px]">{f.asiste}</p>

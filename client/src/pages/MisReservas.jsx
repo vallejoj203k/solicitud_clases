@@ -50,7 +50,7 @@ export default function MisReservas() {
         </Link>
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-extrabold tracking-tightest">Mis reservas</h1>
-          {cliente && <p className="text-xs text-humo-500 truncate">{cliente.nombre} · {cliente.telefono}</p>}
+          {cliente && <p className="text-xs text-humo-500 truncate">{cliente.nombre}{cliente.telefono ? ` · ${cliente.telefono}` : ''}</p>}
         </div>
       </header>
 

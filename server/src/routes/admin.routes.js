@@ -16,7 +16,12 @@ import {
   eliminarClasesEnLote,
 } from '../services/clase.service.js';
 import { actualizarEstadoPago } from '../services/pago.service.js';
-import { cambiarAsistente, cancelarReserva, marcarAsistencia } from '../services/reserva.service.js';
+import {
+  cambiarAsistente,
+  cambiarAsistentes,
+  cancelarReserva,
+  marcarAsistencia,
+} from '../services/reserva.service.js';
 import { enviarConfirmacionReserva } from '../services/notificaciones.service.js';
 import { generarIcs } from '../utils/ics.js';
 import {
@@ -210,6 +215,33 @@ adminRouter.post(
  * nombre: escribe el nombre en la reserva, no en la cuenta, para no arrastrar a
  * las demás. Cadena vacía lo devuelve al nombre de la cuenta.
  */
+/**
+ * Corregir varios nombres de una clase de golpe.
+ *
+ * Las parejas las decide la pantalla y se mandan explícitas: el servidor no
+ * reparte por su cuenta, porque equivocarse en el reparto sería repetir el
+ * problema que se está arreglando.
+ */
+adminRouter.patch(
+  '/clases/:id/asistentes',
+  asyncHandler(async (req, res) => {
+    const { cambios } = z
+      .object({
+        cambios: z
+          .array(
+            z.object({
+              reservaId: z.string().min(1),
+              nombre: z.string().max(60).nullish(),
+            })
+          )
+          .min(1)
+          .max(200),
+      })
+      .parse(req.body);
+    res.json(await cambiarAsistentes(req.params.id, cambios));
+  })
+);
+
 adminRouter.patch(
   '/reservas/:id/asistente',
   asyncHandler(async (req, res) => {

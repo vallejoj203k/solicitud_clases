@@ -49,7 +49,6 @@ export default function Reservar() {
   // quién es: el formulario se llena de cero en cada reserva.
   const haySesion = Boolean(leerToken('cliente'));
   const [nombre, setNombre] = useState('');
-  const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
   const [aceptaDatos, setAceptaDatos] = useState(false);
   const [nombreInvitado, setNombreInvitado] = useState('');
@@ -124,7 +123,6 @@ export default function Reservar() {
         puestoCodigo: puesto,
         nombreInvitado: nombreInvitado.trim() || undefined,
         nombre: nombre.trim(),
-        telefono: telefono.trim(),
         email: email.trim() || undefined,
         aceptaDatos,
       }),
@@ -296,8 +294,6 @@ export default function Reservar() {
         puesto={puesto}
         nombre={nombre}
         setNombre={setNombre}
-        telefono={telefono}
-        setTelefono={setTelefono}
         email={email}
         setEmail={setEmail}
         aceptaDatos={aceptaDatos}
@@ -493,8 +489,6 @@ function HojaConfirmacion({
   puesto,
   nombre,
   setNombre,
-  telefono,
-  setTelefono,
   email,
   setEmail,
   aceptaDatos,
@@ -510,8 +504,8 @@ function HojaConfirmacion({
 }) {
   if (!clase) return null;
 
-  const datosCompletos =
-    nombre.trim().length >= 2 && telefono.replace(/\D/g, '').length >= 7 && aceptaDatos;
+  // El teléfono ya no se pide: basta el nombre y la autorización.
+  const datosCompletos = nombre.trim().length >= 2 && aceptaDatos;
 
   return (
     <Hoja abierta={abierta} onCerrar={onCerrar} titulo="Confirma tu reserva">
@@ -559,22 +553,20 @@ function HojaConfirmacion({
             este aparato: en el mostrador, recordar los datos acababa reservando
             a nombre de quien pasó antes. */}
         <div className="space-y-3">
-            <Campo etiqueta="Tu nombre">
+            {/* Lo único obligatorio. El teléfono se quitó: el gimnasio no lo
+                usa, y exigirlo hacía que recepción escribiera un mismo número
+                de relleno para todos, con lo que todas esas personas acababan
+                siendo el mismo cliente. */}
+            <Campo
+              etiqueta="Tu nombre"
+              ayuda="Con este nombre te reciben en recepción, así que escríbelo completo."
+            >
               <Entrada
                 autoFocus
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
                 placeholder="Nombre y apellido"
                 autoComplete="name"
-              />
-            </Campo>
-            <Campo etiqueta="Teléfono" ayuda="Con él recuperas tu reserva si cambias de celular.">
-              <Entrada
-                value={telefono}
-                onChange={(e) => setTelefono(e.target.value)}
-                placeholder="300 123 4567"
-                inputMode="tel"
-                autoComplete="tel"
               />
             </Campo>
             <Campo etiqueta="Correo (opcional)" ayuda="Te enviamos la confirmación y el recordatorio.">

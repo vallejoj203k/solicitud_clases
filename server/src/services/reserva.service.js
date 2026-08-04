@@ -33,21 +33,36 @@ export async function expirarReservasVencidas(tx = prisma, claseId = undefined) 
   return count;
 }
 
-/** Crea el cliente si es su primera vez; si ya existe actualiza el nombre. */
+/**
+ * Crea el cliente de una reserva.
+ *
+ * SIN TELÉFONO, CADA RESERVA ES UNA PERSONA NUEVA. El gimnasio no pide número,
+ * y ese es justo el punto: no hay ningún dato que distinga a dos personas, así
+ * que no se intenta adivinar. Agrupar por NOMBRE sería peor que no agrupar
+ * -dos "Juan Pérez" distintos acabarían siendo el mismo- y es exactamente el
+ * fallo que ya se pagó una vez, cuando se compartía un número de relleno y cada
+ * reserva pisaba el nombre de la anterior.
+ *
+ * Con teléfono sí se reconoce a quien ya reservó antes: ese sí identifica.
+ */
 export async function upsertCliente(tx, { nombre, telefono, email, aceptaDatos }) {
+  const correo = email?.trim().toLowerCase() || undefined;
+  const sello = aceptaDatos ? { aceptoDatosEn: new Date() } : {};
+
+  if (!telefono?.trim()) {
+    return tx.usuario.create({
+      data: { nombre: nombre.trim(), email: correo, rol: 'CLIENTE', ...sello },
+    });
+  }
+
   const tel = normalizarTelefono(telefono);
   if (tel.length < 7) throw new AppError('El teléfono no es válido.', 422, 'TELEFONO_INVALIDO');
-
-  const correo = email?.trim().toLowerCase() || undefined;
-  // La autorizacion de tratamiento de datos (Ley 1581) se sella con la fecha en
-  // que la persona marco la casilla; queda como constancia.
-  const consentimiento = aceptaDatos ? { aceptoDatosEn: new Date() } : {};
 
   return tx.usuario.upsert({
     where: { telefono: tel },
     // Si vuelve a reservar, respetamos el nombre nuevo que escriba.
-    update: { nombre: nombre.trim(), ...(correo ? { email: correo } : {}), ...consentimiento },
-    create: { nombre: nombre.trim(), telefono: tel, email: correo, rol: 'CLIENTE', ...consentimiento },
+    update: { nombre: nombre.trim(), ...(correo ? { email: correo } : {}), ...sello },
+    create: { nombre: nombre.trim(), telefono: tel, email: correo, rol: 'CLIENTE', ...sello },
   });
 }
 
@@ -103,6 +118,51 @@ export async function cambiarAsistente(reservaId, nombre) {
  *  protege el cupo agregado; el indice hace que sea imposible corromper los
  *  datos aunque alguien escriba por fuera de este servicio.
  */
+/**
+ * Corregir varios nombres de una clase de una sola vez.
+ *
+ * Es la version util del anterior cuando hay veinte puestos que arreglar: la
+ * pantalla empareja cada linea pegada con un puesto y manda las parejas ya
+ * decididas. AQUI NO SE ADIVINA NADA -no se asume orden ni se reparte por
+ * cuenta propia-, porque equivocarse en el reparto seria repetir el problema
+ * que se esta arreglando.
+ *
+ * Va en una transaccion: o se aplican todas o ninguna, para no dejar media
+ * clase corregida si algo falla a mitad.
+ */
+export async function cambiarAsistentes(claseId, parejas) {
+  const ids = parejas.map((p) => p.reservaId);
+  const suyas = await prisma.reserva.findMany({
+    where: { id: { in: ids }, claseId },
+    select: { id: true },
+  });
+
+  // Una reserva de otra clase no se toca aunque venga en la lista.
+  const validas = new Set(suyas.map((r) => r.id));
+  const ajenas = ids.filter((id) => !validas.has(id));
+  if (ajenas.length) {
+    throw new AppError(
+      'Alguna de esas reservas no es de esta clase.',
+      422,
+      'RESERVA_DE_OTRA_CLASE'
+    );
+  }
+
+  const cambios = parejas.map(({ reservaId, nombre }) => {
+    const limpio = nombre?.trim() || null;
+    if (limpio && limpio.length < 2) {
+      throw new AppError(`"${nombre}" es muy corto para ser un nombre.`, 422, 'NOMBRE_INVALIDO');
+    }
+    return prisma.reserva.update({
+      where: { id: reservaId },
+      data: { nombreInvitado: limpio },
+    });
+  });
+
+  await prisma.$transaction(cambios);
+  return { corregidas: cambios.length };
+}
+
 export async function crearReserva({
   claseId,
   puestoCodigo,
@@ -322,23 +382,52 @@ export async function cancelarReserva({ reservaId, codigo, usuarioId, porAdmin =
  * tiene es el dueno de la reserva.
  */
 export async function recuperarAcceso({ codigo, telefono }) {
-  const tel = normalizarTelefono(telefono);
   const reserva = await prisma.reserva.findUnique({
     where: { codigo: String(codigo).trim().toUpperCase() },
     include: incluirCompleto,
   });
 
-  // Mismo error para codigo inexistente y telefono que no coincide: no revelamos
-  // si ese codigo existe.
-  if (!reserva || normalizarTelefono(reserva.usuario.telefono) !== tel) {
+  // Se acepta el TELEFONO o el NOMBRE. Desde que el gimnasio dejo de pedir
+  // numero, la mayoria de reservas no tienen ninguno y exigirlo dejaria a esas
+  // personas sin poder recuperar la suya. El nombre cumple el mismo papel: es
+  // algo que sabe quien reservo y que no se adivina desde fuera junto con el
+  // codigo. El codigo solo no basta a proposito.
+  const escrito = String(telefono ?? '').trim();
+  const digitos = normalizarTelefono(escrito);
+  const suTelefono = reserva?.usuario.telefono
+    ? normalizarTelefono(reserva.usuario.telefono)
+    : null;
+
+  const coincide =
+    reserva &&
+    escrito.length > 0 &&
+    ((suTelefono && digitos.length >= 7 && suTelefono === digitos) ||
+      igualIgnorandoTildes(reserva.usuario.nombre, escrito) ||
+      (reserva.nombreInvitado && igualIgnorandoTildes(reserva.nombreInvitado, escrito)));
+
+  // Mismo error para codigo inexistente y dato que no coincide: no revelamos si
+  // ese codigo existe.
+  if (!coincide) {
     throw new AppError(
-      'No encontramos una reserva con ese código y ese teléfono.',
+      'No encontramos una reserva con ese código y esos datos.',
       404,
       'RECUPERACION_FALLIDA'
     );
   }
 
   return reserva;
+}
+
+/** "José Pérez" y "jose perez" son la misma persona escribiendo con prisa. */
+function igualIgnorandoTildes(a, b) {
+  const limpiar = (t) =>
+    String(t)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+  return limpiar(a) === limpiar(b);
 }
 
 /**

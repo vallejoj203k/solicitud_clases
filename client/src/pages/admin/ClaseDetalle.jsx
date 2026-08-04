@@ -33,6 +33,7 @@ export default function AdminClaseDetalle() {
   // Id de la reserva cuyo nombre se está corrigiendo. Se edita de a una para no
   // dejar media docena de campos abiertos sin guardar.
   const [editando, setEditando] = useState(null);
+  const [corrigiendoLote, setCorrigiendoLote] = useState(false);
   const [error, setError] = useState(null);
 
   const { data, isLoading } = useQuery({
@@ -134,9 +135,22 @@ export default function AdminClaseDetalle() {
 
         <div className="grid lg:grid-cols-[1fr_minmax(280px,380px)] gap-6 items-start">
           <section>
-            <h2 className="font-bold tracking-tight mb-3">
-              Inscritos <span className="text-humo-500 font-normal">({activas.length})</span>
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="font-bold tracking-tight">
+                Inscritos <span className="text-humo-500 font-normal">({activas.length})</span>
+              </h2>
+              {activas.length > 1 && (
+                <button
+                  onClick={() => {
+                    setError(null);
+                    setCorrigiendoLote(true);
+                  }}
+                  className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-volt-500 transition-colors"
+                >
+                  Corregir nombres en lote
+                </button>
+              )}
+            </div>
 
             {activas.length === 0 ? (
               <Vacio titulo="Nadie se ha inscrito todavía" />
@@ -177,7 +191,8 @@ export default function AdminClaseDetalle() {
                         )}
                         <p className="text-xs text-humo-500">
                           {r.nombreInvitado && `reservó ${r.usuario.nombre} · `}
-                          {r.usuario.telefono} · {r.codigo}
+                          {r.usuario.telefono ? `${r.usuario.telefono} · ` : ''}
+                          {r.codigo}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
                           <Insignia tono={r.estadoPago === 'PAGADO' ? 'exito' : r.estadoPago === 'RECHAZADO' ? 'peligro' : 'aviso'}>
@@ -262,6 +277,18 @@ export default function AdminClaseDetalle() {
           </aside>
         </div>
       </div>
+
+      {corrigiendoLote && (
+        <HojaNombresEnLote
+          claseId={id}
+          inscritos={activas}
+          onCerrar={() => setCorrigiendoLote(false)}
+          onListo={() => {
+            setCorrigiendoLote(false);
+            refrescar();
+          }}
+        />
+      )}
 
       {pagoAbierto && (
         <HojaPago
@@ -399,5 +426,120 @@ function NombreDelPuesto({ inicial, guardando, onGuardar, onCancelar }) {
         Cancelar
       </button>
     </div>
+  );
+}
+
+/**
+ * Corregir muchos nombres de una vez pegando una lista.
+ *
+ * PARA QUÉ. Cuando el gimnasio pasó a la app las reservas que tenía en papel
+ * con un mismo teléfono de relleno, TODOS los puestos acabaron mostrando el
+ * último nombre tecleado. Arreglarlos de a uno son veinte ediciones; pegando la
+ * lista es una.
+ *
+ * EL EMPAREJADO SE VE ANTES DE GUARDAR. Cada línea se asigna al puesto que le
+ * toca en orden y se enseña la pareja completa -puesto, nombre nuevo y el que
+ * tenía-, porque equivocarse en el reparto sería repetir el problema que se
+ * está arreglando. Las líneas de más o de menos se avisan y no se guardan a
+ * medias: o entran todas o ninguna.
+ */
+function HojaNombresEnLote({ claseId, inscritos, onCerrar, onListo }) {
+  const [texto, setTexto] = useState('');
+  const [error, setError] = useState(null);
+
+  // El orden en que se agregaron es el que tiene sentido para pegar una lista
+  // de papel; la pantalla los muestra por puesto, que es otro orden.
+  const enOrden = [...inscritos].sort((a, b) => a.creadoEn.localeCompare(b.creadoEn));
+  const lineas = texto
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const parejas = enOrden.slice(0, lineas.length).map((r, i) => ({ reserva: r, nombre: lineas[i] }));
+  const sobran = lineas.length - enOrden.length;
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.admin.cambiarAsistentes(
+        claseId,
+        parejas.map((p) => ({ reservaId: p.reserva.id, nombre: p.nombre }))
+      ),
+    onSuccess: onListo,
+    onError: (e) => setError(e.message),
+  });
+
+  return (
+    <Hoja abierta onCerrar={onCerrar} titulo="Corregir nombres en lote">
+      <div className="space-y-4">
+        <p className="text-sm text-humo-500">
+          Pega los nombres, <strong className="text-humo-300">uno por línea</strong>, en el orden
+          en que se agregaron las reservas. Abajo ves a qué puesto va cada uno antes de guardar.
+        </p>
+
+        <textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          rows={7}
+          autoFocus
+          placeholder={'Laura Gómez\nAndrés Rincón\nMariana Ruiz'}
+          className="w-full rounded-2xl bg-carbon-700 border border-carbon-600 px-4 py-3 text-sm outline-none focus:border-volt-500 transition-colors"
+        />
+
+        {error && <Aviso>{error}</Aviso>}
+
+        {sobran > 0 && (
+          <Aviso tono="info">
+            Pegaste {lineas.length} nombres y hay {enOrden.length} puestos. Se van a usar los
+            primeros {enOrden.length}; sobran {sobran}.
+          </Aviso>
+        )}
+
+        {parejas.length > 0 && (
+          <div>
+            <p className="etiqueta mb-2">
+              Así queda ({parejas.length} de {enOrden.length})
+            </p>
+            <ul className="space-y-1 max-h-64 overflow-y-auto">
+              {parejas.map(({ reserva, nombre }) => {
+                const antes = reserva.nombreInvitado ?? reserva.usuario.nombre;
+                return (
+                  <li
+                    key={reserva.id}
+                    className="flex items-center gap-2 rounded-xl bg-carbon-700/60 px-3 py-2 text-sm"
+                  >
+                    <span className="w-9 shrink-0 font-extrabold tabular-nums text-xs">
+                      {reserva.puestoCodigo}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-semibold">{nombre}</span>
+                    {antes !== nombre && (
+                      <span className="shrink-0 text-[11px] text-humo-500 truncate max-w-[40%]">
+                        antes: {antes}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {parejas.length < enOrden.length && (
+              <p className="mt-2 text-xs text-humo-500">
+                Los {enOrden.length - parejas.length} puestos restantes se quedan como están.
+              </p>
+            )}
+          </div>
+        )}
+
+        <Boton
+          className="w-full"
+          disabled={parejas.length === 0}
+          cargando={guardar.isPending}
+          onClick={() => {
+            setError(null);
+            guardar.mutate();
+          }}
+        >
+          Guardar {parejas.length > 0 ? `${parejas.length} nombre${parejas.length === 1 ? '' : 's'}` : ''}
+        </Boton>
+      </div>
+    </Hoja>
   );
 }

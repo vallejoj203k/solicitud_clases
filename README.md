@@ -271,7 +271,26 @@ sobre las clases de un rango —decenas, no miles— comparar la hora local ya c
 simple y no puede desalinearse con lo que el administrador ve en pantalla, que sale de ese
 mismo `horaLocal`.
 
-**El teléfono es la identidad, y eso tiene un filo.** `upsertCliente` hace un upsert sobre
+**El teléfono ya no se pide.** El gimnasio no lo usa, y exigirlo salía caro: recepción
+escribía un número de relleno igual para todos y, como el teléfono era la identidad, todas
+esas personas acababan siendo el mismo cliente con el último nombre tecleado. Ahora el
+formulario pide **solo el nombre** y la autorización de datos.
+
+Sin teléfono, **cada reserva crea su propia persona**. No se agrupa por nombre a propósito:
+dos «Juan Pérez» distintos acabarían siendo el mismo, que es exactamente el fallo que se
+está corrigiendo. El precio es que un cliente habitual sale varias veces en la lista de
+Clientes; a cambio, es imposible que dos desconocidos se fundan en uno.
+
+`Usuario.telefono` pasa a ser nullable y **mantiene el índice único**: en Postgres varios
+NULL no chocan entre sí, así que sigue impidiendo dos cuentas con el mismo número sin
+estorbar a las que no tienen ninguno. Los admin sí necesitan uno para entrar, pero eso lo
+exige la aplicación, no la columna.
+
+**Recuperar una reserva** acepta el código más el **nombre o el teléfono** (sin distinguir
+tildes ni mayúsculas). Antes solo valía el teléfono, y desde este cambio la mayoría de
+reservas no tienen ninguno. El código solo no basta, a propósito.
+
+**El teléfono era la identidad, y eso tuvo un filo.** `upsertCliente` hace un upsert sobre
 `Usuario.telefono`, que es único. Si dos personas distintas entran con el mismo número —lo
 típico al pasar al software reservas que estaban en papel, poniendo un número de relleno
 porque el gimnasio no lo pide— **quedan colgando del mismo cliente**, y como el upsert
@@ -289,7 +308,14 @@ sitio donde el nombre real de cada asistente sobrevive.
 Cuando pasa, lo que se pierde son los **nombres**; la clase, el puesto y el **orden**
 (`Reserva.creadoEn`) quedan intactos. Por eso **no hay que rehacer nada**: en la vista de la
 clase, cada inscrito lleva un botón *editar* que corrige de quién es ese puesto
-(`PATCH /api/admin/reservas/:id/asistente`).
+(`PATCH /api/admin/reservas/:id/asistente`), y **«Corregir nombres en lote»** deja pegar la
+lista entera —un nombre por línea, en el orden en que se agregaron— para arreglar veinte
+puestos de una vez (`PATCH /api/admin/clases/:id/asistentes`).
+
+El emparejado **se ve antes de guardar**: cada línea con su puesto y el nombre que tenía.
+Las parejas las decide la pantalla y viajan explícitas; el servidor no reparte por su
+cuenta, porque equivocarse en el reparto sería repetir el problema que se está arreglando.
+Se aplica en una transacción: o entran todas o ninguna.
 
 El nombre se escribe en `Reserva.nombreInvitado` y **no** en `Usuario.nombre`, a propósito:
 tocar el usuario volvería a arrastrar a todas las demás reservas que comparten ese teléfono,
@@ -796,6 +822,7 @@ zona con horario de verano.
 | `PATCH` | `/api/admin/reservas/:id/pago` | Marcar pago |
 | `POST` | `/api/admin/reservas/:id/cancelar` | Cancelar reserva |
 | `PATCH` | `/api/admin/reservas/:id/asistente` | Corregir de quién es el puesto (vacío = nombre de la cuenta) |
+| `PATCH` | `/api/admin/clases/:id/asistentes` | Corregir varios nombres de la clase de una vez |
 | `POST` | `/api/admin/reservas/:id/asistencia` | Check-in |
 | `GET` | `/api/admin/reportes/pagos[.csv]` | Reporte filtrable y exportación |
 | `GET` | `/api/admin/clientes[/:id]` | Clientes e historial |

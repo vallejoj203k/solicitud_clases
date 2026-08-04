@@ -47,7 +47,7 @@ export default function AdminClientes() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold truncate">{c.nombre}</p>
-                    <p className="text-xs text-humo-500">{c.telefono}</p>
+                    <p className="text-xs text-humo-500">{c.telefono ?? 'Sin teléfono'}</p>
                     {c.ultimaClase && (
                       <p className="mt-1 text-xs text-humo-500">
                         Última: {c.ultimaClase.nombre} · {c.ultimaClase.fecha} {hora12(c.ultimaClase.hora)}
@@ -87,7 +87,7 @@ function HojaCliente({ id, onCerrar }) {
       {cliente && (
         <div className="space-y-4">
           <div className="rounded-2xl bg-carbon-700 border border-carbon-600 p-4">
-            <p className="text-sm text-humo-500">{cliente.telefono}</p>
+            <p className="text-sm text-humo-500">{cliente.telefono ?? 'Sin teléfono'}</p>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div>
                 <p className="etiqueta">Reservas</p>
