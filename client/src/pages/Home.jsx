@@ -206,16 +206,24 @@ function TarjetaDisciplina({ tipo, desdeCuando, onIrAPuestos }) {
             <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">
               {tipo.nombre}
             </h2>
-            {desdeCuando && (
-              <p className="mt-1 text-[11px] font-bold leading-tight text-volt-500">
-                Reservas desde el {desdeCuando} en adelante
-              </p>
-            )}
           </div>
           <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 backdrop-blur-sm text-humo-100 border border-white/10">
             <IconoFlecha />
           </span>
         </div>
+
+        {/* El aviso de que las reservas todavía no abren. Va en su propia línea
+            -no en la columna del nombre- para poder centrarse en el ancho de la
+            tarjeta, y con fondo propio porque un texto rojo sobre la foto del
+            salón no se lee. */}
+        {desdeCuando && (
+          <p
+            className="mt-2.5 rounded-xl bg-carbon-900/75 backdrop-blur-sm px-2 py-1.5 text-center
+                       text-[15px] leading-tight font-extrabold text-alerta"
+          >
+            Reservas desde el {desdeCuando} en adelante
+          </p>
+        )}
 
         {/* Un toque desde el inicio hasta el mapa de puestos de la próxima
             clase. `pointer-events-auto` la rescata del enlace de la tarjeta. */}
