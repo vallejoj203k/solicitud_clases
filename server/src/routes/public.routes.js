@@ -127,6 +127,13 @@ const nuevaReserva = z.object({
   claseId: z.string().min(1),
   puestoCodigo: z.string().min(1).max(6),
   nombre: z.string().trim().min(2, 'Escribe tu nombre').max(60).optional(),
+  // Se piden por separado y se guardan juntos: `Usuario.nombre` es una sola
+  // columna y partirla no aporta nada, pero dos cajas obligan a escribir el
+  // apellido en vez de dejarlo en "Laura" a secas.
+  apellido: z.string().trim().min(2, 'Escribe tu apellido').max(60).optional(),
+  // El cliente ya vio el aviso de "ya tienes una reserva en esta clase" y aun
+  // así quiere seguir.
+  confirmarDuplicado: z.boolean().optional(),
   // Opcional: el gimnasio no lo pide. Si llega, sirve para reconocer a quien ya
   // reservó antes; si no, la reserva se guarda igual.
   telefono: z.string().trim().max(20).optional().or(z.literal('')),
@@ -152,9 +159,12 @@ publicRouter.post(
     // telefono era la identidad, todas esas personas acababan siendo el mismo
     // cliente con el ultimo nombre tecleado. Sin numero, cada reserva es su
     // propia persona y eso no puede volver a pasar.
-    if (!datos.nombre) {
-      throw new AppError('Necesitamos tu nombre.', 422, 'DATOS_INCOMPLETOS');
+    if (!datos.nombre || !datos.apellido) {
+      throw new AppError('Necesitamos tu nombre y tu apellido.', 422, 'DATOS_INCOMPLETOS');
     }
+    // A partir de aquí viaja el nombre completo: es lo que ve recepción y lo
+    // que se compara para avisar de un puesto repetido.
+    datos.nombre = `${datos.nombre} ${datos.apellido}`;
     // Ley 1581: sin autorizacion explicita no se guardan los datos.
     if (!datos.aceptaDatos) {
       throw new AppError(

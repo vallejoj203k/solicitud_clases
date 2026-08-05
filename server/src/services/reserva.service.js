@@ -173,6 +173,7 @@ export async function crearReserva({
   usuarioId,
   pagoEnLinea = false,
   nombreInvitado,
+  confirmarDuplicado = false,
 }) {
   return prisma.$transaction(async (tx) => {
     const clase = await tx.clase.findUnique({
@@ -199,6 +200,36 @@ export async function crearReserva({
     }
     if ((clase.puestosBloqueados || []).includes(puestoCodigo)) {
       throw new AppError('Ese puesto está fuera de servicio.', 409, 'PUESTO_BLOQUEADO');
+    }
+
+    // ¿Esta misma persona ya tiene un puesto en esta clase?
+    //
+    // SE AVISA, NO SE PROHIBE. Repetir puede ser a proposito -alguien aparta el
+    // puesto de al lado para su pareja- pero casi siempre es que se olvido de
+    // que ya habia reservado, sobre todo desde la tablet del mostrador, donde
+    // cada quien escribe su nombre de cero. Se para una vez, se pregunta, y si
+    // insiste se deja pasar con `confirmarDuplicado`.
+    //
+    // Se compara el nombre del ASISTENTE -el del acompanante si lo hay, si no el
+    // de quien reserva-, que es el que de verdad ocupa el puesto, e ignorando
+    // tildes y mayusculas: "jose pena" y "José Peña" son la misma persona.
+    const quienOcupa = nombreInvitado?.trim() || nombre;
+    if (!confirmarDuplicado && quienOcupa) {
+      const enLaClase = await tx.reserva.findMany({
+        where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+        select: { puestoCodigo: true, nombreInvitado: true, usuario: { select: { nombre: true } } },
+      });
+      const yaEsta = enLaClase.find((r) =>
+        igualIgnorandoTildes(r.nombreInvitado ?? r.usuario.nombre, quienOcupa)
+      );
+      if (yaEsta) {
+        throw new AppError(
+          `Ya tienes una reserva en esta clase (puesto ${yaEsta.puestoCodigo}). ¿Estás seguro que quieres volver a agendar?`,
+          409,
+          'YA_TIENES_RESERVA',
+          { puestoCodigo: yaEsta.puestoCodigo, nombre: quienOcupa }
+        );
+      }
     }
 
     const cliente = usuarioId

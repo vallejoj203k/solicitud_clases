@@ -271,6 +271,23 @@ sobre las clases de un rango —decenas, no miles— comparar la hora local ya c
 simple y no puede desalinearse con lo que el administrador ve en pantalla, que sale de ese
 mismo `horaLocal`.
 
+**Nombre y apellido, en dos cajas y los dos obligatorios.** Con una sola caja la gente
+escribe «Laura» a secas y en recepción hay tres Lauras. Se guardan juntos en `Usuario.nombre`
+—una sola columna; partirla no aporta nada—, pero pedirlos por separado obliga a escribir el
+apellido.
+
+**Si ya hay un puesto a ese nombre en la clase, se avisa antes de agendar.** El servidor
+compara el nombre del **asistente** (el del acompañante si lo hay, si no el de quien reserva)
+contra los puestos ocupados de esa clase, ignorando tildes y mayúsculas, y responde
+`409 YA_TIENES_RESERVA` diciendo en qué puesto está. La pantalla lo enseña como pregunta con
+dos salidas —«Sí, agendar igual» / «No, cancelar»—, no como error.
+
+**Se avisa, no se prohíbe**: repetir puede ser a propósito —apartar el puesto de al lado para
+alguien— pero casi siempre es que se olvidó de que ya había reservado, sobre todo desde la
+tablet del mostrador, donde cada quien escribe su nombre de cero. Al insistir, la reserva
+viaja con `confirmarDuplicado: true` y entra. La comprobación es **por clase**: la misma
+persona en otra clase no dispara nada.
+
 **El teléfono ya no se pide.** El gimnasio no lo usa, y exigirlo salía caro: recepción
 escribía un número de relleno igual para todos y, como el teléfono era la identidad, todas
 esas personas acababan siendo el mismo cliente con el último nombre tecleado. Ahora el
