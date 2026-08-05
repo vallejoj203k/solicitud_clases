@@ -661,6 +661,12 @@ la pidan dos personas distintas, y los turnos se reparten por persona —o por n
 no hay sesión—, de modo que quien pide diez no deja sin sonar a quien pidió una. Repetir
 algo que ya sonó **sí** se puede.
 
+Desde el **reproductor**, cada pedido lleva una **✕** para quitarlo. Va solo ahí —la
+pantalla del gimnasio, que está detrás del mostrador— y no en el teléfono del cliente, donde
+cada quien solo puede quitar lo suyo (`403 SIN_PERMISO`). Sin confirmación a propósito: quien
+atiende está de pie delante de la pantalla y un diálogo por canción estorba más de lo que
+protege; si se equivoca, quien la pidió la vuelve a pedir.
+
 Estados de un pedido: `EN_FILA` → `SONANDO` → `SONO`. `SONANDO` existe como estado propio
 —en vez de deducirlo de «la primera de la cola»— para que el reproductor sepa desde dónde
 retomar si alguien recarga la pantalla a mitad de canción.
