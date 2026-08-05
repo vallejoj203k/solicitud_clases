@@ -6,6 +6,7 @@ import {
   Aviso,
   BarraDisponibilidad,
   Boton,
+  Campo,
   Cargando,
   Entrada,
   Hoja,
@@ -34,6 +35,7 @@ export default function AdminClaseDetalle() {
   // dejar media docena de campos abiertos sin guardar.
   const [editando, setEditando] = useState(null);
   const [corrigiendoLote, setCorrigiendoLote] = useState(false);
+  const [agregando, setAgregando] = useState(false);
   const [error, setError] = useState(null);
 
   const { data, isLoading } = useQuery({
@@ -139,17 +141,28 @@ export default function AdminClaseDetalle() {
               <h2 className="font-bold tracking-tight">
                 Inscritos <span className="text-humo-500 font-normal">({activas.length})</span>
               </h2>
-              {activas.length > 1 && (
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => {
                     setError(null);
-                    setCorrigiendoLote(true);
+                    setAgregando(true);
                   }}
-                  className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-volt-500 transition-colors"
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-volt-500 text-carbon-900 hover:bg-volt-400 transition-colors"
                 >
-                  Corregir nombres en lote
+                  Agregar reserva
                 </button>
-              )}
+                {activas.length > 1 && (
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setCorrigiendoLote(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-volt-500 transition-colors"
+                  >
+                    Corregir nombres
+                  </button>
+                )}
+              </div>
             </div>
 
             {activas.length === 0 ? (
@@ -277,6 +290,18 @@ export default function AdminClaseDetalle() {
           </aside>
         </div>
       </div>
+
+      {agregando && (
+        <HojaAgregarReserva
+          claseId={id}
+          mapa={disponibilidad?.mapa}
+          onCerrar={() => setAgregando(false)}
+          onListo={() => {
+            setAgregando(false);
+            refrescar();
+          }}
+        />
+      )}
 
       {corrigiendoLote && (
         <HojaNombresEnLote
@@ -538,6 +563,96 @@ function HojaNombresEnLote({ claseId, inscritos, onCerrar, onListo }) {
           }}
         >
           Guardar {parejas.length > 0 ? `${parejas.length} nombre${parejas.length === 1 ? '' : 's'}` : ''}
+        </Boton>
+      </div>
+    </Hoja>
+  );
+}
+
+/**
+ * Dar un puesto desde recepción.
+ *
+ * Es la vía para lo que no pasa por la app: quien llega al mostrador, quien
+ * llama, y sobre todo las clases anteriores a la fecha de apertura, cuyos cupos
+ * estaban repartidos en papel y que la app todavía no deja reservar.
+ *
+ * Los puestos se eligen de una rejilla y no de un desplegable: recepción está
+ * mirando el salón y piensa en "la bici del fondo", no en un código de una
+ * lista de dieciocho.
+ */
+function HojaAgregarReserva({ claseId, mapa, onCerrar, onListo }) {
+  const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+  const [puesto, setPuesto] = useState(null);
+  const [error, setError] = useState(null);
+
+  const libres = (mapa?.filas ?? [])
+    .flatMap((f) => f.puestos)
+    .filter((p) => p.estado === 'libre');
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.admin.reservarDesdeAdmin(claseId, {
+        nombre: nombre.trim(),
+        apellido: apellido.trim(),
+        puestoCodigo: puesto,
+      }),
+    onSuccess: onListo,
+    onError: (e) => setError(e.message),
+  });
+
+  const listo = nombre.trim().length >= 2 && apellido.trim().length >= 2 && puesto;
+
+  return (
+    <Hoja abierta onCerrar={onCerrar} titulo="Agregar reserva">
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Nombre">
+            <Entrada autoFocus value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Laura" />
+          </Campo>
+          <Campo etiqueta="Apellido">
+            <Entrada value={apellido} onChange={(e) => setApellido(e.target.value)} placeholder="Gómez" />
+          </Campo>
+        </div>
+
+        <div role="group" aria-label="Puestos libres">
+          <span className="etiqueta block mb-1.5">Puesto ({libres.length} libres)</span>
+          {libres.length === 0 ? (
+            <p className="text-sm text-humo-500">Esta clase está llena.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {libres.map((p) => (
+                <button
+                  key={p.codigo}
+                  type="button"
+                  aria-pressed={puesto === p.codigo}
+                  onClick={() => setPuesto(p.codigo)}
+                  className={cx(
+                    'w-12 h-12 rounded-xl text-sm font-extrabold tabular-nums border transition-colors',
+                    puesto === p.codigo
+                      ? 'bg-volt-500 text-carbon-900 border-volt-500'
+                      : 'bg-carbon-700 text-humo-300 border-carbon-600 hover:border-carbon-500'
+                  )}
+                >
+                  {p.codigo}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <Aviso>{error}</Aviso>}
+
+        <Boton
+          className="w-full"
+          disabled={!listo}
+          cargando={guardar.isPending}
+          onClick={() => {
+            setError(null);
+            guardar.mutate();
+          }}
+        >
+          Reservar {puesto ?? ''}
         </Boton>
       </div>
     </Hoja>

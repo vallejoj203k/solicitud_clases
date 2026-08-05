@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api/client.js';
 import { guardarToken, leerToken } from '../lib/sesion.js';
 import { hoyISO, hora12, fechaLarga, pesos } from '../lib/formato.js';
+import { abierta, etiquetaApertura } from '../lib/apertura.js';
 import CalendarioDias, { semanasDelMes } from '../components/CalendarioDias.jsx';
 import TarjetaHorario from '../components/TarjetaHorario.jsx';
 import MapaPuestos from '../components/MapaPuestos.jsx';
@@ -265,6 +266,7 @@ export default function Reservar() {
           acento={acento}
           clases={clasesPorDia[dia] ?? []}
           hayEnElMes={Object.keys(clasesPorDia).length > 0}
+          reservasDesde={config?.reservasDesde}
           onElegir={elegirClase}
         />
       ) : (
@@ -362,8 +364,15 @@ function PasoHorarios({
   acento,
   clases,
   hayEnElMes,
+  reservasDesde,
   onElegir,
 }) {
+  // Mientras el gimnasio termina de pasar su horario al software, los cupos de
+  // las clases anteriores están repartidos en papel. El día se sigue viendo
+  // -con sus horarios- pero no se puede tomar puesto.
+  const seAbre = abierta(dia, reservasDesde);
+  const desdeCuando = etiquetaApertura(reservasDesde);
+
   return (
     <div className="px-5 pt-4 animate-aparecer md:landscape:px-8">
       {/* En tablet horizontal el calendario se queda a un lado y los horarios
@@ -395,8 +404,20 @@ function PasoHorarios({
             }
           />
         )}
+        {!seAbre && clases.length > 0 && (
+          <Aviso tono="info">
+            Las reservas por la app son desde el <strong>{desdeCuando}</strong> en adelante. Para
+            una clase antes de esa fecha, habla con recepción.
+          </Aviso>
+        )}
         {clases.map((clase) => (
-          <TarjetaHorario key={clase.id} clase={clase} onSeleccionar={onElegir} />
+          <div
+            key={clase.id}
+            className={seAbre ? undefined : 'opacity-50 pointer-events-none'}
+            aria-disabled={!seAbre}
+          >
+            <TarjetaHorario clase={clase} onSeleccionar={seAbre ? onElegir : () => {}} />
+          </div>
         ))}
       </div>
       </div>

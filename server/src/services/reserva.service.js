@@ -228,6 +228,9 @@ export async function reservarEnLote({
         usuarioId: usuario.id,
         // Ya se comprobo arriba, y en lote no hay a quien preguntar.
         confirmarDuplicado: true,
+        // Recepcion si puede dar puesto antes de la fecha de apertura: es justo
+        // para eso -pasar al software lo que estaba en papel-.
+        porAdmin: true,
       });
       codigos.push(reserva.codigo);
       paso.codigo = reserva.codigo;
@@ -321,6 +324,7 @@ export async function crearReserva({
   pagoEnLinea = false,
   nombreInvitado,
   confirmarDuplicado = false,
+  porAdmin = false,
 }) {
   return prisma.$transaction(async (tx) => {
     const clase = await tx.clase.findUnique({
@@ -331,6 +335,18 @@ export async function crearReserva({
     if (clase.estado !== 'ACTIVA') throw new AppError('Esta clase fue cancelada.', 409, 'CLASE_CANCELADA');
     if (clase.inicioEn.getTime() <= Date.now()) {
       throw new AppError('Esta clase ya comenzó.', 409, 'CLASE_INICIADA');
+    }
+
+    // Las clases anteriores a la fecha de apertura tienen sus cupos repartidos
+    // en papel: reservar encima venderia dos veces la misma bici. Se ven en la
+    // app, pero solo recepcion puede darles puesto.
+    if (!porAdmin && env.reservasDesde && clase.inicioEn < inicioDelDia(env.reservasDesde)) {
+      throw new AppError(
+        `Por ahora las reservas por la app son desde el ${etiquetaDeApertura()}. Para una clase antes de esa fecha, habla con recepción.`,
+        409,
+        'RESERVAS_NO_ABIERTAS',
+        { desde: env.reservasDesde }
+      );
     }
 
     // (1) Lock de la fila de la clase. Cualquier otra reserva para esta misma
@@ -621,6 +637,14 @@ export async function recuperarAcceso({ codigo, telefono }) {
   }
 
   return reserva;
+}
+
+/** "24 de agosto", para el mensaje de cuando las reservas todavia no abren. */
+function etiquetaDeApertura() {
+  const [a, m, d] = env.reservasDesde.split('-').map(Number);
+  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(a, m - 1, d))
+  );
 }
 
 /** "José Pérez" y "jose perez" son la misma persona escribiendo con prisa. */

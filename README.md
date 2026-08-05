@@ -252,6 +252,30 @@ sale quién lo reservó y se puede marcar asistencia o cobrar ahí mismo. Esa vi
 `components/SalonClase.jsx` justamente para que las dos pantallas compartan código. La
 pestaña **Lista** es la de siempre: crear, editar, cancelar y borrar.
 
+**Las reservas por la app abren en una fecha.** `RESERVAS_DESDE` (por defecto `2026-08-24`)
+marca desde cuándo un CLIENTE puede tomar puesto. Las clases anteriores se siguen viendo, con
+sus horarios, pero no se pueden reservar: sus cupos estaban repartidos en papel cuando el
+gimnasio pasó su horario al software, y dejar reservar encima habría vendido dos veces la
+misma bici.
+
+- En el **inicio**, cada tarjeta de disciplina lo anuncia: «Reservas desde el 24 de agosto en
+  adelante».
+- En **reservar**, los días anteriores muestran sus horarios apagados y un aviso que remite a
+  recepción.
+- El servidor lo rechaza igual con `409 RESERVAS_NO_ABIERTAS`, aunque alguien llame la API
+  directamente.
+- **Recepción no tiene ese muro**: `crearReserva({ porAdmin: true })` se lo salta, que es
+  justo para lo que existe.
+
+Vacío = sin restricción. Cuando el gimnasio se ponga al día se borra la variable en Railway y
+el aviso desaparece solo de la pantalla.
+
+**Reservar desde recepción.** En la vista de la clase, **«Agregar reserva»** pide nombre,
+apellido y un puesto de los libres, y lo da en el acto. Es la vía para quien llega al
+mostrador, quien llama, y sobre todo para las clases anteriores a la fecha de apertura. Los
+puestos se eligen de una rejilla y no de un desplegable: recepción está mirando el salón y
+piensa en «la bici del fondo», no en un código de una lista de dieciocho.
+
 **Reservar varias de una vez.** Llega alguien al mostrador y pide «los martes y jueves a las
 6, por dos meses»: son dieciséis reservas, y hacerlas de a una en el mapa de puestos es media
 hora. Desde el calendario, «Reservar varias» pide nombre, disciplina, días de la semana, hora
@@ -869,6 +893,7 @@ zona con horario de verano.
 | `POST` | `/api/admin/clases/lote` | Crear una programación semanal completa |
 | `POST` | `/api/admin/clases/eliminar-lote` | Borrar un rango (filtrable por disciplina y horarios; `simular` cuenta sin tocar) |
 | `POST` | `/api/admin/reservas/lote` | Reservar la misma franja varias semanas (`simular` devuelve el plan) |
+| `POST` | `/api/admin/clases/:id/reservar` | Dar un puesto desde recepción (sin el muro de la fecha de apertura) |
 | `PATCH/DELETE` | `/api/admin/clases/:id` | Editar / eliminar (solo sin reservas) |
 | `POST` | `/api/admin/clases/:id/cancelar` | Cancelar clase y sus reservas |
 | `GET` | `/api/admin/clases/:id/reservas` | Inscritos con puesto y estado de pago |

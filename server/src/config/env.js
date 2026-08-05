@@ -66,6 +66,18 @@ export const env = {
   tzGimnasio: process.env.TZ_GIMNASIO || 'America/Bogota',
   rootDir,
   clientDist: path.join(rootDir, 'client/dist'),
+  // Desde que fecha (YYYY-MM-DD, hora local del gimnasio) los CLIENTES pueden
+  // reservar por la app. Las clases anteriores siguen viendose, pero solo
+  // recepcion puede darles puesto.
+  //
+  // POR QUE EXISTE: el gimnasio paso su horario al software a mitad de camino y
+  // los cupos de las proximas semanas ya estaban repartidos en papel. Dejar
+  // reservar encima habria vendido dos veces la misma bici.
+  //
+  // Vacio = sin restriccion. Cuando el gimnasio se ponga al dia, se borra la
+  // variable en Railway y la app se abre entera.
+  reservasDesde: (process.env.RESERVAS_DESDE ?? '2026-08-24').trim() || null,
+
   // Horas antes del inicio hasta las que el cliente puede cancelar solo.
   // Pasado ese punto tiene que hablar con recepcion; el admin siempre puede.
   // Ocho por decision del gimnasio: da margen a revender el puesto de una clase

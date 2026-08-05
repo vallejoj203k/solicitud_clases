@@ -132,6 +132,14 @@ export const api = {
       pedir('/admin/clases/eliminar-lote', { metodo: 'POST', cuerpo: datos, tipoToken: 'admin' }),
     eliminarClase: (id) => pedir(`/admin/clases/${id}`, { metodo: 'DELETE', tipoToken: 'admin' }),
     reservasDeClase: (id) => pedir(`/admin/clases/${id}/reservas`, { tipoToken: 'admin' }),
+    // Dar un puesto desde recepción: sirve también antes de la fecha de
+    // apertura, que es cuando la app todavía no deja reservar.
+    reservarDesdeAdmin: (claseId, datos) =>
+      pedir(`/admin/clases/${claseId}/reservar`, {
+        metodo: 'POST',
+        cuerpo: datos,
+        tipoToken: 'admin',
+      }),
     // Reservar la misma franja durante varias semanas. Con `simular` devuelve
     // el plan sin escribir nada.
     reservarEnLote: (datos) =>
