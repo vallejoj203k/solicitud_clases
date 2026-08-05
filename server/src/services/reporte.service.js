@@ -464,10 +464,13 @@ export async function buscarReservas(consulta) {
 export async function listarClientes({ busqueda } = {}) {
   const where = { rol: 'CLIENTE' };
   if (busqueda) {
-    where.OR = [
-      { nombre: { contains: busqueda, mode: 'insensitive' } },
-      { telefono: { contains: busqueda.replace(/\D/g, '') } },
-    ];
+    where.OR = [{ nombre: { contains: busqueda, mode: 'insensitive' } }];
+    // OJO: solo se busca por telefono si de verdad se escribieron digitos. Con
+    // un nombre, `replace(/\D/g,'')` deja la cadena VACIA, y `contains: ''`
+    // coincide con todas las filas: buscar "Quintero" devolvia el listado
+    // entero. Es la misma guarda que ya tenia `buscarReservas`.
+    const soloDigitos = busqueda.replace(/\D/g, '');
+    if (soloDigitos.length >= 4) where.OR.push({ telefono: { contains: soloDigitos } });
   }
 
   const clientes = await prisma.usuario.findMany({

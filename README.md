@@ -252,6 +252,27 @@ sale quién lo reservó y se puede marcar asistencia o cobrar ahí mismo. Esa vi
 `components/SalonClase.jsx` justamente para que las dos pantallas compartan código. La
 pestaña **Lista** es la de siempre: crear, editar, cancelar y borrar.
 
+**Reservar varias de una vez.** Llega alguien al mostrador y pide «los martes y jueves a las
+6, por dos meses»: son dieciséis reservas, y hacerlas de a una en el mapa de puestos es media
+hora. Desde el calendario, «Reservar varias» pide nombre, disciplina, días de la semana, hora
+y rango de fechas, y **enseña el plan antes de crear nada** (`simular: true`): cuántas entran,
+cuántas están llenas y en cuáles ya tiene puesto.
+
+Tres decisiones que importan:
+
+- **Una sola persona para todas.** El cliente se resuelve una vez y se le pasa su `usuarioId` a
+  cada reserva. Dejando que cada una creara el suyo —que es lo que hace `crearReserva` sin
+  teléfono— quedarían dieciséis clientes distintos con el mismo nombre.
+- **El mismo puesto siempre que se pueda.** En spinning la gente se acostumbra a su bici: se
+  intenta el de la clase anterior (o el `puestoPreferido`) y donde esté ocupado se toma otro
+  libre en vez de fallar.
+- **No se para en el primer hueco.** Una clase llena, o una donde ya tiene puesto, se salta y
+  se informa; las demás se reservan igual. Rendirse entera por una llena obligaría a recepción
+  a adivinar el rango.
+
+Los días y las horas se filtran en memoria por la misma razón que en el borrado por rango:
+`inicioEn` está en UTC y el gimnasio opera en `America/Bogota`.
+
 **Borrar un rango.** Un lote semanal deja treinta clases y borrarlas de a una es absurdo,
 así que el calendario tiene «Borrar rango»: fechas, disciplina opcional, **horarios**
 opcionales y una **simulación** que dice en números qué va a pasar antes de tocar nada
@@ -847,6 +868,7 @@ zona con horario de verano.
 | `GET/POST` | `/api/admin/clases` | Listar / crear |
 | `POST` | `/api/admin/clases/lote` | Crear una programación semanal completa |
 | `POST` | `/api/admin/clases/eliminar-lote` | Borrar un rango (filtrable por disciplina y horarios; `simular` cuenta sin tocar) |
+| `POST` | `/api/admin/reservas/lote` | Reservar la misma franja varias semanas (`simular` devuelve el plan) |
 | `PATCH/DELETE` | `/api/admin/clases/:id` | Editar / eliminar (solo sin reservas) |
 | `POST` | `/api/admin/clases/:id/cancelar` | Cancelar clase y sus reservas |
 | `GET` | `/api/admin/clases/:id/reservas` | Inscritos con puesto y estado de pago |
