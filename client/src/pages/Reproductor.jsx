@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import { Aviso, Boton, Cargando, Entrada, cx } from '../components/ui.jsx';
 import { IconoAtras, IconoBuscar, IconoCerrar, IconoMusica } from '../components/Iconos.jsx';
@@ -117,6 +117,15 @@ export default function Reproductor() {
     () => queryClient.invalidateQueries({ queryKey: ['musicaAhora'] }),
     [queryClient]
   );
+
+  // Quitar un pedido de la lista. Si se quita el que estaba apartado como
+  // siguiente, no pasa nada: la fila se vuelve a leer en el sondeo y lo que
+  // sonará después se decide al terminar la canción, no ahora.
+  const quitar = useMutation({
+    mutationFn: (pedidoId) => api.admin.quitarPedidoMusica(pedidoId),
+    onSuccess: refrescar,
+    onError: (e) => setError(e.message),
+  });
 
   const { data: resultados, isFetching: buscando } = useQuery({
     queryKey: ['adminBuscarYoutube', consulta],
@@ -518,6 +527,26 @@ export default function Reproductor() {
                           {p.pidio?.nombre ? ` · ${p.pidio.nombre}` : ''}
                         </p>
                       </div>
+
+                      {/* Quitar un pedido que no se quiere poner. Solo sale
+                          aquí -en la pantalla del gimnasio, que está detrás del
+                          mostrador- y no en el teléfono del cliente, donde cada
+                          quien solo puede quitar lo suyo.
+
+                          Sin confirmación a propósito: quien atiende está de pie
+                          delante de la pantalla y un diálogo por cada canción
+                          estorba más de lo que protege. Si se equivoca, quien la
+                          pidió la vuelve a pedir. */}
+                      <button
+                        onClick={() => quitar.mutate(p.id)}
+                        disabled={quitar.isPending}
+                        aria-label={`Quitar ${p.cancion.titulo} de la lista`}
+                        title="Quitar de la lista"
+                        className="shrink-0 p-2 -mr-1 rounded-lg text-humo-500 hover:text-alerta
+                                   hover:bg-carbon-700 active:scale-95 transition-all disabled:opacity-40"
+                      >
+                        <IconoCerrar className="w-4 h-4" />
+                      </button>
                     </li>
                   ))}
                 </ul>
