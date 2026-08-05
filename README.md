@@ -642,10 +642,17 @@ estaba en la cola) para poder elegir otra.
 
 ### La fila
 
-Se ordena **por rondas**, no por llegada estricta: primero la primera canción de cada
-persona, después la segunda de cada persona, y así (`PedidoMusica.turno` es la n-ésima que
-pide esa persona en esa clase; se ordena por `turno` y, dentro de cada ronda, por
-`creadoEn`). Con llegada estricta, el primero que pidiera diez se comería la clase entera.
+Se ordena **por llegada**: la primera que se pidió suena primero y lo que se pide ahora se va
+al final (`orderBy: { creadoEn: 'asc' }`).
+
+Se repartió por rondas durante un tiempo —la primera de cada quien, luego la segunda de cada
+quien— para que nadie acaparara. Sobre el papel era más justo; en el salón se veía al revés:
+al empezar a sonar la primera canción de alguien, el siguiente que pedía entraba con `turno`
+1 y se colaba delante de las que esa persona tenía esperando con turno 2 y 3. **El último en
+pedir quedaba primero**, que es justo lo contrario de lo que se espera de una fila.
+
+`PedidoMusica.turno` se sigue guardando —dice cuántas llevaba pedidas esa persona, que es lo
+que delata a quien pide de más— pero ya no ordena nada.
 
 Cada persona puede pedir **las que quiera** y quitar las suyas mientras no hayan sonado.
 **No hace falta reserva ni sesión**: quien está en el salón quiere poner música sin haber
