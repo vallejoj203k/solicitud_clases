@@ -5,6 +5,7 @@ import { resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
 import { env } from '../config/env.js';
 import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 import { ESTADOS_OCUPAN_PUESTO, ESTADOS_SIN_PAGAR } from '../config/estados.js';
+import { fechaISOLocal, horaLocal, inicioDelDia, finDelDia } from '../utils/fechas.js';
 
 
 const incluirCompleto = {
@@ -96,6 +97,152 @@ export async function cambiarAsistente(reservaId, nombre) {
     data: { nombreInvitado: limpio },
     include: incluirCompleto,
   });
+}
+
+/**
+ * Reservar la misma franja durante varias semanas.
+ *
+ * EL CASO REAL: llega alguien al mostrador y pide "los martes y jueves a las 6,
+ * por dos meses". Son dieciseis reservas; hacerlas de a una en el mapa de
+ * puestos es media hora de mostrador.
+ *
+ * TRES DECISIONES QUE IMPORTAN:
+ *
+ *  1. UNA SOLA PERSONA para todas. Se resuelve el cliente una vez y se le pasa
+ *     su `usuarioId` a cada reserva. Si se dejara que cada una creara el suyo
+ *     -que es lo que hace `crearReserva` sin telefono- quedarian dieciseis
+ *     clientes distintos con el mismo nombre en la lista.
+ *
+ *  2. EL MISMO PUESTO SIEMPRE QUE SE PUEDA. En spinning la gente se acostumbra a
+ *     su bici. Se intenta el preferido -o el de la primera clase, si no se pide
+ *     ninguno- y donde este ocupado se toma otro libre en vez de fallar.
+ *
+ *  3. NO SE PARA EN EL PRIMER HUECO. Una clase llena, o una donde esa persona ya
+ *     tiene puesto, se salta y se informa; las demas se reservan igual. Rendirse
+ *     entera por una clase llena obligaria a recepcion a adivinar el rango.
+ *
+ * `simular` devuelve el plan sin escribir nada, para poder enseñarlo antes de
+ * crear dieciseis reservas.
+ */
+export async function reservarEnLote({
+  nombre,
+  email,
+  aceptaDatos = true,
+  tipoSlug,
+  diasSemana,
+  horas,
+  desde,
+  hasta,
+  puestoPreferido = null,
+  simular = false,
+}) {
+  const clases = await prisma.clase.findMany({
+    where: {
+      estado: 'ACTIVA',
+      inicioEn: { gte: new Date(Math.max(Date.now(), inicioDelDia(desde).getTime())), lt: finDelDia(hasta) },
+      ...(tipoSlug ? { tipoClase: { slug: tipoSlug } } : {}),
+    },
+    include: { tipoClase: true },
+    orderBy: { inicioEn: 'asc' },
+  });
+
+  // Dia de la semana y hora se filtran EN MEMORIA, no en la consulta: `inicioEn`
+  // esta en UTC y el gimnasio opera en America/Bogota, asi que "los martes a las
+  // 6" no es una franja fija de la columna.
+  const dias = new Set(diasSemana);
+  const enHora = new Set(horas);
+  const candidatas = clases.filter((c) => {
+    const fecha = fechaISOLocal(c.inicioEn);
+    const [a, m, d] = fecha.split('-').map(Number);
+    const diaSemana = new Date(Date.UTC(a, m - 1, d)).getUTCDay();
+    return dias.has(diaSemana) && enHora.has(horaLocal(c.inicioEn));
+  });
+
+  const plan = [];
+  let ultimoPuesto = puestoPreferido;
+
+  for (const clase of candidatas) {
+    const etiqueta = {
+      claseId: clase.id,
+      fecha: fechaISOLocal(clase.inicioEn),
+      hora: horaLocal(clase.inicioEn),
+      disciplina: clase.tipoClase.nombre,
+    };
+
+    const reservas = await prisma.reserva.findMany({
+      where: { claseId: clase.id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+      select: { puestoCodigo: true, nombreInvitado: true, usuario: { select: { nombre: true } } },
+    });
+
+    // Esa persona ya tiene puesto aqui: se salta. En lote no se pregunta -no hay
+    // nadie mirando dieciseis avisos-, se informa y sigue.
+    const suyo = reservas.find((r) => igualIgnorandoTildes(r.nombreInvitado ?? r.usuario.nombre, nombre));
+    if (suyo) {
+      plan.push({ ...etiqueta, resultado: 'YA_TENIA', puestoCodigo: suyo.puestoCodigo });
+      continue;
+    }
+
+    const layout = resolverLayout(clase);
+    const ocupados = new Set(reservas.map((r) => r.puestoCodigo));
+    const bloqueados = new Set(clase.puestosBloqueados || []);
+    const enJuego = puestosEnJuego({
+      layout,
+      ocupados,
+      bloqueados,
+      cupoMaximo: clase.cupoMaximo,
+    });
+    const libres = [...enJuego].filter((c) => !ocupados.has(c) && !bloqueados.has(c));
+
+    if (!libres.length) {
+      plan.push({ ...etiqueta, resultado: 'LLENA', puestoCodigo: null });
+      continue;
+    }
+
+    // El mismo de siempre si sigue libre; si no, el primero que haya.
+    const puesto = ultimoPuesto && libres.includes(ultimoPuesto) ? ultimoPuesto : libres[0];
+    ultimoPuesto = puesto;
+    plan.push({ ...etiqueta, resultado: 'RESERVA', puestoCodigo: puesto });
+  }
+
+  const resumen = {
+    total: plan.length,
+    aReservar: plan.filter((p) => p.resultado === 'RESERVA').length,
+    llenas: plan.filter((p) => p.resultado === 'LLENA').length,
+    yaTenia: plan.filter((p) => p.resultado === 'YA_TENIA').length,
+    creadas: 0,
+    plan,
+  };
+
+  if (simular || !resumen.aReservar) return resumen;
+
+  // Un solo cliente para todas: ver la decision (1) del comentario de arriba.
+  const usuario = await upsertCliente(prisma, { nombre, email, aceptaDatos });
+
+  const codigos = [];
+  for (const paso of plan) {
+    if (paso.resultado !== 'RESERVA') continue;
+    try {
+      const reserva = await crearReserva({
+        claseId: paso.claseId,
+        puestoCodigo: paso.puestoCodigo,
+        usuarioId: usuario.id,
+        // Ya se comprobo arriba, y en lote no hay a quien preguntar.
+        confirmarDuplicado: true,
+      });
+      codigos.push(reserva.codigo);
+      paso.codigo = reserva.codigo;
+      resumen.creadas += 1;
+    } catch (e) {
+      // Alguien tomo el puesto entre la simulacion y ahora. No se tumba el lote
+      // entero por una: se anota y se sigue con las demas.
+      paso.resultado = 'FALLO';
+      paso.motivo = e.message;
+    }
+  }
+
+  resumen.codigos = codigos;
+  resumen.cliente = { id: usuario.id, nombre: usuario.nombre };
+  return resumen;
 }
 
 /**

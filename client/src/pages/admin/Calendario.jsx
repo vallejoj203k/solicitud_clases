@@ -60,6 +60,7 @@ export default function CalendarioClases() {
   const [diaAbierto, setDiaAbierto] = useState(null);
   const [claseSalon, setClaseSalon] = useState(null);
   const [borrandoRango, setBorrandoRango] = useState(false);
+  const [reservandoLote, setReservandoLote] = useState(false);
 
   const semanas = semanasDelMes(anio, mes);
   const desde = semanas[0][0].fecha;
@@ -106,6 +107,12 @@ export default function CalendarioClases() {
         <p className="font-bold tracking-tight first-letter:uppercase">{nombreMes}</p>
         <div className="flex items-center gap-1">
           <button
+            onClick={() => setReservandoLote(true)}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-volt-500 transition-colors"
+          >
+            Reservar varias
+          </button>
+          <button
             onClick={() => setBorrandoRango(true)}
             className="px-3 py-1.5 rounded-xl text-xs font-semibold text-humo-500 hover:text-alerta transition-colors"
           >
@@ -146,6 +153,14 @@ export default function CalendarioClases() {
           </div>
         ))}
       </div>
+
+      {reservandoLote && (
+        <HojaReservarVarias
+          desdeSugerido={hoy}
+          hastaSugerido={[...semanas.flat()].filter((d) => d.delMes).at(-1).fecha}
+          onCerrar={() => setReservandoLote(false)}
+        />
+      )}
 
       {borrandoRango && (
         <HojaBorrarRango
@@ -603,6 +618,257 @@ function HojaBorrarRango({ desdeSugerido, hastaSugerido, onCerrar }) {
                   : `Cancelar ${previo.conHistorial}`}
               </Boton>
             </div>
+          </div>
+        )}
+      </div>
+    </Hoja>
+  );
+}
+
+const DIAS = [
+  { n: 1, corto: 'Lun' },
+  { n: 2, corto: 'Mar' },
+  { n: 3, corto: 'Mié' },
+  { n: 4, corto: 'Jue' },
+  { n: 5, corto: 'Vie' },
+  { n: 6, corto: 'Sáb' },
+  { n: 0, corto: 'Dom' },
+];
+
+/**
+ * Reservar la misma franja durante varias semanas.
+ *
+ * EL CASO REAL: llega alguien al mostrador y pide "los martes y jueves a las 6,
+ * por dos meses". Son dieciséis reservas, y hacerlas de a una en el mapa de
+ * puestos es media hora de mostrador.
+ *
+ * SE ENSEÑA EL PLAN ANTES DE CREAR NADA, igual que en el borrado por rango:
+ * cuántas entran, cuántas están llenas y cuáles ya tenía. Crear dieciséis
+ * reservas a ciegas no es algo que deba sorprender a nadie.
+ */
+function HojaReservarVarias({ desdeSugerido, hastaSugerido, onCerrar }) {
+  const queryClient = useQueryClient();
+  const { data: tipos } = useQuery({ queryKey: ['adminTipos'], queryFn: api.admin.tiposClase });
+
+  const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+  const [tipoSlug, setTipoSlug] = useState('');
+  const [dias, setDias] = useState([]);
+  const [horas, setHoras] = useState([]);
+  const [desde, setDesde] = useState(desdeSugerido);
+  const [hasta, setHasta] = useState(hastaSugerido);
+  const [previo, setPrevio] = useState(null);
+  const [resultado, setResultado] = useState(null);
+  const [error, setError] = useState(null);
+
+  // Los horarios que de verdad existen en el rango, para no ofrecer una hora a
+  // la que no hay clase y dejar a quien atiende creyendo que el filtro falla.
+  const { data: enRango } = useQuery({
+    queryKey: ['adminClases', desde, hasta, tipoSlug, 'lote'],
+    queryFn: () =>
+      api.admin.clases({ desde, hasta, tipo: tipoSlug || undefined, incluirPasadas: false }),
+    enabled: Boolean(desde && hasta && hasta >= desde),
+  });
+
+  const horarios = [...new Set((enRango ?? []).map((c) => c.hora))].sort();
+  const vivas = horas.filter((h) => horarios.includes(h));
+  const listo = nombre.trim().length >= 2 && apellido.trim().length >= 2 && dias.length && vivas.length;
+
+  const datos = () => ({
+    nombre: nombre.trim(),
+    apellido: apellido.trim(),
+    tipoSlug: tipoSlug || undefined,
+    diasSemana: dias,
+    horas: vivas,
+    desde,
+    hasta,
+  });
+
+  const olvidar = () => setPrevio(null);
+  const alternar = (lista, poner, valor) => {
+    olvidar();
+    poner(lista.includes(valor) ? lista.filter((x) => x !== valor) : [...lista, valor]);
+  };
+
+  const revisar = useMutation({
+    mutationFn: () => api.admin.reservarEnLote({ ...datos(), simular: true }),
+    onSuccess: setPrevio,
+    onError: (e) => setError(e.message),
+  });
+
+  const reservar = useMutation({
+    mutationFn: () => api.admin.reservarEnLote(datos()),
+    onSuccess: (r) => {
+      setResultado(r);
+      queryClient.invalidateQueries({ queryKey: ['adminClases'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+    },
+    onError: (e) => setError(e.message),
+  });
+
+  if (resultado) {
+    return (
+      <Hoja abierta onCerrar={onCerrar} titulo="Listo">
+        <div className="space-y-4">
+          <p className="text-sm">
+            Se {resultado.creadas === 1 ? 'creó' : 'crearon'}{' '}
+            <span className="font-extrabold">{resultado.creadas}</span> reserva
+            {resultado.creadas === 1 ? '' : 's'} a nombre de{' '}
+            <span className="font-semibold">{resultado.cliente?.nombre}</span>.
+          </p>
+          {resultado.llenas > 0 && (
+            <Aviso tono="info">
+              {resultado.llenas} {resultado.llenas === 1 ? 'clase estaba llena' : 'clases estaban llenas'} y
+              se saltaron.
+            </Aviso>
+          )}
+          {resultado.yaTenia > 0 && (
+            <Aviso tono="info">Ya tenía puesto en {resultado.yaTenia}, así que no se duplicaron.</Aviso>
+          )}
+          <Boton className="w-full" onClick={onCerrar}>
+            Cerrar
+          </Boton>
+        </div>
+      </Hoja>
+    );
+  }
+
+  return (
+    <Hoja abierta onCerrar={onCerrar} titulo="Reservar varias clases">
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Nombre">
+            <Entrada autoFocus value={nombre} onChange={(e) => { setNombre(e.target.value); olvidar(); }} placeholder="Laura" />
+          </Campo>
+          <Campo etiqueta="Apellido">
+            <Entrada value={apellido} onChange={(e) => { setApellido(e.target.value); olvidar(); }} placeholder="Gómez" />
+          </Campo>
+        </div>
+
+        <Campo etiqueta="Disciplina">
+          <Seleccion value={tipoSlug} onChange={(e) => { setTipoSlug(e.target.value); olvidar(); }}>
+            <option value="">Todas</option>
+            {(tipos ?? []).map((t) => (
+              <option key={t.slug} value={t.slug}>{t.nombre}</option>
+            ))}
+          </Seleccion>
+        </Campo>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Desde">
+            <Entrada type="date" value={desde} onChange={(e) => { setDesde(e.target.value); olvidar(); }} />
+          </Campo>
+          <Campo etiqueta="Hasta">
+            <Entrada type="date" value={hasta} onChange={(e) => { setHasta(e.target.value); olvidar(); }} />
+          </Campo>
+        </div>
+
+        <div role="group" aria-label="Días de la semana">
+          <span className="etiqueta block mb-1.5">Días</span>
+          <div className="flex flex-wrap gap-1.5">
+            {DIAS.map((d) => (
+              <button
+                key={d.n}
+                type="button"
+                aria-pressed={dias.includes(d.n)}
+                onClick={() => alternar(dias, setDias, d.n)}
+                className={cx(
+                  'px-3 py-2 rounded-xl text-sm font-semibold border transition-colors',
+                  dias.includes(d.n)
+                    ? 'bg-volt-500 text-carbon-900 border-volt-500'
+                    : 'bg-carbon-700 text-humo-300 border-carbon-600 hover:border-carbon-500'
+                )}
+              >
+                {d.corto}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div role="group" aria-label="Horarios">
+          <span className="etiqueta block mb-1.5">Hora</span>
+          {horarios.length === 0 ? (
+            <p className="text-sm text-humo-500">No hay clases en ese rango.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {horarios.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  aria-pressed={vivas.includes(h)}
+                  onClick={() => alternar(horas, setHoras, h)}
+                  className={cx(
+                    'px-3 py-2 rounded-xl text-sm font-semibold tabular-nums border transition-colors',
+                    vivas.includes(h)
+                      ? 'bg-volt-500 text-carbon-900 border-volt-500'
+                      : 'bg-carbon-700 text-humo-300 border-carbon-600 hover:border-carbon-500'
+                  )}
+                >
+                  {hora12(h)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {error && <Aviso>{error}</Aviso>}
+
+        {!previo ? (
+          <Boton
+            className="w-full"
+            disabled={!listo}
+            cargando={revisar.isPending}
+            onClick={() => { setError(null); revisar.mutate(); }}
+          >
+            Ver qué se reservaría
+          </Boton>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-carbon-600 bg-carbon-700/50 p-4 space-y-1.5 text-sm">
+              <p>
+                Se reservarían{' '}
+                <span className="font-extrabold text-volt-500">{previo.aReservar}</span> clase
+                {previo.aReservar === 1 ? '' : 's'} de {previo.total}.
+              </p>
+              {previo.llenas > 0 && (
+                <p className="text-humo-500">{previo.llenas} están llenas y se saltan.</p>
+              )}
+              {previo.yaTenia > 0 && (
+                <p className="text-humo-500">En {previo.yaTenia} ya tiene puesto.</p>
+              )}
+            </div>
+
+            {previo.plan?.length > 0 && (
+              <ul className="space-y-1 max-h-52 overflow-y-auto">
+                {previo.plan.map((p) => (
+                  <li
+                    key={`${p.claseId}`}
+                    className="flex items-center gap-2 rounded-xl bg-carbon-700/60 px-3 py-2 text-xs"
+                  >
+                    <span className="tabular-nums text-humo-300">{p.fecha}</span>
+                    <span className="tabular-nums font-semibold">{hora12(p.hora)}</span>
+                    <span className="ml-auto shrink-0">
+                      {p.resultado === 'RESERVA' && (
+                        <span className="font-bold text-volt-500">puesto {p.puestoCodigo}</span>
+                      )}
+                      {p.resultado === 'LLENA' && <span className="text-humo-500">llena</span>}
+                      {p.resultado === 'YA_TENIA' && (
+                        <span className="text-humo-500">ya tiene {p.puestoCodigo}</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <Boton
+              className="w-full"
+              disabled={!previo.aReservar}
+              cargando={reservar.isPending}
+              onClick={() => { setError(null); reservar.mutate(); }}
+            >
+              Reservar {previo.aReservar} clase{previo.aReservar === 1 ? '' : 's'}
+            </Boton>
           </div>
         )}
       </div>

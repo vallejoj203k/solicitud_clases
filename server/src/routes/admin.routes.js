@@ -21,6 +21,7 @@ import {
   cambiarAsistentes,
   cancelarReserva,
   marcarAsistencia,
+  reservarEnLote,
 } from '../services/reserva.service.js';
 import { enviarConfirmacionReserva } from '../services/notificaciones.service.js';
 import { generarIcs } from '../utils/ics.js';
@@ -144,6 +145,42 @@ adminRouter.post(
       throw new AppError('El rango termina antes de empezar.', 422, 'RANGO_INVALIDO');
     }
     res.json(await eliminarClasesEnLote(datos));
+  })
+);
+
+/**
+ * Reservar la misma franja durante varias semanas: "los martes y jueves a las
+ * 6, por dos meses". `simular: true` devuelve el plan sin escribir nada, para
+ * poder enseñarlo antes de crear dieciséis reservas.
+ */
+const loteReservaSchema = z.object({
+  nombre: z.string().trim().min(2).max(60),
+  apellido: z.string().trim().min(2).max(60),
+  email: z.string().trim().email().max(120).optional().or(z.literal('')),
+  tipoSlug: z.string().min(1).optional(),
+  diasSemana: z.array(z.number().int().min(0).max(6)).min(1),
+  horas: z.array(z.string().regex(/^\d{2}:\d{2}$/)).min(1),
+  desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  hasta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  puestoPreferido: z.string().max(6).optional().or(z.literal('')),
+  simular: z.boolean().optional(),
+});
+
+adminRouter.post(
+  '/reservas/lote',
+  asyncHandler(async (req, res) => {
+    const datos = loteReservaSchema.parse(req.body);
+    if (datos.hasta < datos.desde) {
+      throw new AppError('El rango termina antes de empezar.', 422, 'RANGO_INVALIDO');
+    }
+    res.json(
+      await reservarEnLote({
+        ...datos,
+        nombre: `${datos.nombre} ${datos.apellido}`,
+        email: datos.email || undefined,
+        puestoPreferido: datos.puestoPreferido || null,
+      })
+    );
   })
 );
 
