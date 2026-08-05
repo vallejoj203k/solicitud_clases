@@ -49,6 +49,10 @@ export default function Reservar() {
   // quién es: el formulario se llena de cero en cada reserva.
   const haySesion = Boolean(leerToken('cliente'));
   const [nombre, setNombre] = useState('');
+  const [apellido, setApellido] = useState('');
+  // Cuando el servidor avisa de que ya hay un puesto a este nombre en la clase,
+  // aquí queda el aviso para enseñarlo y poder insistir.
+  const [duplicado, setDuplicado] = useState(null);
   const [email, setEmail] = useState('');
   const [aceptaDatos, setAceptaDatos] = useState(false);
   const [nombreInvitado, setNombreInvitado] = useState('');
@@ -117,14 +121,16 @@ export default function Reservar() {
   });
 
   const reservar = useMutation({
-    mutationFn: () =>
+    mutationFn: (confirmarDuplicado = false) =>
       api.crearReserva({
         claseId,
         puestoCodigo: puesto,
         nombreInvitado: nombreInvitado.trim() || undefined,
         nombre: nombre.trim(),
+        apellido: apellido.trim(),
         email: email.trim() || undefined,
         aceptaDatos,
+        confirmarDuplicado,
       }),
     onSuccess: ({ reserva, token, checkout }) => {
       // El token sí se guarda: permite ver y cancelar la reserva sin contraseña.
@@ -146,6 +152,12 @@ export default function Reservar() {
       navegar(`/reserva/${reserva.codigo}?nueva=1`, { replace: true });
     },
     onError: (err) => {
+      // Ya hay un puesto a este nombre en la clase. No es un error: es una
+      // pregunta, así que se guarda aparte para poder ofrecer "sí, sigue".
+      if (err instanceof ApiError && err.codigo === 'YA_TIENES_RESERVA') {
+        setDuplicado(err.message);
+        return;
+      }
       setErrorReserva(err);
       if (err instanceof ApiError && ['PUESTO_OCUPADO', 'PUESTO_BLOQUEADO'].includes(err.codigo)) {
         // Alguien se adelantó: cerramos la hoja y refrescamos el mapa para que
@@ -294,6 +306,14 @@ export default function Reservar() {
         puesto={puesto}
         nombre={nombre}
         setNombre={setNombre}
+        apellido={apellido}
+        setApellido={setApellido}
+        duplicado={duplicado}
+        onSeguirIgual={() => {
+          setDuplicado(null);
+          reservar.mutate(true);
+        }}
+        onDescartarDuplicado={() => setDuplicado(null)}
         email={email}
         setEmail={setEmail}
         aceptaDatos={aceptaDatos}
@@ -306,7 +326,8 @@ export default function Reservar() {
         cargando={reservar.isPending}
         onConfirmar={() => {
           setErrorReserva(null);
-          reservar.mutate();
+          setDuplicado(null);
+          reservar.mutate(false);
         }}
         acento={acento}
       />
@@ -489,6 +510,11 @@ function HojaConfirmacion({
   puesto,
   nombre,
   setNombre,
+  apellido,
+  setApellido,
+  duplicado,
+  onSeguirIgual,
+  onDescartarDuplicado,
   email,
   setEmail,
   aceptaDatos,
@@ -504,8 +530,10 @@ function HojaConfirmacion({
 }) {
   if (!clase) return null;
 
-  // El teléfono ya no se pide: basta el nombre y la autorización.
-  const datosCompletos = nombre.trim().length >= 2 && aceptaDatos;
+  // Nombre Y apellido, los dos obligatorios: con una sola caja la gente escribe
+  // "Laura" a secas y en recepción hay tres Lauras.
+  const datosCompletos =
+    nombre.trim().length >= 2 && apellido.trim().length >= 2 && aceptaDatos;
 
   return (
     <Hoja abierta={abierta} onCerrar={onCerrar} titulo="Confirma tu reserva">
@@ -556,19 +584,28 @@ function HojaConfirmacion({
             {/* Lo único obligatorio. El teléfono se quitó: el gimnasio no lo
                 usa, y exigirlo hacía que recepción escribiera un mismo número
                 de relleno para todos, con lo que todas esas personas acababan
-                siendo el mismo cliente. */}
-            <Campo
-              etiqueta="Tu nombre"
-              ayuda="Con este nombre te reciben en recepción, así que escríbelo completo."
-            >
-              <Entrada
-                autoFocus
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Nombre y apellido"
-                autoComplete="name"
-              />
-            </Campo>
+                siendo el mismo cliente.
+                Van en dos cajas porque con una sola la gente escribe "Laura" a
+                secas y en recepción hay tres Lauras. */}
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="Nombre">
+                <Entrada
+                  autoFocus
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  placeholder="Laura"
+                  autoComplete="given-name"
+                />
+              </Campo>
+              <Campo etiqueta="Apellido">
+                <Entrada
+                  value={apellido}
+                  onChange={(e) => setApellido(e.target.value)}
+                  placeholder="Gómez"
+                  autoComplete="family-name"
+                />
+              </Campo>
+            </div>
             <Campo etiqueta="Correo (opcional)" ayuda="Te enviamos la confirmación y el recordatorio.">
               <Entrada
                 value={email}
@@ -622,16 +659,34 @@ function HojaConfirmacion({
 
         {error && <Aviso>{error.message}</Aviso>}
 
-        <Boton
-          className="w-full"
-          disabled={!datosCompletos}
-          cargando={cargando}
-          onClick={onConfirmar}
-          style={datosCompletos && !cargando ? { backgroundColor: acento } : undefined}
-        >
-          {{ wompi: 'Ir a pagar', transferencia: 'Continuar al pago' }[config?.modoPago] ??
-            'Confirmar reserva'}
-        </Boton>
+        {/* Ya hay un puesto a este nombre en esta clase. Se pregunta, no se
+            prohíbe: repetir puede ser a propósito -apartar el puesto de al lado
+            para alguien- pero casi siempre es que se olvidó de que ya había
+            reservado. */}
+        {duplicado ? (
+          <div className="rounded-2xl border border-alerta/40 bg-alerta/10 p-4 space-y-3">
+            <p className="text-sm text-alerta">{duplicado}</p>
+            <div className="flex gap-2">
+              <Boton variante="secundario" className="flex-1" onClick={onDescartarDuplicado}>
+                No, cancelar
+              </Boton>
+              <Boton className="flex-1" cargando={cargando} onClick={onSeguirIgual}>
+                Sí, agendar igual
+              </Boton>
+            </div>
+          </div>
+        ) : (
+          <Boton
+            className="w-full"
+            disabled={!datosCompletos}
+            cargando={cargando}
+            onClick={onConfirmar}
+            style={datosCompletos && !cargando ? { backgroundColor: acento } : undefined}
+          >
+            {{ wompi: 'Ir a pagar', transferencia: 'Continuar al pago' }[config?.modoPago] ??
+              'Confirmar reserva'}
+          </Boton>
+        )}
       </div>
     </Hoja>
   );
