@@ -542,15 +542,21 @@ export async function sugerenciasParaReproductor({ excluir = [], limite = 12 } =
 /**
  * La cola del gimnasio, en el orden en que va a sonar.
  *
- * POR RONDAS: primero la primera cancion de cada quien, despues la segunda de
- * cada quien, y asi. Cada persona puede pedir las que quiera sin dejar a los
- * demas sin sonar, que es lo que pasaria con un orden de llegada estricto.
+ * POR ORDEN DE LLEGADA: la primera que se pidio suena primero, y lo que se pide
+ * ahora se va al final.
+ *
+ * Antes se repartia por rondas -la primera de cada quien, luego la segunda de
+ * cada quien- para que nadie acaparara. Sobre el papel era mas justo; en el
+ * salon se veia al reves: al empezar a sonar la primera cancion de alguien, el
+ * siguiente que pedia entraba con turno 1 y se colaba delante de las que esa
+ * persona tenia esperando con turno 2 y 3. El ultimo en pedir quedaba primero,
+ * que es justo lo contrario de lo que se espera de una fila.
  */
 export async function colaActual({ incluirSonadas = false, limiteSonadas = 20 } = {}) {
   const pedidos = await prisma.pedidoMusica.findMany({
     where: incluirSonadas ? {} : { estado: { in: ['EN_FILA', 'SONANDO'] } },
     include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
-    orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
+    orderBy: { creadoEn: 'asc' },
     ...(incluirSonadas ? { take: limiteSonadas } : {}),
   });
   return pedidos.map(serializarPedido);
@@ -612,8 +618,9 @@ export async function pedirCancion({
     ? await prisma.usuario.findUnique({ where: { id: usuarioId } })
     : null;
 
-  // El turno es cuantas lleva pedidas QUIEN pide, contando solo lo que sigue
-  // vivo: al vaciarse la cola todos vuelven a empezar en la ronda 1.
+  // Cuantas lleva pedidas QUIEN pide, contando solo lo que sigue vivo. Ya no
+  // decide el orden -la fila va por llegada- pero se guarda porque es lo que
+  // dice si alguien esta pidiendo de mas.
   const quien = usuario
     ? { usuarioId: usuario.id }
     : dispositivoId
@@ -701,7 +708,7 @@ export async function estadoReproduccion() {
     prisma.pedidoMusica.findMany({
       where: { estado: { in: ['EN_FILA', 'SONANDO'] } },
       include: { cancion: true, usuario: { select: { id: true, nombre: true } } },
-      orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
+      orderBy: { creadoEn: 'asc' },
     }),
     claseEnCurso(),
   ]);
@@ -757,7 +764,7 @@ export async function siguienteCancion() {
 
     const siguiente = await tx.pedidoMusica.findFirst({
       where: { estado: 'EN_FILA' },
-      orderBy: [{ turno: 'asc' }, { creadoEn: 'asc' }],
+      orderBy: { creadoEn: 'asc' },
     });
 
     if (!siguiente) return { sonando: null, motivo: 'COLA_VACIA' };

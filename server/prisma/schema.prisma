@@ -267,16 +267,16 @@ model PedidoMusica {
   // Como se muestra en la pantalla. Sale de la sesion si la hay.
   nombre String?
 
-  // Numero de pedido de QUIEN pide: 1 la primera que pidio, 2 la segunda... La
-  // fila se ordena por turno y luego por hora, de modo que suena la primera de
-  // cada quien antes que la segunda de nadie.
+  // Numero de pedido de QUIEN pide: 1 la primera que pidio, 2 la segunda...
+  // YA NO ORDENA LA FILA, que va por orden de llegada; se guarda porque dice
+  // cuantas llevaba pedidas esa persona, que es util para mirar el historial.
   turno Int @default(1)
 
   estado   EstadoPedidoMusica @default(EN_FILA)
   creadoEn DateTime           @default(now())
   sonoEn   DateTime?
 
-  @@index([estado, turno, creadoEn])
+  @@index([estado, creadoEn])
   @@index([cancionId, estado])
   @@index([claseId])
 }
