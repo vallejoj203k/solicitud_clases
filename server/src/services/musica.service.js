@@ -91,6 +91,40 @@ export async function guardarDeYoutube(videoId) {
   });
 }
 
+/**
+ * Buscar una cancion para pedirla: primero en casa, despues en YouTube.
+ *
+ * El catalogo local no cuesta cuota y ya trae todo lo que el gimnasio importo o
+ * alguien pidio alguna vez, asi que va delante. YouTube completa la lista, y si
+ * se acabaron las busquedas del dia se devuelve lo local con un aviso en vez de
+ * un error: quedarse sin poder pedir nada por eso es peor que una lista corta.
+ */
+export async function buscarParaPedir(q) {
+  const texto = String(q || '').trim();
+  if (texto.length < 2) return { resultados: [], sinCuota: false };
+
+  const locales = await buscarCanciones({ q: texto, limite: 8 }).catch(() => []);
+  const reproducibles = locales.filter((c) => c.videoId && !c.bloqueadaEn);
+
+  let deYoutube = [];
+  let sinCuota = false;
+  try {
+    deYoutube = await buscarEnYoutube(texto);
+  } catch (e) {
+    if (e.codigo !== 'YOUTUBE_SIN_CUOTA') throw e;
+    sinCuota = true;
+  }
+
+  // Lo local primero, y sin repetir lo que YouTube devuelva igual.
+  const puestas = new Set(reproducibles.map((c) => c.videoId));
+  const resultados = [
+    ...reproducibles,
+    ...deYoutube.filter((c) => !puestas.has(c.videoId)),
+  ].slice(0, 25);
+
+  return { resultados, sinCuota };
+}
+
 /** Busca en lo que ya se ha pedido alguna vez. No gasta cuota de YouTube. */
 export async function buscarCanciones({ q, incluirInactivas = false, limite = 20 } = {}) {
   const texto = q?.trim();
