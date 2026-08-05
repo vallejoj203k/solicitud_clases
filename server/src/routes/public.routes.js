@@ -346,6 +346,8 @@ publicRouter.get('/configuracion', (_req, res) => {
   const modo = modoDeCobro();
   res.json({
     horasLimiteCancelacion: env.horasLimiteCancelacion,
+    // Desde cuándo se puede reservar por la app. Null = sin restricción.
+    reservasDesde: env.reservasDesde,
     modoPago: modo,
     // Se conserva por compatibilidad con lo que ya lee el cliente.
     pagoEnLinea: modo === 'wompi',

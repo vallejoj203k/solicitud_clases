@@ -12,6 +12,7 @@ import {
   IconoContraer,
 } from '../components/Iconos.jsx';
 import { hora12 } from '../lib/formato.js';
+import { etiquetaApertura } from '../lib/apertura.js';
 import { leerCliente } from '../lib/sesion.js';
 import { usePantallaCompleta } from '../lib/pantalla.js';
 
@@ -38,6 +39,12 @@ export default function Home() {
     queryFn: api.inicio,
     staleTime: 30_000,
   });
+
+  // Hasta que el gimnasio termine de pasar su horario al software, las reservas
+  // por la app empiezan en una fecha. Se avisa en la tarjeta de cada disciplina
+  // porque es donde la persona va a tocar.
+  const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
+  const desdeCuando = etiquetaApertura(config?.reservasDesde);
 
   const sinClases = data && data.tipos.every((t) => t.totalProximas === 0);
 
@@ -113,6 +120,7 @@ export default function Home() {
             <TarjetaDisciplina
               key={tipo.slug}
               tipo={tipo}
+              desdeCuando={desdeCuando}
               onIrAPuestos={(clase) => navegar(`/reservar/${tipo.slug}?clase=${clase.id}`)}
             />
           ))}
@@ -151,7 +159,7 @@ function Tarjeta({ children, className = '' }) {
   );
 }
 
-function TarjetaDisciplina({ tipo, onIrAPuestos }) {
+function TarjetaDisciplina({ tipo, desdeCuando, onIrAPuestos }) {
   const Icono = ICONOS_DISCIPLINA[tipo.icono] ?? ICONOS_DISCIPLINA.run;
   const acento = tipo.color;
   const proxima = tipo.proximas.find((c) => !c.agotada) ?? tipo.proximas[0] ?? null;
@@ -198,6 +206,11 @@ function TarjetaDisciplina({ tipo, onIrAPuestos }) {
             <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">
               {tipo.nombre}
             </h2>
+            {desdeCuando && (
+              <p className="mt-1 text-[11px] font-bold leading-tight text-volt-500">
+                Reservas desde el {desdeCuando} en adelante
+              </p>
+            )}
           </div>
           <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 backdrop-blur-sm text-humo-100 border border-white/10">
             <IconoFlecha />

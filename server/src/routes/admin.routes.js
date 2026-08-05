@@ -20,6 +20,7 @@ import {
   cambiarAsistente,
   cambiarAsistentes,
   cancelarReserva,
+  crearReserva,
   marcarAsistencia,
   reservarEnLote,
 } from '../services/reserva.service.js';
@@ -181,6 +182,37 @@ adminRouter.post(
         puestoPreferido: datos.puestoPreferido || null,
       })
     );
+  })
+);
+
+/**
+ * Dar un puesto desde recepción.
+ *
+ * Es la vía para lo que no pasa por la app: quien llega al mostrador, quien
+ * llama, y sobre todo las clases anteriores a la fecha de apertura, cuyos cupos
+ * estaban repartidos en papel. Por eso va con `porAdmin`, que se salta ese muro
+ * y el aviso de reserva repetida —recepción está viendo la lista y ya sabe.
+ */
+adminRouter.post(
+  '/clases/:id/reservar',
+  asyncHandler(async (req, res) => {
+    const { nombre, apellido, puestoCodigo } = z
+      .object({
+        nombre: z.string().trim().min(2).max(60),
+        apellido: z.string().trim().min(2).max(60),
+        puestoCodigo: z.string().min(1).max(6),
+      })
+      .parse(req.body);
+
+    const reserva = await crearReserva({
+      claseId: req.params.id,
+      puestoCodigo,
+      nombre: `${nombre} ${apellido}`,
+      aceptaDatos: true,
+      porAdmin: true,
+      confirmarDuplicado: true,
+    });
+    res.status(201).json(reserva);
   })
 );
 
