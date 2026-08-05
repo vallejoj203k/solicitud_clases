@@ -17,6 +17,17 @@ import { leerCliente } from '../lib/sesion.js';
 import { usePantallaCompleta } from '../lib/pantalla.js';
 
 /**
+ * La dirección que se le enseña a la gente del salón.
+ *
+ * VA ESCRITA A MANO, y no sale de `APP_URL` ni de `location.host` a propósito:
+ * la app se sirve en `app.megavital.app`, pero lo que hay que poder dictarle a
+ * alguien que la va a buscar desde su propio teléfono es el dominio corto. Son
+ * dos cosas distintas, y esta es un texto, no una configuración. Si el gimnasio
+ * cambia de dominio, se cambia aquí.
+ */
+const DIRECCION_PUBLICA = 'megavital.app';
+
+/**
  * Pantalla principal: tres tarjetas —Spinning, Running y Música— y nada más.
  *
  * LA REGLA DE ESTA PANTALLA ES QUE NO SE DESPLAZA. La app se usa de pie, con
@@ -93,6 +104,20 @@ export default function Home() {
           </Link>
         </div>
       </header>
+
+      {/* La dirección, justo encima de las tarjetas.
+          POR QUE ESTA AQUI: en el gimnasio la app vive en una tablet del
+          mostrador, y quien pasa por delante y la ve funcionando no tiene forma
+          de saber dónde encontrarla desde su propio teléfono. Por eso va en el
+          inicio y no en un pie de página: es lo que se apunta de un vistazo.
+          La etiqueta es la que se recorta cuando no cabe; la dirección nunca
+          (`shrink-0`), porque es el único dato que importa de esta línea. */}
+      <div className="shrink-0 px-5 pb-3 flex items-baseline gap-2">
+        <p className="etiqueta min-w-0 truncate">Búscalo en internet como:</p>
+        <h2 className="shrink-0 text-[26px] leading-none font-extrabold tracking-tightest text-volt-500">
+          {DIRECCION_PUBLICA}
+        </h2>
+      </div>
 
       {isLoading && (
         <div className="flex-1 flex items-center justify-center">
