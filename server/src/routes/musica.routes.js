@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler, AppError } from '../utils/errores.js';
-import { buscar, catalogo, hayYoutube, populares } from '../services/youtube.service.js';
+import { catalogo, hayYoutube, populares } from '../services/youtube.service.js';
 import {
   buscarCanciones,
   cancionesDeLaCasa,
@@ -9,6 +9,7 @@ import {
   estadoReproduccion,
   pedirCancion,
   quitarPedido,
+  buscarParaPedir,
 } from '../services/musica.service.js';
 
 /**
@@ -35,15 +36,25 @@ const dispositivoDe = (req) => {
     : null;
 };
 
-/** Buscar en todo YouTube. */
+/**
+ * Buscar una canción.
+ *
+ * MIRA PRIMERO LO QUE YA HAY. El catálogo -todo lo que el gimnasio importó o
+ * alguien pidió alguna vez- está en la base y no cuesta cuota; YouTube cobra 100
+ * unidades por búsqueda, de las 10.000 que da el día. Poner delante lo local
+ * hace que las canciones que se piden a menudo salgan gratis.
+ *
+ * Y CUANDO SE ACABA LA CUOTA, LA PANTALLA SIGUE SIRVIENDO: se devuelve lo local
+ * con un aviso, en vez de un error. El gimnasio se quedó una tarde sin poder
+ * pedir nada por esto.
+ */
 musicaRouter.get(
   '/musica/buscar',
   asyncHandler(async (req, res) => {
     if (!req.usuario?.sub && !dispositivoDe(req)) {
       throw new AppError('Recarga la página e inténtalo de nuevo.', 400, 'SIN_DISPOSITIVO');
     }
-    const q = typeof req.query.q === 'string' ? req.query.q : '';
-    res.json(await buscar(q));
+    res.json(await buscarParaPedir(typeof req.query.q === 'string' ? req.query.q : ''));
   })
 );
 

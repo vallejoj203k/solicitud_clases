@@ -121,7 +121,11 @@ export default function Musica() {
     ...(catalogo?.grupos ?? []).flatMap((g) => g.canciones),
     ...(catalogo?.deLaCasa ?? []),
   ];
-  const mostrando = consulta.length >= 2 ? resultados : paraEmpezar;
+  // La búsqueda devuelve `{ resultados, sinCuota }`: lo primero es lo local más
+  // lo de YouTube, y `sinCuota` avisa de que hoy ya no quedan búsquedas y solo
+  // se está viendo lo que el gimnasio ya tiene guardado.
+  const mostrando = consulta.length >= 2 ? resultados?.resultados : paraEmpezar;
+  const sinCuota = Boolean(resultados?.sinCuota);
 
   if (confirmado) return <Confirmacion pedido={confirmado} onIr={() => navegar('/')} />;
 
@@ -230,6 +234,13 @@ export default function Musica() {
         </form>
 
         {errorBusqueda && <Aviso tono="info">{errorBusqueda.message}</Aviso>}
+
+        {sinCuota && (
+          <Aviso tono="info">
+            Hoy ya se agotaron las búsquedas en YouTube. Abajo está lo que el gimnasio ya
+            tiene guardado; mañana vuelve a buscarse todo.
+          </Aviso>
+        )}
 
         <div>
           <p className="etiqueta mb-2">

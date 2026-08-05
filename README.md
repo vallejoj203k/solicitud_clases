@@ -96,6 +96,7 @@ Cancion       id, titulo, artista?, videoId(único)?, canal?, duracionSeg?, mini
 PedidoMusica  id, cancionId, claseId?, usuarioId?, dispositivoId?, nombre?, turno,
               estado(EN_FILA|SONANDO|SONO), creadoEn, sonoEn?
               (único parcial: cancionId donde estado IN (EN_FILA, SONANDO))
+BusquedaYoutube id, texto(único, normalizado), resultado(Json), creadoEn
 ```
 
 ### No hay tabla `Puesto`
@@ -598,14 +599,28 @@ enlace cuesta **1**. De ahí tres decisiones:
 
 - **la búsqueda se dispara al enviar, nunca al teclear** —buscar mientras se escribe
   agotaría la cuota en una tarde—;
-- los resultados se **cachean 12 horas** por texto normalizado, así que «bad bunny» cuesta
-  una sola vez al día;
+- **primero se mira en casa**: el catálogo local (todo lo importado y todo lo que alguien
+  pidió alguna vez) no cuesta nada y va delante de lo de YouTube, así que las canciones
+  que se piden a menudo terminan saliendo gratis;
+- los resultados se **guardan en la base** (`BusquedaYoutube`, 30 días) además de en
+  memoria, así que «bad bunny» se paga una sola vez;
 - el catálogo que se ve al abrir sale de **listas de reproducción** (`YOUTUBE_LISTAS`), no
   de búsquedas, y la carga masiva va **por enlaces**, no por títulos: pegar 50 títulos
   costaría media cuota diaria; pegar 50 enlaces cuesta 1 unidad.
 
 Buscar exige sesión de cliente, justamente para que la cuota no se la gaste cualquiera
 desde internet.
+
+**Por qué la caché está en la base y no solo en memoria.** Estaba solo en un `Map` del
+proceso, y en Railway cada despliegue arranca un proceso nuevo y la vaciaba: en un día de
+cambios no llegaba a servir de nada y la cuota se gastaba igual. El gimnasio se quedó una
+tarde sin poder pedir música por eso.
+
+**Y cuando la cuota se acaba de verdad**, `/api/musica/buscar` no falla: responde
+`{ resultados, sinCuota: true }` con lo que haya en el catálogo local y la pantalla lo
+avisa. Ojo con el motivo que manda Google: el tope diario de búsquedas llega como
+`rateLimitExceeded`, no como `quotaExceeded`, y por no contemplarlo salía en pantalla el
+texto crudo en inglés («Quota exceeded for quota metric 'Search Queries'…»).
 
 ### Qué se descarta y por qué
 
@@ -885,7 +900,7 @@ zona con horario de verano.
 | `GET` | `/api/reservas/:codigo/calendario.ics` | Archivo de calendario |
 | `GET` | `/api/mis-reservas` | Reservas del dispositivo (token de cliente) |
 | `POST` | `/api/reservas/:codigo/cancelar` | Cancelar la propia reserva |
-| `GET` | `/api/musica/buscar?q=` | Buscar en YouTube (token de cliente: protege la cuota) |
+| `GET` | `/api/musica/buscar?q=` | Buscar: catálogo local + YouTube → `{ resultados, sinCuota }` |
 | `GET` | `/api/musica/populares` | Lo más escuchado del momento (ranking de YouTube) |
 | `GET` | `/api/musica/catalogo` | Listas configuradas + canciones de la casa |
 | `GET` | `/api/musica/ahora` | Qué suena y qué viene |

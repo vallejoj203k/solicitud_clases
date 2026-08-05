@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { prisma } from '../config/prisma.js';
 import { AppError } from '../utils/errores.js';
 
 /**
@@ -25,8 +26,41 @@ import { AppError } from '../utils/errores.js';
 
 const BASE = env.youtube.urlBasePruebas || 'https://www.googleapis.com/youtube/v3';
 
-/** Resultados cacheados en memoria. Se pierde al reiniciar y no importa. */
+/**
+ * Cache de dos pisos.
+ *
+ * En MEMORIA para lo de la sesion, y en la BASE para las busquedas, que son las
+ * caras. La de memoria sola no bastaba: en Railway cada despliegue arranca un
+ * proceso nuevo y la vaciaba, asi que en un dia de cambios no servia de nada y
+ * la cuota se gastaba igual.
+ */
 const cache = new Map();
+
+// Cuanto vale una busqueda guardada. Largo a proposito: los resultados de
+// "bad bunny" no cambian de un dia para otro, y repetir una busqueda que ya se
+// hizo no tiene por que costar cuota nunca mas.
+const HORAS_CACHE_BUSQUEDA = 24 * 30;
+
+const normalizar = (t) => String(t || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** Busqueda guardada en la base, si no se ha pasado de vieja. */
+async function deLaBase(texto) {
+  const fila = await prisma.busquedaYoutube.findUnique({ where: { texto } }).catch(() => null);
+  if (!fila) return null;
+  const vencida = Date.now() - fila.creadoEn.getTime() > HORAS_CACHE_BUSQUEDA * 3600_000;
+  return vencida ? null : fila.resultado;
+}
+
+async function aLaBase(texto, resultado) {
+  // Que falle el guardado no puede tumbar una busqueda que ya salio bien.
+  await prisma.busquedaYoutube
+    .upsert({
+      where: { texto },
+      update: { resultado, creadoEn: new Date() },
+      create: { texto, resultado },
+    })
+    .catch(() => {});
+}
 
 function deCache(clave) {
   const entrada = cache.get(clave);
@@ -65,9 +99,18 @@ async function llamar(recurso, params) {
 
   if (!respuesta.ok) {
     const motivo = datos?.error?.errors?.[0]?.reason;
+    const mensaje = datos?.error?.message || '';
     // La cuota agotada no es un fallo del gimnasio ni algo que reintentar:
     // merece un mensaje que se entienda desde la pantalla.
-    if (motivo === 'quotaExceeded' || motivo === 'dailyLimitExceeded') {
+    //
+    // OJO CON LOS MOTIVOS: el tope diario de BUSQUEDAS no llega como
+    // `quotaExceeded` sino como `rateLimitExceeded`, y por eso al gimnasio le
+    // salia en pantalla el texto crudo de Google en ingles. Se mira tambien el
+    // mensaje, que en todos los casos habla de "quota".
+    if (
+      ['quotaExceeded', 'dailyLimitExceeded', 'rateLimitExceeded'].includes(motivo) ||
+      /quota/i.test(mensaje)
+    ) {
       throw new AppError(
         'Se acabaron las búsquedas de hoy. Elige del catálogo mientras tanto.',
         429,
@@ -174,9 +217,19 @@ export async function buscar(texto) {
   const q = String(texto || '').trim().slice(0, 100);
   if (q.length < 2) return [];
 
-  const clave = `buscar:${q.toLowerCase()}`;
-  const guardado = deCache(clave);
-  if (guardado) return guardado;
+  const normalizado = normalizar(q);
+  const clave = `buscar:${normalizado}`;
+
+  const enMemoria = deCache(clave);
+  if (enMemoria) return enMemoria;
+
+  // Antes de gastar 100 unidades, mirar si ya se busco alguna vez. Esto es lo
+  // que sobrevive a un despliegue.
+  const enLaBase = await deLaBase(normalizado);
+  if (enLaBase) {
+    aCache(clave, enLaBase, 12 * 60);
+    return enLaBase;
+  }
 
   const datos = await llamar('search', {
     part: 'snippet',
@@ -193,9 +246,9 @@ export async function buscar(texto) {
   const ids = (datos.items ?? []).map((i) => i.id?.videoId).filter(Boolean);
   const canciones = await detallesDe(ids);
 
-  // 12 horas: una busqueda repetida el mismo dia no vuelve a gastar cuota, y al
-  // dia siguiente se refresca por si salio algo nuevo.
   aCache(clave, canciones, 12 * 60);
+  // Y en la base, que es lo que sobrevive al proximo despliegue.
+  await aLaBase(normalizado, canciones);
   return canciones;
 }
 
