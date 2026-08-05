@@ -12,7 +12,7 @@ import {
   IconoContraer,
 } from '../components/Iconos.jsx';
 import { hora12 } from '../lib/formato.js';
-import { etiquetaApertura } from '../lib/apertura.js';
+import { abierta, etiquetaApertura } from '../lib/apertura.js';
 import { leerCliente } from '../lib/sesion.js';
 import { usePantallaCompleta } from '../lib/pantalla.js';
 
@@ -44,7 +44,8 @@ export default function Home() {
   // por la app empiezan en una fecha. Se avisa en la tarjeta de cada disciplina
   // porque es donde la persona va a tocar.
   const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
-  const desdeCuando = etiquetaApertura(config?.reservasDesde);
+  const reservasDesde = config?.reservasDesde ?? null;
+  const desdeCuando = etiquetaApertura(reservasDesde);
 
   const sinClases = data && data.tipos.every((t) => t.totalProximas === 0);
 
@@ -121,6 +122,7 @@ export default function Home() {
               key={tipo.slug}
               tipo={tipo}
               desdeCuando={desdeCuando}
+              reservasDesde={reservasDesde}
               onIrAPuestos={(clase) => navegar(`/reservar/${tipo.slug}?clase=${clase.id}`)}
             />
           ))}
@@ -159,10 +161,16 @@ function Tarjeta({ children, className = '' }) {
   );
 }
 
-function TarjetaDisciplina({ tipo, desdeCuando, onIrAPuestos }) {
+function TarjetaDisciplina({ tipo, desdeCuando, reservasDesde, onIrAPuestos }) {
   const Icono = ICONOS_DISCIPLINA[tipo.icono] ?? ICONOS_DISCIPLINA.run;
   const acento = tipo.color;
-  const proxima = tipo.proximas.find((c) => !c.agotada) ?? tipo.proximas[0] ?? null;
+  const siguiente = tipo.proximas.find((c) => !c.agotada) ?? tipo.proximas[0] ?? null;
+
+  // El atajo a la próxima clase se esconde mientras esa clase no se pueda
+  // reservar: lleva a un mapa de puestos donde no se puede tomar ninguno, y de
+  // paso deja el sitio que necesita el aviso para caber centrado en un teléfono
+  // corto, donde la tarjeta mide un tercio de la pantalla.
+  const proxima = siguiente && abierta(siguiente.fecha, reservasDesde) ? siguiente : null;
 
   return (
     <Tarjeta>
@@ -195,6 +203,25 @@ function TarjetaDisciplina({ tipo, desdeCuando, onIrAPuestos }) {
       />
 
       <div className="relative z-20 h-full p-4 flex flex-col justify-end pointer-events-none">
+        {/* El aviso de que las reservas todavía no abren: SOBRE la foto y
+            centrado, porque es lo primero que tiene que ver quien abre la app.
+            Ocupa el hueco que sobra encima del texto (`flex-1`) y se centra
+            dentro de él; con un desplazamiento fijo quedaba bien en la tablet y
+            encima del nombre en un teléfono corto, donde la tarjeta mide un
+            tercio. `min-h-0` es lo que le permite encogerse ahí.
+            El fondo con desenfoque es lo que hace legible un texto rojo sobre la
+            foto del salón. */}
+        {desdeCuando && (
+          <div className="flex-1 min-h-0 flex items-center justify-center pb-2">
+            <p
+              className="rounded-2xl bg-carbon-900/80 backdrop-blur-sm px-3 py-2 text-center
+                         text-[17px] leading-tight font-extrabold text-alerta"
+            >
+              Reservas desde el {desdeCuando} en adelante
+            </p>
+          </div>
+        )}
+
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <span
@@ -211,19 +238,6 @@ function TarjetaDisciplina({ tipo, desdeCuando, onIrAPuestos }) {
             <IconoFlecha />
           </span>
         </div>
-
-        {/* El aviso de que las reservas todavía no abren. Va en su propia línea
-            -no en la columna del nombre- para poder centrarse en el ancho de la
-            tarjeta, y con fondo propio porque un texto rojo sobre la foto del
-            salón no se lee. */}
-        {desdeCuando && (
-          <p
-            className="mt-2.5 rounded-xl bg-carbon-900/75 backdrop-blur-sm px-2 py-1.5 text-center
-                       text-[15px] leading-tight font-extrabold text-alerta"
-          >
-            Reservas desde el {desdeCuando} en adelante
-          </p>
-        )}
 
         {/* Un toque desde el inicio hasta el mapa de puestos de la próxima
             clase. `pointer-events-auto` la rescata del enlace de la tarjeta. */}
@@ -250,7 +264,7 @@ function TarjetaDisciplina({ tipo, desdeCuando, onIrAPuestos }) {
             </span>
           </button>
         ) : (
-          <p className="mt-2.5 text-xs text-humo-500">Sin horarios próximos.</p>
+          !desdeCuando && <p className="mt-2.5 text-xs text-humo-500">Sin horarios próximos.</p>
         )}
       </div>
     </Tarjeta>
