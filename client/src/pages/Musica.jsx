@@ -11,6 +11,7 @@ import {
   IconoMusica,
 } from '../components/Iconos.jsx';
 import { duracion } from '../lib/youtube.js';
+import { INICIO_TABLET } from '../lib/tablet.js';
 
 /**
  * Pide tu música.
@@ -95,12 +96,14 @@ export default function Musica() {
     onSettled: () => setPidiendo(null),
   });
 
-  // Vuelta al inicio. El temporizador se limpia si la pantalla se desmonta
-  // antes -por ejemplo si tocan la confirmación-, para no navegar encima de
-  // donde haya ido la persona.
+  // Vuelta al inicio DE LA TABLET, no al público: esta pantalla solo se abre
+  // desde el salón, y el inicio público ya no tiene Música. Mandarla ahí
+  // dejaría a la siguiente persona de la fila sin forma de volver a pedir.
+  // El temporizador se limpia si la pantalla se desmonta antes -por ejemplo si
+  // tocan la confirmación-, para no navegar encima de donde haya ido la persona.
   useEffect(() => {
     if (!confirmado) return undefined;
-    const t = setTimeout(() => navegar('/'), MS_CONFIRMACION);
+    const t = setTimeout(() => navegar(INICIO_TABLET), MS_CONFIRMACION);
     return () => clearTimeout(t);
   }, [confirmado, navegar]);
 
@@ -127,13 +130,14 @@ export default function Musica() {
   const mostrando = consulta.length >= 2 ? resultados?.resultados : paraEmpezar;
   const sinCuota = Boolean(resultados?.sinCuota);
 
-  if (confirmado) return <Confirmacion pedido={confirmado} onIr={() => navegar('/')} />;
+  if (confirmado)
+    return <Confirmacion pedido={confirmado} onIr={() => navegar(INICIO_TABLET)} />;
 
   return (
     <div className="min-h-dvh pb-16">
       <header className="px-5 pt-6 pb-4 flex items-center gap-3">
         <Link
-          to="/"
+          to={INICIO_TABLET}
           aria-label="Volver"
           className="p-2 -ml-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
         >

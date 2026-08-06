@@ -16,6 +16,7 @@ import AdminPagos from './pages/admin/Pagos.jsx';
 import AdminClientes from './pages/admin/Clientes.jsx';
 import AdminRecepcion from './pages/admin/Recepcion.jsx';
 import AdminMusica from './pages/admin/Musica.jsx';
+import { INICIO_TABLET, MUSICA_TABLET } from './lib/tablet.js';
 
 export default function App() {
   return (
@@ -25,7 +26,18 @@ export default function App() {
       <Route path="/reservar/:slug" element={<Reservar />} />
       <Route path="/reserva/:codigo" element={<Reserva />} />
       <Route path="/mis-reservas" element={<MisReservas />} />
-      <Route path="/musica" element={<Musica />} />
+
+      {/* La tablet del salón: el mismo inicio, pero con Música, en una
+          dirección que no está enlazada desde ninguna parte. Ver `lib/tablet.js`
+          para hasta dónde protege eso -y hasta dónde no-. */}
+      <Route path={INICIO_TABLET} element={<Home tablet />} />
+      <Route path={MUSICA_TABLET} element={<Musica />} />
+
+      {/* La dirección vieja de la música ya no lleva a ninguna parte: pedir
+          canciones dejó de hacerse desde el teléfono de cada quien. Se deja
+          escrita en vez de dejarla caer en el comodín de abajo para que quien
+          la busque en el código encuentre el porqué. */}
+      <Route path="/musica" element={<Navigate to="/" replace />} />
       {/* La pantalla del gimnasio: fuera del layout del panel a propósito, para
           que ocupe todo el televisor sin la barra de navegación. */}
       <Route path="/musica/reproductor" element={<Reproductor />} />
