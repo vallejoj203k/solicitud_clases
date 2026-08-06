@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client.js';
-import { Aviso, Cargando, Entrada, cx } from '../components/ui.jsx';
+import { Aviso, Cargando, Entrada, Hoja, cx } from '../components/ui.jsx';
 import {
   IconoAtras,
   IconoBuscar,
@@ -47,6 +47,14 @@ export default function Musica() {
   // El pedido recién hecho. Mientras esté puesto se ve la confirmación y corre
   // el reloj para volver al inicio.
   const [confirmado, setConfirmado] = useState(null);
+  // El aviso que tapa la pantalla hasta que se cierra.
+  //
+  // EMPIEZA SIN VER EN CADA VISITA a propósito, y no se recuerda en el
+  // navegador: la tablet del salón la usa una persona distinta cada vez, y
+  // recordarlo significaría que solo lo lee quien la estrene ese día. Como al
+  // pedir se vuelve al inicio de la tablet, esta pantalla se monta de nuevo
+  // para cada quien y el aviso vuelve a salir.
+  const [avisoVisto, setAvisoVisto] = useState(false);
   const entrada = useRef(null);
 
   const { data: estado } = useQuery({
@@ -135,6 +143,21 @@ export default function Musica() {
 
   return (
     <div className="min-h-dvh pb-16">
+      {/* La regla de la salsa, antes de dejar buscar nada.
+          Va sobre la pantalla y no como un aviso más dentro de la lista porque
+          ahí se lee cuando ya da igual: la idea es que se vea ANTES de ponerse
+          a buscar. La `Hoja` ya trae la X, el fondo que bloquea el resto, el
+          cierre con Escape y el diálogo accesible. */}
+      <Hoja
+        abierta={!avisoVisto}
+        onCerrar={() => setAvisoVisto(true)}
+        titulo="Advertencia"
+      >
+        <p className="py-2 text-center text-[26px] leading-tight font-extrabold text-alerta">
+          Salsa solo los viernes
+        </p>
+      </Hoja>
+
       <header className="px-5 pt-6 pb-4 flex items-center gap-3">
         <Link
           to={INICIO_TABLET}
