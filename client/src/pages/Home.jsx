@@ -15,6 +15,7 @@ import { hora12 } from '../lib/formato.js';
 import { abierta, etiquetaApertura } from '../lib/apertura.js';
 import { leerCliente } from '../lib/sesion.js';
 import { usePantallaCompleta } from '../lib/pantalla.js';
+import { MUSICA_TABLET } from '../lib/tablet.js';
 
 /**
  * La dirección que se le enseña a la gente del salón.
@@ -28,19 +29,25 @@ import { usePantallaCompleta } from '../lib/pantalla.js';
 const DIRECCION_PUBLICA = 'megavital.app';
 
 /**
- * Pantalla principal: tres tarjetas —Spinning, Running y Música— y nada más.
+ * Pantalla principal: las tarjetas de las disciplinas y nada más.
  *
  * LA REGLA DE ESTA PANTALLA ES QUE NO SE DESPLAZA. La app se usa de pie, con
  * una mano y muchas veces en la tablet del mostrador: todo lo que se puede
  * hacer tiene que estar a la vista. Por eso el alto es `h-dvh` y las tarjetas
  * se reparten el espacio que sobra en vez de tener alto propio; en una pantalla
- * pequeña se encogen, pero siguen cabiendo las tres.
+ * pequeña se encogen, pero siguen cabiendo todas.
  *
  * Cada tarjeta lleva al listado de su disciplina, y la pastilla de abajo salta
  * directo al mapa de puestos de la próxima clase: reservar sigue siendo un
  * toque desde aquí.
+ *
+ * `tablet` ES LA UNICA DIFERENCIA entre las dos versiones de esta pantalla. La
+ * pública -la que abre cualquiera desde su teléfono- solo tiene las disciplinas.
+ * La de la tablet del salón añade Música, porque pedir canciones dejó de ser
+ * algo que se hace desde casa y pasó a hacerse ahí, de pie, delante del
+ * mostrador. Ver `lib/tablet.js`.
  */
-export default function Home() {
+export default function Home({ tablet = false }) {
   const navegar = useNavigate();
   const cliente = leerCliente();
   const pantalla = usePantallaCompleta();
@@ -135,11 +142,13 @@ export default function Home() {
         <main
           className={cx(
             'flex-1 min-h-0 px-4 pb-4 grid gap-3',
-            // Vertical: una debajo de otra, repartiéndose el alto.
-            'grid-rows-3',
-            // Tablet horizontal: las tres en fila, que es como se ve en el
-            // mostrador.
-            'md:landscape:grid-rows-1 md:landscape:grid-cols-3 md:landscape:px-6 md:landscape:pb-6'
+            'md:landscape:grid-rows-1 md:landscape:px-6 md:landscape:pb-6',
+            // Vertical: una debajo de otra, repartiéndose el alto. En
+            // horizontal, todas en fila, que es como se ve en el mostrador.
+            // Las clases van escritas enteras y no armadas a trozos porque
+            // Tailwind las busca por texto en el código: un `grid-rows-${n}`
+            // no llegaría a la hoja de estilos.
+            tablet ? 'grid-rows-3 md:landscape:grid-cols-3' : 'grid-rows-2 md:landscape:grid-cols-2'
           )}
         >
           {data.tipos.map((tipo) => (
@@ -151,7 +160,7 @@ export default function Home() {
               onIrAPuestos={(clase) => navegar(`/reservar/${tipo.slug}?clase=${clase.id}`)}
             />
           ))}
-          <TarjetaMusica />
+          {tablet && <TarjetaMusica />}
         </main>
       )}
 
@@ -299,11 +308,14 @@ function TarjetaDisciplina({ tipo, desdeCuando, reservasDesde, onIrAPuestos }) {
 /**
  * Música. No tiene foto propia: va con la paleta de la app para que se lea como
  * "otra cosa" y no como una tercera disciplina.
+ *
+ * Solo aparece en el inicio de la tablet del salón, y por eso apunta a la
+ * dirección de ahí y no a `/musica`, que ya no lleva a ninguna parte.
  */
 function TarjetaMusica() {
   return (
     <Tarjeta className="bg-carbon-800">
-      <Link to="/musica" className="absolute inset-0 z-10" aria-label="Pedir música" />
+      <Link to={MUSICA_TABLET} className="absolute inset-0 z-10" aria-label="Pedir música" />
 
       <div
         className="absolute inset-0"

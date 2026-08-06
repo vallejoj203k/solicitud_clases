@@ -444,9 +444,31 @@ incrustado oficial de YouTube (IFrame Player API), que va con su publicidad y su
 
 | Quién | Dónde | Qué hace |
 |---|---|---|
-| Cliente | `/musica` (tercera tarjeta del inicio) o su reserva | Busca en YouTube, manda a la fila y vuelve al inicio |
+| Cliente | La tablet del salón (ver abajo) | Busca en YouTube, manda a la fila y vuelve al inicio de la tablet |
 | Gimnasio | `/musica/reproductor` | **Suena aquí.** Se deja abierta todo el día |
 | Recepción | `/admin/musica` | Canciones de la casa; `/admin/recepcion` → clase → Música para ver la fila |
+
+### Pedir música es cosa del salón, no de casa
+
+Pedir canciones **no se hace desde el teléfono de cada quien**. El gimnasio lo quiso así:
+la música es de quien está en la clase, no de quien la programa desde el sofá.
+
+Por eso hay **dos inicios**, que son el mismo componente (`Home`) con un `tablet` distinto:
+
+| | Qué tiene |
+|---|---|
+| `/` — el público | Solo las disciplinas. Sin Música. |
+| `/salon-…` — el de la tablet | Las disciplinas **y** Música. No está enlazado desde ninguna parte. |
+
+La dirección secreta vive en `client/src/lib/tablet.js`, que es también donde se cambia.
+`/musica` a secas ya no lleva a la pantalla de pedir: redirige al inicio público.
+
+**Hasta dónde protege eso:** hasta donde protege no estar enlazada, y ni un paso más. Las
+rutas del cliente viajan dentro del JavaScript que se le manda a todo el mundo, así que
+quien se ponga a mirarlo la encuentra. Es suficiente para lo que hay en juego —lo peor que
+pasa es que alguien pida una canción— y a cambio no le pone ninguna puerta a quien sí está
+en el salón. Si algún día hiciera falta de verdad, la forma correcta no es una dirección
+más larga: es un PIN.
 
 ### El reproductor
 
