@@ -463,6 +463,12 @@ Por eso hay **dos inicios**, que son el mismo componente (`Home`) con un `tablet
 La dirección secreta vive en `client/src/lib/tablet.js`, que es también donde se cambia.
 `/musica` a secas ya no lleva a la pantalla de pedir: redirige al inicio público.
 
+Al entrar a pedir sale **un aviso que tapa la pantalla** («Salsa solo los viernes») y hay
+que cerrarlo con la X antes de poder buscar. **No se recuerda**: la tablet la usa una
+persona distinta cada vez, y recordarlo significaría que solo lo lee quien la estrene ese
+día. Como al pedir se vuelve al inicio de la tablet, la pantalla se monta de nuevo para
+cada quien y el aviso vuelve a salir.
+
 **Hasta dónde protege eso:** hasta donde protege no estar enlazada, y ni un paso más. Las
 rutas del cliente viajan dentro del JavaScript que se le manda a todo el mundo, así que
 quien se ponga a mirarlo la encuentra. Es suficiente para lo que hay en juego —lo peor que
