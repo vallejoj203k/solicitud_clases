@@ -1,8 +1,10 @@
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client.js';
 import { borrarToken, leerToken } from '../../lib/sesion.js';
 import { Cargando, cx } from '../../components/ui.jsx';
+import { pesos, hora12, fechaLarga } from '../../lib/formato.js';
 import {
   IconoPanel,
   IconoCalendario,
@@ -11,7 +13,42 @@ import {
   IconoRayo,
   IconoBuscar,
   IconoMusica,
+  IconoCerrar,
 } from '../../components/Iconos.jsx';
+
+/**
+ * Timbre corto para el aviso de pago, con la API de audio del navegador.
+ *
+ * SIN ARCHIVO DE SONIDO A PROPOSITO: dos tonos generados son suficientes para
+ * un timbre de mostrador y evitan cargar un audio de más. Si el navegador
+ * bloquea el audio -sin gesto previo del usuario, o uno muy viejo- el aviso
+ * visual sigue apareciendo igual; el sonido es un extra, no la única señal.
+ */
+function reproducirTimbre() {
+  try {
+    const Contexto = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Contexto();
+    const ahora = ctx.currentTime;
+    [0, 0.16].forEach((retraso, i) => {
+      const osc = ctx.createOscillator();
+      const ganancia = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = i === 0 ? 880 : 1046.5; // La5, luego Do6: un "ding-ding".
+      ganancia.gain.setValueAtTime(0, ahora + retraso);
+      ganancia.gain.linearRampToValueAtTime(0.2, ahora + retraso + 0.02);
+      ganancia.gain.exponentialRampToValueAtTime(0.0001, ahora + retraso + 0.16);
+      osc.connect(ganancia).connect(ctx.destination);
+      osc.start(ahora + retraso);
+      osc.stop(ahora + retraso + 0.17);
+    });
+    setTimeout(() => ctx.close().catch(() => {}), 500);
+  } catch {
+    // Sin Web Audio: el aviso visual basta.
+  }
+}
+
+/** Cuánto se queda un aviso de pago en pantalla antes de irse solo. */
+const MS_AVISO_PAGO = 12_000;
 
 const SECCIONES = [
   { a: '/admin', texto: 'Resumen', Icono: IconoPanel, exacto: true },
@@ -55,6 +92,40 @@ export default function AdminLayout() {
   // Cuentan los que ya avisaron -tienen a alguien esperando- y los que quedaron
   // en conflicto, que necesitan una decisión: devolver o reubicar.
   const avisos = (porConfirmar ?? []).filter((p) => p.avisoPagoEn || p.notasPago).length;
+
+  // Timbre y aviso flotante cuando alguien toca "Ya transferí".
+  //
+  // SE DISPARA POR TRANSICIÓN, no por presencia: `porConfirmar` trae TODAS las
+  // reservas pendientes de pago desde que se crean, hayan avisado o no, así
+  // que un id nuevo en la lista no significa que acaben de pagar. Lo que
+  // importa es que `avisoPagoEn` pase de vacío a puesto entre una consulta y
+  // la siguiente -eso es exactamente el instante del botón-.
+  //
+  // La primera carga NO suena nada: es la base de comparación, no hay "nuevo"
+  // todavía. Si sonara ahí, cada vez que el admin abre el panel con gente ya
+  // esperando desde antes, oiría un timbre por cada una.
+  const vistos = useRef(null);
+  const [avisosFlotantes, setAvisosFlotantes] = useState([]);
+
+  useEffect(() => {
+    if (!porConfirmar) return;
+    const anteriores = vistos.current;
+    if (anteriores) {
+      for (const p of porConfirmar) {
+        if (p.avisoPagoEn && !anteriores.get(p.id)) {
+          reproducirTimbre();
+          setAvisosFlotantes((lista) => [...lista, p]);
+          setTimeout(() => {
+            setAvisosFlotantes((lista) => lista.filter((x) => x.id !== p.id));
+          }, MS_AVISO_PAGO);
+        }
+      }
+    }
+    vistos.current = new Map(porConfirmar.map((p) => [p.id, p.avisoPagoEn]));
+  }, [porConfirmar]);
+
+  const cerrarAvisoFlotante = (id) =>
+    setAvisosFlotantes((lista) => lista.filter((x) => x.id !== id));
 
   if (!hayToken) return <Navigate to="/admin/login" replace />;
   if (isLoading) return <Cargando texto="Verificando sesión…" />;
@@ -135,6 +206,49 @@ export default function AdminLayout() {
           ))}
         </div>
       </nav>
+
+      {/* Avisos de pago, flotando sobre CUALQUIER pantalla del panel.
+          Arriba a la derecha: no choca con la barra lateral ni con la barra
+          inferior del móvil, y es donde se mira primero en un panel de admin. */}
+      {avisosFlotantes.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 w-[min(92vw,360px)] space-y-2">
+          {avisosFlotantes.map((p) => (
+            <AvisoPagoFlotante key={p.id} pago={p} onCerrar={() => cerrarAvisoFlotante(p.id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Un pago recién avisado, flotando encima del panel hasta que se cierre solo. */
+function AvisoPagoFlotante({ pago, onCerrar }) {
+  return (
+    <div className="tarjeta p-4 border-volt-500/50 bg-carbon-800 shadow-2xl animate-aparecer">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="etiqueta text-volt-500">Alguien acaba de pagar</p>
+          <p className="mt-1 font-bold tracking-tight truncate">{pago.usuario.nombre}</p>
+          <p className="mt-1 text-sm text-humo-300">
+            <span
+              className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+              style={{ backgroundColor: pago.clase.color }}
+            />
+            {pago.clase.tipoClase} · {fechaLarga(pago.clase.fecha)} · {hora12(pago.clase.hora)}
+          </p>
+          <p className="text-xs text-humo-500">Puesto {pago.puestoCodigo}</p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-lg font-extrabold tabular-nums leading-none">{pesos(pago.montoCop)}</p>
+          <button
+            onClick={onCerrar}
+            aria-label="Cerrar aviso"
+            className="mt-2 p-1 rounded-lg text-humo-500 hover:text-humo-100 hover:bg-carbon-700"
+          >
+            <IconoCerrar className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
