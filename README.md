@@ -260,16 +260,23 @@ gimnasio pasó su horario al software, y dejar reservar encima habría vendido d
 misma bici.
 
 - En el **inicio**, cada tarjeta de disciplina lo anuncia: «Reservas desde el 24 de agosto en
-  adelante».
+  adelante» **mientras esa fecha no haya llegado** (`lib/apertura.js`, `avisoApertura`). El
+  día que llega, el aviso se apaga solo: no hace falta tocar Railway. Antes se mostraba con
+  solo que `RESERVAS_DESDE` estuviera configurado, sin mirar la fecha de hoy, así que seguía
+  diciendo "reservas desde el 24" el 24 mismo -y cualquier día después, para siempre, salvo
+  que alguien recordara borrar la variable.
 - En **reservar**, los días anteriores muestran sus horarios apagados y un aviso que remite a
   recepción.
 - El servidor lo rechaza igual con `409 RESERVAS_NO_ABIERTAS`, aunque alguien llame la API
-  directamente.
+  directamente. Esta parte SÍ compara contra la fecha de cada clase, no contra la de hoy, y
+  no necesitó ningún cambio: una clase del 24 de agosto en adelante ya era reservable ese
+  mismo día, aunque el aviso de la pantalla no se enterara.
 - **Recepción no tiene ese muro**: `crearReserva({ porAdmin: true })` se lo salta, que es
   justo para lo que existe.
 
-Vacío = sin restricción. Cuando el gimnasio se ponga al día se borra la variable en Railway y
-el aviso desaparece solo de la pantalla.
+Vacío = sin restricción, y sin aviso. Dejar `RESERVAS_DESDE` puesto para siempre tras la
+fecha no es un problema: una vez pasado ese día, ni el aviso ni el bloqueo de reservas vuelven
+a aparecer.
 
 **Reservar desde recepción.** En la vista de la clase, **«Agregar reserva»** pide nombre,
 apellido y un puesto de los libres, y lo da en el acto. Es la vía para quien llega al

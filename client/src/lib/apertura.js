@@ -23,3 +23,18 @@ export function etiquetaApertura(iso) {
 
 /** ¿Esa fecha ("2026-08-20") ya se puede reservar? */
 export const abierta = (fechaISO, desde) => !desde || !fechaISO || fechaISO >= desde;
+
+/** Hoy, como "2026-08-24", en la hora del gimnasio. */
+const hoyGimnasio = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+
+/**
+ * ¿Todavía hace falta el aviso de "reservas desde el X"?
+ *
+ * SE APAGA SOLO EL DÍA QUE LLEGA LA FECHA, sin que nadie tenga que borrar
+ * `RESERVAS_DESDE` en Railway. Antes el aviso se mostraba con solo que el
+ * servidor mandara una fecha, sin mirar si ya se había cumplido: el 24 de
+ * agosto seguía diciendo "reservas desde el 24 de agosto en adelante" aunque
+ * ese mismo día ya se pudiera reservar.
+ */
+export const avisoApertura = (desde) => Boolean(desde) && hoyGimnasio() < desde;
