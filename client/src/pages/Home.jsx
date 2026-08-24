@@ -12,7 +12,7 @@ import {
   IconoContraer,
 } from '../components/Iconos.jsx';
 import { hora12 } from '../lib/formato.js';
-import { abierta, etiquetaApertura } from '../lib/apertura.js';
+import { abierta, avisoApertura, etiquetaApertura } from '../lib/apertura.js';
 import { leerCliente } from '../lib/sesion.js';
 import { usePantallaCompleta } from '../lib/pantalla.js';
 import { MUSICA_TABLET } from '../lib/tablet.js';
@@ -63,7 +63,9 @@ export default function Home({ tablet = false }) {
   // porque es donde la persona va a tocar.
   const { data: config } = useQuery({ queryKey: ['configuracion'], queryFn: api.configuracion });
   const reservasDesde = config?.reservasDesde ?? null;
-  const desdeCuando = etiquetaApertura(reservasDesde);
+  // El aviso solo hace falta ANTES de que llegue la fecha. Se apaga solo el
+  // día que llega, sin que nadie tenga que borrar `RESERVAS_DESDE` en Railway.
+  const desdeCuando = avisoApertura(reservasDesde) ? etiquetaApertura(reservasDesde) : null;
 
   const sinClases = data && data.tipos.every((t) => t.totalProximas === 0);
 
