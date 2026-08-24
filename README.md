@@ -829,12 +829,23 @@ confirmación es humana:
 2. Toca **«Ya transferí»**. Eso no confirma nada: sella `avisoPagoEn` y lo pone en la cola
    del mostrador. Es idempotente —tocarlo dos veces conserva la hora del primer aviso, que
    es la que ordena la cola.
-3. En Recepción aparece **«Pagos por confirmar»** con nombre, monto y código. Recepción
-   coteja **contra la notificación del banco, no contra la captura que muestre el cliente**,
-   y confirma de un toque.
+3. En Recepción aparece **«Pagos por confirmar»** con nombre, clase (día y hora incluidos),
+   monto y código. Recepción coteja **contra la notificación del banco, no contra la
+   captura que muestre el cliente**, y confirma de un toque.
 4. Confirmar deja la reserva `CONFIRMADA`, borra `expiraEn` y dispara el correo con el
    `.ics`. La pantalla del cliente se actualiza sola, sin recargar.
 5. Si nadie confirma a tiempo, el puesto se libera como cualquier otro apartado.
+
+**Y el admin se entera sin estar mirando esa pantalla.** En cuanto alguien toca «Ya
+transferí» -en cualquier pantalla del panel, no solo en Recepción-, aparece un aviso flotante
+arriba a la derecha con el nombre, la disciplina, el día y la hora de la clase, el puesto y el
+monto, y suena un timbre corto (dos tonos generados con la API de audio del navegador, sin
+archivo de sonido). Se dispara por **transición**, no por presencia: `pagosPorConfirmar()` trae
+todas las reservas pendientes de pago desde que se crean, no solo las que ya avisaron, así que
+lo que se vigila es que `avisoPagoEn` pase de vacío a puesto entre una consulta y la siguiente
+-el instante exacto del botón-. La primera carga del panel nunca suena: es la base de
+comparación, y si sonara ahí, abrir el panel con gente ya esperando desde antes haría sonar un
+timbre por cada una. Ver `AdminLayout` en `pages/admin/Layout.jsx`.
 
 Marcar pagada una reserva apartada **siempre** la confirma y le quita el vencimiento, venga
 de la cola o del botón de cobro en efectivo. Sin eso, el barrido de vencidas liberaría más

@@ -226,7 +226,8 @@ function PagosPorConfirmar() {
                     className="inline-block w-2 h-2 rounded-full mr-2 align-middle"
                     style={{ backgroundColor: p.clase.color }}
                   />
-                  {p.clase.tipoClase} · {hora12(p.clase.hora)} · Puesto {p.puestoCodigo}
+                  {p.clase.tipoClase} · {fechaLarga(p.clase.fecha)} · {hora12(p.clase.hora)} · Puesto{' '}
+                  {p.puestoCodigo}
                 </p>
               </div>
               <div className="text-right shrink-0">
