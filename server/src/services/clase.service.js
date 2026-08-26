@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { AppError, noEncontrado } from '../utils/errores.js';
 import { expandirLayout } from '../utils/layout.js';
-import { ESTADOS_OCUPAN_PUESTO, ESTADOS_CONFIRMADOS } from '../config/estados.js';
+import { ESTADOS_CONFIRMADOS, FILTRO_PUESTO_OCUPADO } from '../config/estados.js';
 import {
   desdeFechaHoraLocal,
   sumarDias,
@@ -116,7 +116,7 @@ export async function actualizarClase(id, datos) {
 
   // No se puede reducir el cupo por debajo de lo ya vendido.
   const ocupados = await prisma.reserva.count({
-    where: { claseId: id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    where: { claseId: id, ...FILTRO_PUESTO_OCUPADO },
   });
   if (cupoMaximo < ocupados) {
     throw new AppError(
@@ -130,7 +130,7 @@ export async function actualizarClase(id, datos) {
   const nuevosBloqueos = puestosBloqueados.filter((c) => !actual.puestosBloqueados.includes(c));
   if (nuevosBloqueos.length) {
     const enConflicto = await prisma.reserva.findMany({
-      where: { claseId: id, estado: { in: ESTADOS_OCUPAN_PUESTO }, puestoCodigo: { in: nuevosBloqueos } },
+      where: { claseId: id, ...FILTRO_PUESTO_OCUPADO, puestoCodigo: { in: nuevosBloqueos } },
       select: { puestoCodigo: true },
     });
     if (enConflicto.length) {
@@ -169,8 +169,11 @@ export async function cancelarClase(id) {
       data: { estado: 'CANCELADA' },
       include: incluir,
     });
+    // Incluye las que apenas avisaron "ya transferí": si la clase se cancela,
+    // esa espera ya no tiene sentido y dejarla viva solo le ocupa un puesto a
+    // nadie hasta que venza sola.
     await tx.reserva.updateMany({
-      where: { claseId: id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+      where: { claseId: id, ...FILTRO_PUESTO_OCUPADO },
       data: { estado: 'CANCELADA', canceladoEn: new Date() },
     });
     return clase;
@@ -298,7 +301,7 @@ export async function eliminarClasesEnLote({
     await prisma.$transaction([
       prisma.clase.updateMany({ where: { id: { in: restantes } }, data: { estado: 'CANCELADA' } }),
       prisma.reserva.updateMany({
-        where: { claseId: { in: restantes }, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+        where: { claseId: { in: restantes }, ...FILTRO_PUESTO_OCUPADO },
         data: { estado: 'CANCELADA', canceladoEn: new Date() },
       }),
     ]);

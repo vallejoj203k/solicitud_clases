@@ -56,6 +56,9 @@ export const ETIQUETA_RESERVA = {
   CANCELADA: 'Cancelada',
   ASISTIO: 'Asistió',
   NO_SHOW: 'No asistió',
+  // Solo llega a verse en el mapa de puestos cuando ya avisó "ya transferí":
+  // antes de eso no ocupa puesto y no aparece aquí.
+  PENDIENTE_PAGO: 'Por confirmar',
 };
 
 export const ETIQUETA_METODO = {

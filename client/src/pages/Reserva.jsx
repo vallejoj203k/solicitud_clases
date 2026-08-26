@@ -348,12 +348,24 @@ function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
         <h1 className="mt-1 text-2xl font-extrabold tracking-tightest">
           {yaAviso ? 'Estamos verificando tu pago' : 'Transfiere para confirmar'}
         </h1>
-        {/* El puesto NO queda apartado: se lo lleva quien pague primero. Decirlo
-            claro es lo único honesto y además es lo que hace que transfieran ya. */}
+        {/* Antes de avisar, el puesto NO está apartado: se lo lleva quien
+            confirme primero. Decirlo claro es lo único honesto y además es lo
+            que hace que transfieran ya. Después de avisar cambia la historia:
+            el puesto SÍ queda apartado, para que nadie se quede esperando su
+            plata sin saber si todavía compite por la bici. */}
         <p className="mt-2 text-sm text-humo-500">
-          El puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span> queda
-          tuyo cuando confirmemos el pago. Hasta entonces sigue disponible para otros
-          {minutos !== null && minutos > 0 ? `, así que no te demores` : ''}.
+          {yaAviso ? (
+            <>
+              El puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span>{' '}
+              queda apartado para ti mientras recepción revisa tu transferencia.
+            </>
+          ) : (
+            <>
+              El puesto <span className="font-bold text-humo-100">{reserva.puestoCodigo}</span>{' '}
+              queda tuyo cuando confirmemos el pago. Hasta entonces sigue disponible para otros
+              {minutos !== null && minutos > 0 ? `, así que no te demores` : ''}.
+            </>
+          )}
         </p>
       </div>
 
@@ -429,10 +441,14 @@ function EsperandoTransferencia({ reserva, acento, datos, avisado }) {
         <LiberarPuesto codigo={reserva.codigo} />
       </div>
 
-      <p className="mt-6 text-xs text-humo-500 text-center">
-        Si alguien alcanza a confirmar ese puesto antes que tú, en recepción te lo cambian o te
-        devuelven el pago.
-      </p>
+      {/* Solo aplica ANTES de avisar: una vez que se avisa, el puesto queda
+          apartado y ya nadie más puede confirmarlo primero. */}
+      {!yaAviso && (
+        <p className="mt-6 text-xs text-humo-500 text-center">
+          Si alguien alcanza a confirmar ese puesto antes que tú, en recepción te lo cambian o te
+          devuelven el pago.
+        </p>
+      )}
     </div>
   );
 }

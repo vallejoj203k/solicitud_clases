@@ -257,9 +257,12 @@ function FichaPuesto({ puesto, acento, onCerrar, onAsistio, onCobrar, guardando 
           <Insignia>{r.codigo}</Insignia>
         </div>
 
+        {/* Solo se ve aquí cuando ya avisó "ya transferí": antes de eso no
+            ocupa puesto y ni siquiera aparece en este mapa. Decidir -confirmar
+            o liberar- se hace desde "Pagos por confirmar" en Recepción. */}
         {r.estado === 'PENDIENTE_PAGO' && (
           <Aviso tono="info">
-            Todavía está pagando en línea. El puesto le queda apartado hasta que se confirme.
+            Avisó que ya transfirió. El puesto le queda apartado hasta que se confirme o se libere.
           </Aviso>
         )}
 

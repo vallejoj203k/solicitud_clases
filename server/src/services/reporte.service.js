@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { inicioDelDia, finDelDia, fechaISOLocal, horaLocal, sumarDias } from '../utils/fechas.js';
 import { serializarClase, calcularCupos, resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
-import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
+import { FILTRO_PUESTO_OCUPADO } from '../config/estados.js';
 import { noEncontrado } from '../utils/errores.js';
 import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
 
@@ -302,7 +302,7 @@ export async function agendaRecepcion({ horasAtras = 1, dias = 7, siguientes = 8
 
   const conteos = await prisma.reserva.groupBy({
     by: ['claseId'],
-    where: { claseId: { in: clases.map((c) => c.id) }, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    where: { claseId: { in: clases.map((c) => c.id) }, ...FILTRO_PUESTO_OCUPADO },
     _count: { _all: true },
   });
   const mapaConteo = new Map(conteos.map((c) => [c.claseId, c._count._all]));
@@ -339,7 +339,7 @@ export async function mapaConOcupantes(claseId) {
   if (!clase) throw noEncontrado('Clase');
 
   const reservas = await prisma.reserva.findMany({
-    where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    where: { claseId, ...FILTRO_PUESTO_OCUPADO },
     include: { usuario: { select: { id: true, nombre: true, telefono: true } } },
   });
 
