@@ -229,6 +229,13 @@ publicRouter.get(
  * No confirma nada -de eso se encarga quien mira la notificación del banco-,
  * solo avisa que hay alguien esperando. Es idempotente: tocar el botón dos
  * veces conserva la hora del primer aviso, que es la que ordena la cola.
+ *
+ * REINICIA EL RELOJ DEL PUESTO, de paso. Hasta aquí `expiraEn` contaba los
+ * minutos que tenía el CLIENTE para pagar; desde este momento cuenta los que
+ * tiene RECEPCION para revisarlo -una hora, `minutosParaConfirmar`-, sin que
+ * el puesto se libere solo mientras tanto. Son dos relojes con el mismo campo:
+ * hace falta una hora entera cuando se acumulan varios avisos seguidos y el
+ * primero no puede vencerse mientras se atiende al segundo.
  */
 publicRouter.post(
   '/reservas/:codigo/aviso-pago',
@@ -252,7 +259,10 @@ publicRouter.post(
       ? reserva
       : await prisma.reserva.update({
           where: { id: reserva.id },
-          data: { avisoPagoEn: new Date() },
+          data: {
+            avisoPagoEn: new Date(),
+            expiraEn: new Date(Date.now() + env.pagos.minutosParaConfirmar * 60_000),
+          },
           include: { clase: { include: { tipoClase: true, instructor: true } }, usuario: true },
         });
 

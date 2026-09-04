@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { expandirLayout } from '../utils/layout.js';
 import { noEncontrado } from '../utils/errores.js';
-import { ESTADOS_OCUPAN_PUESTO } from '../config/estados.js';
+import { FILTRO_PUESTO_OCUPADO } from '../config/estados.js';
 import { inicioDelDia, finDelDia, fechaISOLocal, horaLocal } from '../utils/fechas.js';
 
 
@@ -76,7 +76,7 @@ async function contarOcupacion(claseIds) {
   if (claseIds.length === 0) return new Map();
   const filas = await prisma.reserva.groupBy({
     by: ['claseId'],
-    where: { claseId: { in: claseIds }, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    where: { claseId: { in: claseIds }, ...FILTRO_PUESTO_OCUPADO },
     _count: { _all: true },
   });
   return new Map(filas.map((f) => [f.claseId, f._count._all]));
@@ -188,7 +188,7 @@ export async function obtenerDisponibilidad(claseId) {
   if (!clase) throw noEncontrado('Clase');
 
   const reservas = await prisma.reserva.findMany({
-    where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+    where: { claseId, ...FILTRO_PUESTO_OCUPADO },
     select: { puestoCodigo: true },
   });
 

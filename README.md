@@ -787,6 +787,35 @@ confirmar:
 Por eso el índice único solo mira las reservas firmes: varias `PENDIENTE_PAGO` pueden
 convivir sobre el mismo puesto.
 
+**Con una excepción: avisar "ya transferí" sí aparta el puesto**, por una hora
+(`MINUTOS_PARA_CONFIRMAR_PAGO`, por defecto 60). Antes de ese aviso rige todo lo de arriba
+sin cambios -el puesto sigue verde y cualquiera lo puede tomar-, pero desde el momento en
+que alguien avisa, ESE puesto deja de estar en juego para los demás: no se puede volver a
+reservar (`409 PUESTO_OCUPADO`), el mapa lo pinta ocupado, y cuenta para el cupo. Es lo que
+le da a recepción margen real para revisar varios avisos seguidos -acumulados en una tarde
+ocupada- sin que el primero se lo gane otro cliente mientras se atiende al segundo.
+
+Dos piezas lo sostienen:
+
+- `FILTRO_PUESTO_OCUPADO` (`config/estados.js`) es el mismo filtro de siempre
+  (`CONFIRMADA`/`ASISTIO`/`NO_SHOW`) más `PENDIENTE_PAGO` con `avisoPagoEn` puesto. Se usa en
+  todos los sitios que deciden si un puesto está físicamente disponible -mapa, cupos,
+  choques, cascadas de cancelación-, no en los reportes de ingresos, que siguen midiendo
+  solo lo firme.
+- El **índice único parcial** se extendió para cubrir también ese caso
+  (`PENDIENTE_PAGO AND "avisoPagoEn" IS NOT NULL`). No basta con la comprobación en memoria
+  de `crearReserva` -esa solo evita crear una reserva nueva sobre un puesto ya apartado-: sin
+  el índice, dos reservas que ya convivían sobre el mismo puesto -eso sigue permitido antes
+  de avisar- podrían avisar "ya transferí" casi al mismo tiempo y las dos quedarían
+  apartadas a la vez. El índice es lo único que Postgres garantiza de verdad bajo carrera: el
+  segundo `UPDATE` choca con `P2002`, que el middleware ya traduce a `409 PUESTO_OCUPADO`.
+
+`aviso-pago` extiende `expiraEn` a esa hora en el mismo momento en que sella `avisoPagoEn`,
+así que el reloj de "tiempo para pagar" (`MINUTOS_PARA_PAGAR`, arriba) y el de "tiempo para
+que recepción revise" son el mismo campo pero cuentan cosas distintas según en qué momento
+del flujo esté la reserva. Si nadie confirma ni libera en esa hora, el barrido de siempre la
+expira igual y el puesto vuelve a estar libre solo.
+
 1. Al confirmar, la reserva nace en **`PENDIENTE_PAGO`** con `expiraEn` a
    `MINUTOS_PARA_PAGAR` minutos. Ese plazo ya no aparta nada: solo decide cuándo se da por
    abandonada y deja de estorbar en la cola. Tampoco es una venta: no aparece en el reporte
@@ -819,22 +848,26 @@ medio nuevo que Wompi agregue no rompe nada: cae en «En línea».
 
 ### Cobro por transferencia (llave Bre-B)
 
-Con `PAGO_MODO=transferencia` el puesto se aparta igual que con la pasarela —mismo estado
-`PENDIENTE_PAGO`, mismo `expiraEn`, mismo barrido que lo libera— pero **nadie avisa que el
-pago entró**: Bre-B le notifica al celular del gimnasio, no al servidor. Así que la
-confirmación es humana:
+Con `PAGO_MODO=transferencia` la reserva nace igual que con la pasarela —mismo estado
+`PENDIENTE_PAGO`, mismo `expiraEn` de `MINUTOS_PARA_PAGAR`— pero **nadie avisa que el pago
+entró**: Bre-B le notifica al celular del gimnasio, no al servidor. Así que la confirmación es
+humana:
 
 1. El cliente ve la llave, el QR, el **monto exacto** y el **código de la reserva** para
-   poner en la descripción. La llave se copia de un toque.
-2. Toca **«Ya transferí»**. Eso no confirma nada: sella `avisoPagoEn` y lo pone en la cola
-   del mostrador. Es idempotente —tocarlo dos veces conserva la hora del primer aviso, que
-   es la que ordena la cola.
+   poner en la descripción. La llave se copia de un toque. Hasta aquí el puesto sigue
+   disponible para cualquiera -ver "Una reserva sin pagar NO aparta el puesto", arriba-.
+2. Toca **«Ya transferí»**. Eso no confirma nada, pero **desde ahí el puesto sí queda
+   apartado**: sella `avisoPagoEn`, extiende `expiraEn` a `MINUTOS_PARA_CONFIRMAR_PAGO`
+   (una hora) y lo pone en la cola del mostrador. Es idempotente —tocarlo dos veces conserva
+   la hora del primer aviso, que es la que ordena la cola.
 3. En Recepción aparece **«Pagos por confirmar»** con nombre, clase (día y hora incluidos),
    monto y código. Recepción coteja **contra la notificación del banco, no contra la
-   captura que muestre el cliente**, y confirma de un toque.
+   captura que muestre el cliente**, y decide: confirma de un toque, o libera el puesto si
+   al final no era cierto.
 4. Confirmar deja la reserva `CONFIRMADA`, borra `expiraEn` y dispara el correo con el
    `.ics`. La pantalla del cliente se actualiza sola, sin recargar.
-5. Si nadie confirma a tiempo, el puesto se libera como cualquier otro apartado.
+5. Si nadie confirma ni libera en esa hora, el barrido de siempre la vence igual y el puesto
+   vuelve a estar libre solo -no se queda apartado para siempre por olvido-.
 
 **Y el admin se entera sin estar mirando esa pantalla.** En cuanto alguien toca «Ya
 transferí» -en cualquier pantalla del panel, no solo en Recepción-, aparece un aviso flotante

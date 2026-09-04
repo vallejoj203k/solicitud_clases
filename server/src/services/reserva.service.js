@@ -4,7 +4,7 @@ import { generarCodigoReserva, normalizarTelefono } from '../utils/codigo.js';
 import { resolverLayout, puestosEnJuego } from './disponibilidad.service.js';
 import { env } from '../config/env.js';
 import { ESTADOS_CONFIRMADOS } from '../config/estados.js';
-import { ESTADOS_OCUPAN_PUESTO, ESTADOS_SIN_PAGAR } from '../config/estados.js';
+import { ESTADOS_OCUPAN_PUESTO, ESTADOS_SIN_PAGAR, FILTRO_PUESTO_OCUPADO } from '../config/estados.js';
 import { fechaISOLocal, horaLocal, inicioDelDia, finDelDia } from '../utils/fechas.js';
 
 
@@ -170,7 +170,7 @@ export async function reservarEnLote({
     };
 
     const reservas = await prisma.reserva.findMany({
-      where: { claseId: clase.id, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+      where: { claseId: clase.id, ...FILTRO_PUESTO_OCUPADO },
       select: { puestoCodigo: true, nombreInvitado: true, usuario: { select: { nombre: true } } },
     });
 
@@ -379,7 +379,7 @@ export async function crearReserva({
     const quienOcupa = nombreInvitado?.trim() || nombre;
     if (!confirmarDuplicado && quienOcupa) {
       const enLaClase = await tx.reserva.findMany({
-        where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+        where: { claseId, ...FILTRO_PUESTO_OCUPADO },
         select: { puestoCodigo: true, nombreInvitado: true, usuario: { select: { nombre: true } } },
       });
       const yaEsta = enLaClase.find((r) =>
@@ -435,7 +435,7 @@ export async function crearReserva({
     }
 
     const reservasActivas = await tx.reserva.findMany({
-      where: { claseId, estado: { in: ESTADOS_OCUPAN_PUESTO } },
+      where: { claseId, ...FILTRO_PUESTO_OCUPADO },
       select: { puestoCodigo: true },
     });
     const ocupados = new Set(reservasActivas.map((r) => r.puestoCodigo));
@@ -443,6 +443,17 @@ export async function crearReserva({
 
     const capacidad = Math.min(layout.total - bloqueadosSet.size, clase.cupoMaximo);
     if (ocupados.size >= capacidad) throw new AppError('Esta clase ya está llena.', 409, 'CLASE_LLENA');
+
+    // El puesto exacto que se pide: si ya lo tiene alguien -confirmado, o
+    // esperando que recepción revise su "ya transferí"-, no se puede volver a
+    // reservar. OJO: `enJuego`, mas abajo, NO sirve para esto -a propósito
+    // incluye los puestos ocupados, para que el mapa los siga dibujando en vez
+    // de saltárselos-, así que por si solo dejaría pasar un puesto que ya es
+    // de otro. Los PENDIENTE_PAGO que todavía no avisaron siguen sin bloquear
+    // nada: esa parte de la decisión original no cambia.
+    if (ocupados.has(puestoCodigo)) {
+      throw new AppError('Ese puesto ya no está disponible.', 409, 'PUESTO_OCUPADO');
+    }
 
     // El puesto tiene que estar entre los que esta clase pone a la venta. El
     // layout puede tener 12 trotadoras y la clase abrir solo 6: las otras 6 no
