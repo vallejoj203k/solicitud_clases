@@ -232,9 +232,9 @@ publicRouter.get(
  *
  * REINICIA EL RELOJ DEL PUESTO, de paso. Hasta aquí `expiraEn` contaba los
  * minutos que tenía el CLIENTE para pagar; desde este momento cuenta los que
- * tiene RECEPCION para revisarlo -una hora, `minutosParaConfirmar`-, sin que
+ * tiene RECEPCION para revisarlo -dos horas, `minutosParaConfirmar`-, sin que
  * el puesto se libere solo mientras tanto. Son dos relojes con el mismo campo:
- * hace falta una hora entera cuando se acumulan varios avisos seguidos y el
+ * hacen falta dos horas cuando se acumulan varios avisos seguidos y el
  * primero no puede vencerse mientras se atiende al segundo.
  */
 publicRouter.post(

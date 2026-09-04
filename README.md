@@ -787,8 +787,8 @@ confirmar:
 Por eso el índice único solo mira las reservas firmes: varias `PENDIENTE_PAGO` pueden
 convivir sobre el mismo puesto.
 
-**Con una excepción: avisar "ya transferí" sí aparta el puesto**, por una hora
-(`MINUTOS_PARA_CONFIRMAR_PAGO`, por defecto 60). Antes de ese aviso rige todo lo de arriba
+**Con una excepción: avisar "ya transferí" sí aparta el puesto**, por dos horas
+(`MINUTOS_PARA_CONFIRMAR_PAGO`, por defecto 120). Antes de ese aviso rige todo lo de arriba
 sin cambios -el puesto sigue verde y cualquiera lo puede tomar-, pero desde el momento en
 que alguien avisa, ESE puesto deja de estar en juego para los demás: no se puede volver a
 reservar (`409 PUESTO_OCUPADO`), el mapa lo pinta ocupado, y cuenta para el cupo. Es lo que
@@ -810,11 +810,12 @@ Dos piezas lo sostienen:
   apartadas a la vez. El índice es lo único que Postgres garantiza de verdad bajo carrera: el
   segundo `UPDATE` choca con `P2002`, que el middleware ya traduce a `409 PUESTO_OCUPADO`.
 
-`aviso-pago` extiende `expiraEn` a esa hora en el mismo momento en que sella `avisoPagoEn`,
-así que el reloj de "tiempo para pagar" (`MINUTOS_PARA_PAGAR`, arriba) y el de "tiempo para
-que recepción revise" son el mismo campo pero cuentan cosas distintas según en qué momento
-del flujo esté la reserva. Si nadie confirma ni libera en esa hora, el barrido de siempre la
-expira igual y el puesto vuelve a estar libre solo.
+`aviso-pago` extiende `expiraEn` a esas dos horas en el mismo momento en que sella
+`avisoPagoEn`, así que el reloj de "tiempo para pagar" (`MINUTOS_PARA_PAGAR`, arriba) y el
+de "tiempo para que recepción revise" son el mismo campo pero cuentan cosas distintas según
+en qué momento del flujo esté la reserva. Si nadie confirma ni libera en esas dos horas, el
+barrido de siempre la expira igual y el puesto vuelve a estar libre solo -no se queda
+apartado para siempre por un aviso olvidado-.
 
 1. Al confirmar, la reserva nace en **`PENDIENTE_PAGO`** con `expiraEn` a
    `MINUTOS_PARA_PAGAR` minutos. Ese plazo ya no aparta nada: solo decide cuándo se da por
@@ -858,7 +859,7 @@ humana:
    disponible para cualquiera -ver "Una reserva sin pagar NO aparta el puesto", arriba-.
 2. Toca **«Ya transferí»**. Eso no confirma nada, pero **desde ahí el puesto sí queda
    apartado**: sella `avisoPagoEn`, extiende `expiraEn` a `MINUTOS_PARA_CONFIRMAR_PAGO`
-   (una hora) y lo pone en la cola del mostrador. Es idempotente —tocarlo dos veces conserva
+   (dos horas) y lo pone en la cola del mostrador. Es idempotente —tocarlo dos veces conserva
    la hora del primer aviso, que es la que ordena la cola.
 3. En Recepción aparece **«Pagos por confirmar»** con nombre, clase (día y hora incluidos),
    monto y código. Recepción coteja **contra la notificación del banco, no contra la
@@ -866,8 +867,8 @@ humana:
    al final no era cierto.
 4. Confirmar deja la reserva `CONFIRMADA`, borra `expiraEn` y dispara el correo con el
    `.ics`. La pantalla del cliente se actualiza sola, sin recargar.
-5. Si nadie confirma ni libera en esa hora, el barrido de siempre la vence igual y el puesto
-   vuelve a estar libre solo -no se queda apartado para siempre por olvido-.
+5. Si nadie confirma ni libera en esas dos horas, el barrido de siempre la vence igual y el
+   puesto vuelve a estar libre solo -no se queda apartado para siempre por olvido-.
 
 **Y el admin se entera sin estar mirando esa pantalla.** En cuanto alguien toca «Ya
 transferí» -en cualquier pantalla del panel, no solo en Recepción-, aparece un aviso flotante

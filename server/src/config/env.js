@@ -116,10 +116,10 @@ export const env = {
     // Minutos que tiene RECEPCION para revisar un "ya transferi" antes de que
     // el puesto se libere solo. Es un reloj DISTINTO del de arriba: ese es
     // para que el CLIENTE pague, este arranca de cero cuando ya avisó y es
-    // para que el ADMIN decida -aceptar o liberar-. Una hora da margen para
+    // para que el ADMIN decida -aceptar o liberar-. Dos horas da margen para
     // que se acumulen varios avisos sin que el primero se venza mientras se
     // coteja el segundo contra el banco.
-    minutosParaConfirmar: Number(process.env.MINUTOS_PARA_CONFIRMAR_PAGO ?? 60),
+    minutosParaConfirmar: Number(process.env.MINUTOS_PARA_CONFIRMAR_PAGO ?? 120),
   },
 
   // Datos que se le muestran al cliente para transferir. La llave es lo unico
