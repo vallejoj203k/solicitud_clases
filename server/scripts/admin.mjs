@@ -8,6 +8,7 @@
  *   node server/scripts/admin.mjs listar
  *   node server/scripts/admin.mjs crear --telefono 3001234567 --password "clave" --nombre "Ana"
  *   node server/scripts/admin.mjs quitar-telefono --telefono 3001234567
+ *   node server/scripts/admin.mjs borrar --id <id de "listar">  (o --telefono / --email si no hay ambigüedad)
  *   node server/scripts/admin.mjs revisar-puestos
  *   node server/scripts/admin.mjs revisar-nombres
  *
@@ -63,6 +64,11 @@ async function listar() {
     console.log(`  Usuario   : ${a.telefono}${a.email ? `  ó  ${a.email}` : ''}`);
     console.log(`  Contraseña: ${a.passwordHash ? 'definida (no se puede leer, está hasheada)' : '⚠ SIN DEFINIR — no puede entrar'}`);
     console.log(`  Creado    : ${a.creadoEn.toISOString().slice(0, 16).replace('T', ' ')}`);
+    // Si dos administradores llegan a compartir el mismo teléfono/correo -por
+    // ejemplo, dos con el mismo alias tras un `crear` a medias- ya no hay con
+    // qué distinguirlos por esos campos. El id siempre es único: es lo que
+    // `borrar --id` necesita para apuntar sin ambigüedad al que sobra.
+    console.log(`  Id        : ${a.id}`);
     console.log('');
   }
   console.log('  La contraseña está hasheada y no es recuperable. Si no la recuerdas,');
@@ -104,6 +110,64 @@ async function crear(args) {
   console.log(`  Usuario   : ${usuario.telefono}${usuario.email ? `  ó  ${usuario.email}` : ''}`);
   console.log(`  Nombre    : ${usuario.nombre}`);
   console.log('\n  Ya puedes entrar en /admin/login.\n');
+}
+
+/**
+ * Borra un administrador que sobra -típicamente uno creado por error, con un
+ * teléfono equivocado-. Busca por `--telefono` o `--email`, lo que se le pase.
+ *
+ * SE NIEGA SI TIENE RESERVAS. `Reserva.usuario` borra en cascada
+ * (`onDelete: Cascade`): borrar un usuario con historial de verdad se llevaría
+ * sus reservas detrás. Un admin creado hace segundos por un teléfono mal
+ * escrito no tiene ninguna, así que el chequeo no estorba al caso real y sí
+ * frena borrar por error una cuenta con historial.
+ */
+async function borrar(args) {
+  const id = typeof args.id === 'string' ? args.id : '';
+  const telefono = args.telefono ? normalizarTelefono(args.telefono) : '';
+  const email = typeof args.email === 'string' ? args.email.toLowerCase() : '';
+  if (!id && !telefono && !email) {
+    throw new Error('Falta --id, --telefono o --email para saber a quién borrar.');
+  }
+
+  // --id va aparte y manda: es el único campo que nunca se puede repetir. Si
+  // dos administradores llegaron a compartir teléfono o correo -por ejemplo,
+  // los dos con el mismo alias tras un `crear` a medias-, buscar por esos
+  // campos es ambiguo y NO se adivina cuál de los dos se quiso decir.
+  const admin = id
+    ? await prisma.usuario.findUnique({
+        where: { id },
+        include: { _count: { select: { reservas: true, pedidosMusica: true } } },
+      })
+    : await (async () => {
+        const candidatos = await prisma.usuario.findMany({
+          where: {
+            rol: 'ADMIN',
+            OR: [...(telefono ? [{ telefono }] : []), ...(email ? [{ email }] : [])],
+          },
+          include: { _count: { select: { reservas: true, pedidosMusica: true } } },
+        });
+        if (candidatos.length > 1) {
+          const lista = candidatos.map((c) => `      ${c.nombre}  —  id ${c.id}`).join('\n');
+          throw new Error(
+            `Hay ${candidatos.length} administradores que coinciden, no sé cuál borrar:\n${lista}\n` +
+              '  Usa "borrar --id <el-que-corresponda>" con el id exacto (sale en `listar`).'
+          );
+        }
+        return candidatos[0] ?? null;
+      })();
+  if (!admin || admin.rol !== 'ADMIN') throw new Error('No encontré ningún administrador con esos datos.');
+
+  if (admin._count.reservas > 0) {
+    throw new Error(
+      `${admin.nombre} tiene ${admin._count.reservas} reserva(s) a su nombre. No lo borro: ` +
+        'borrarlo se llevaría esas reservas también. Si de verdad es el que sobra, cancela o ' +
+        'reasigna sus reservas primero desde el panel.'
+    );
+  }
+
+  await prisma.usuario.delete({ where: { id: admin.id } });
+  console.log(`\n✔ Borrado: ${admin.nombre} (${admin.telefono ?? admin.email ?? admin.id})\n`);
 }
 
 /**
@@ -291,6 +355,7 @@ const comandos = {
   listar,
   crear,
   'quitar-telefono': quitarTelefono,
+  borrar,
   'revisar-puestos': revisarPuestos,
   'revisar-nombres': revisarNombres,
 };
@@ -300,6 +365,7 @@ if (!comandos[comando]) {
   console.log('  node server/scripts/admin.mjs listar');
   console.log('  node server/scripts/admin.mjs crear --telefono <tel> --password "<clave>" [--nombre "<nombre>"] [--email <correo>]');
   console.log('  node server/scripts/admin.mjs quitar-telefono --telefono <tel>');
+  console.log('  node server/scripts/admin.mjs borrar --id <id>  (o --telefono / --email si no hay ambigüedad)');
   console.log('  node server/scripts/admin.mjs revisar-puestos');
   console.log('  node server/scripts/admin.mjs revisar-nombres [--tope 3] [--desde 2026-08-01]\n');
   process.exit(comando ? 1 : 0);
