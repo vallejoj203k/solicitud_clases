@@ -7,6 +7,7 @@
  *
  *   node server/scripts/admin.mjs listar
  *   node server/scripts/admin.mjs crear --telefono 3001234567 --password "clave" --nombre "Ana"
+ *   node server/scripts/admin.mjs quitar-telefono --telefono 3001234567
  *   node server/scripts/admin.mjs revisar-puestos
  *   node server/scripts/admin.mjs revisar-nombres
  *
@@ -103,6 +104,42 @@ async function crear(args) {
   console.log(`  Usuario   : ${usuario.telefono}${usuario.email ? `  ó  ${usuario.email}` : ''}`);
   console.log(`  Nombre    : ${usuario.nombre}`);
   console.log('\n  Ya puedes entrar en /admin/login.\n');
+}
+
+/**
+ * Quita el teléfono de un administrador, para que deje de servir como usuario
+ * de entrada y solo quede el correo (o lo que se le haya puesto con
+ * `--email` en `crear`).
+ *
+ * POR QUÉ ES UN COMANDO APARTE Y NO UNA OPCIÓN DE `crear`. `crear` busca a
+ * quién actualizar POR el teléfono (`where: { telefono }`); vaciarlo ahí mismo
+ * dejaría al admin sin forma de volver a encontrarse a sí mismo la próxima vez
+ * que se use ese comando. Aquí se hace como el último paso, aparte, y con su
+ * propio nombre para que quede claro que es a propósito: sin teléfono, la
+ * única puerta que queda es el correo.
+ */
+async function quitarTelefono(args) {
+  const telefono = normalizarTelefono(args.telefono ?? '');
+  if (!telefono) throw new Error('Falta --telefono (el que tiene hoy el administrador).');
+
+  const admin = await prisma.usuario.findUnique({ where: { telefono } });
+  if (!admin || admin.rol !== 'ADMIN') {
+    throw new Error(`No hay ningún administrador con el teléfono ${telefono}.`);
+  }
+  if (!admin.email) {
+    throw new Error(
+      'Este administrador no tiene correo. Ponle uno primero con ' +
+        `"crear --telefono ${telefono} --password <clave> --email <alias>", ` +
+        'o se quedaría sin ninguna forma de entrar.'
+    );
+  }
+
+  // Postgres deja convivir varios NULL en una columna única, así que quitarle
+  // el teléfono a este no choca con los demás usuarios sin teléfono.
+  await prisma.usuario.update({ where: { telefono }, data: { telefono: null } });
+
+  console.log(`\n✔ Teléfono quitado.\n`);
+  console.log(`  Ahora solo se puede entrar con: ${admin.email}\n`);
 }
 
 /**
@@ -253,6 +290,7 @@ const args = leerArgumentos(resto);
 const comandos = {
   listar,
   crear,
+  'quitar-telefono': quitarTelefono,
   'revisar-puestos': revisarPuestos,
   'revisar-nombres': revisarNombres,
 };
@@ -261,6 +299,7 @@ if (!comandos[comando]) {
   console.log('\nUso:');
   console.log('  node server/scripts/admin.mjs listar');
   console.log('  node server/scripts/admin.mjs crear --telefono <tel> --password "<clave>" [--nombre "<nombre>"] [--email <correo>]');
+  console.log('  node server/scripts/admin.mjs quitar-telefono --telefono <tel>');
   console.log('  node server/scripts/admin.mjs revisar-puestos');
   console.log('  node server/scripts/admin.mjs revisar-nombres [--tope 3] [--desde 2026-08-01]\n');
   process.exit(comando ? 1 : 0);
