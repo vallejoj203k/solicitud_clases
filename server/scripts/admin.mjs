@@ -8,7 +8,7 @@
  *   node server/scripts/admin.mjs listar
  *   node server/scripts/admin.mjs crear --telefono 3001234567 --password "clave" --nombre "Ana"
  *   node server/scripts/admin.mjs quitar-telefono --telefono 3001234567
- *   node server/scripts/admin.mjs borrar --telefono 3001234567 (o --email correo)
+ *   node server/scripts/admin.mjs borrar --id <id de "listar">  (o --telefono / --email si no hay ambigüedad)
  *   node server/scripts/admin.mjs revisar-puestos
  *   node server/scripts/admin.mjs revisar-nombres
  *
@@ -64,6 +64,11 @@ async function listar() {
     console.log(`  Usuario   : ${a.telefono}${a.email ? `  ó  ${a.email}` : ''}`);
     console.log(`  Contraseña: ${a.passwordHash ? 'definida (no se puede leer, está hasheada)' : '⚠ SIN DEFINIR — no puede entrar'}`);
     console.log(`  Creado    : ${a.creadoEn.toISOString().slice(0, 16).replace('T', ' ')}`);
+    // Si dos administradores llegan a compartir el mismo teléfono/correo -por
+    // ejemplo, dos con el mismo alias tras un `crear` a medias- ya no hay con
+    // qué distinguirlos por esos campos. El id siempre es único: es lo que
+    // `borrar --id` necesita para apuntar sin ambigüedad al que sobra.
+    console.log(`  Id        : ${a.id}`);
     console.log('');
   }
   console.log('  La contraseña está hasheada y no es recuperable. Si no la recuerdas,');
@@ -118,18 +123,40 @@ async function crear(args) {
  * frena borrar por error una cuenta con historial.
  */
 async function borrar(args) {
+  const id = typeof args.id === 'string' ? args.id : '';
   const telefono = args.telefono ? normalizarTelefono(args.telefono) : '';
   const email = typeof args.email === 'string' ? args.email.toLowerCase() : '';
-  if (!telefono && !email) throw new Error('Falta --telefono o --email para saber a quién borrar.');
+  if (!id && !telefono && !email) {
+    throw new Error('Falta --id, --telefono o --email para saber a quién borrar.');
+  }
 
-  const admin = await prisma.usuario.findFirst({
-    where: {
-      rol: 'ADMIN',
-      OR: [...(telefono ? [{ telefono }] : []), ...(email ? [{ email }] : [])],
-    },
-    include: { _count: { select: { reservas: true, pedidosMusica: true } } },
-  });
-  if (!admin) throw new Error('No encontré ningún administrador con esos datos.');
+  // --id va aparte y manda: es el único campo que nunca se puede repetir. Si
+  // dos administradores llegaron a compartir teléfono o correo -por ejemplo,
+  // los dos con el mismo alias tras un `crear` a medias-, buscar por esos
+  // campos es ambiguo y NO se adivina cuál de los dos se quiso decir.
+  const admin = id
+    ? await prisma.usuario.findUnique({
+        where: { id },
+        include: { _count: { select: { reservas: true, pedidosMusica: true } } },
+      })
+    : await (async () => {
+        const candidatos = await prisma.usuario.findMany({
+          where: {
+            rol: 'ADMIN',
+            OR: [...(telefono ? [{ telefono }] : []), ...(email ? [{ email }] : [])],
+          },
+          include: { _count: { select: { reservas: true, pedidosMusica: true } } },
+        });
+        if (candidatos.length > 1) {
+          const lista = candidatos.map((c) => `      ${c.nombre}  —  id ${c.id}`).join('\n');
+          throw new Error(
+            `Hay ${candidatos.length} administradores que coinciden, no sé cuál borrar:\n${lista}\n` +
+              '  Usa "borrar --id <el-que-corresponda>" con el id exacto (sale en `listar`).'
+          );
+        }
+        return candidatos[0] ?? null;
+      })();
+  if (!admin || admin.rol !== 'ADMIN') throw new Error('No encontré ningún administrador con esos datos.');
 
   if (admin._count.reservas > 0) {
     throw new Error(
@@ -338,7 +365,7 @@ if (!comandos[comando]) {
   console.log('  node server/scripts/admin.mjs listar');
   console.log('  node server/scripts/admin.mjs crear --telefono <tel> --password "<clave>" [--nombre "<nombre>"] [--email <correo>]');
   console.log('  node server/scripts/admin.mjs quitar-telefono --telefono <tel>');
-  console.log('  node server/scripts/admin.mjs borrar --telefono <tel>  (o --email <correo>)');
+  console.log('  node server/scripts/admin.mjs borrar --id <id>  (o --telefono / --email si no hay ambigüedad)');
   console.log('  node server/scripts/admin.mjs revisar-puestos');
   console.log('  node server/scripts/admin.mjs revisar-nombres [--tope 3] [--desde 2026-08-01]\n');
   process.exit(comando ? 1 : 0);
