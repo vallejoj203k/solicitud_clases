@@ -8,6 +8,7 @@
  *   node server/scripts/admin.mjs listar
  *   node server/scripts/admin.mjs crear --telefono 3001234567 --password "clave" --nombre "Ana"
  *   node server/scripts/admin.mjs quitar-telefono --telefono 3001234567
+ *   node server/scripts/admin.mjs borrar --telefono 3001234567 (o --email correo)
  *   node server/scripts/admin.mjs revisar-puestos
  *   node server/scripts/admin.mjs revisar-nombres
  *
@@ -104,6 +105,42 @@ async function crear(args) {
   console.log(`  Usuario   : ${usuario.telefono}${usuario.email ? `  ó  ${usuario.email}` : ''}`);
   console.log(`  Nombre    : ${usuario.nombre}`);
   console.log('\n  Ya puedes entrar en /admin/login.\n');
+}
+
+/**
+ * Borra un administrador que sobra -típicamente uno creado por error, con un
+ * teléfono equivocado-. Busca por `--telefono` o `--email`, lo que se le pase.
+ *
+ * SE NIEGA SI TIENE RESERVAS. `Reserva.usuario` borra en cascada
+ * (`onDelete: Cascade`): borrar un usuario con historial de verdad se llevaría
+ * sus reservas detrás. Un admin creado hace segundos por un teléfono mal
+ * escrito no tiene ninguna, así que el chequeo no estorba al caso real y sí
+ * frena borrar por error una cuenta con historial.
+ */
+async function borrar(args) {
+  const telefono = args.telefono ? normalizarTelefono(args.telefono) : '';
+  const email = typeof args.email === 'string' ? args.email.toLowerCase() : '';
+  if (!telefono && !email) throw new Error('Falta --telefono o --email para saber a quién borrar.');
+
+  const admin = await prisma.usuario.findFirst({
+    where: {
+      rol: 'ADMIN',
+      OR: [...(telefono ? [{ telefono }] : []), ...(email ? [{ email }] : [])],
+    },
+    include: { _count: { select: { reservas: true, pedidosMusica: true } } },
+  });
+  if (!admin) throw new Error('No encontré ningún administrador con esos datos.');
+
+  if (admin._count.reservas > 0) {
+    throw new Error(
+      `${admin.nombre} tiene ${admin._count.reservas} reserva(s) a su nombre. No lo borro: ` +
+        'borrarlo se llevaría esas reservas también. Si de verdad es el que sobra, cancela o ' +
+        'reasigna sus reservas primero desde el panel.'
+    );
+  }
+
+  await prisma.usuario.delete({ where: { id: admin.id } });
+  console.log(`\n✔ Borrado: ${admin.nombre} (${admin.telefono ?? admin.email ?? admin.id})\n`);
 }
 
 /**
@@ -291,6 +328,7 @@ const comandos = {
   listar,
   crear,
   'quitar-telefono': quitarTelefono,
+  borrar,
   'revisar-puestos': revisarPuestos,
   'revisar-nombres': revisarNombres,
 };
@@ -300,6 +338,7 @@ if (!comandos[comando]) {
   console.log('  node server/scripts/admin.mjs listar');
   console.log('  node server/scripts/admin.mjs crear --telefono <tel> --password "<clave>" [--nombre "<nombre>"] [--email <correo>]');
   console.log('  node server/scripts/admin.mjs quitar-telefono --telefono <tel>');
+  console.log('  node server/scripts/admin.mjs borrar --telefono <tel>  (o --email <correo>)');
   console.log('  node server/scripts/admin.mjs revisar-puestos');
   console.log('  node server/scripts/admin.mjs revisar-nombres [--tope 3] [--desde 2026-08-01]\n');
   process.exit(comando ? 1 : 0);
