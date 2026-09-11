@@ -6,6 +6,7 @@ import { api, descargar } from '../api/client.js';
 import { Aviso, Boton, Campo, Cargando, Entrada, Insignia, Vacio } from '../components/ui.jsx';
 import { IconoCalendario, IconoCheck, IconoFlecha, IconoMusica } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
+import { rutaInicio } from '../lib/tablet.js';
 
 /**
  * Pantalla de éxito / detalle de una reserva.
@@ -68,7 +69,7 @@ export default function Reserva() {
         titulo="No encontramos esa reserva"
         descripcion="Revisa el código o vuelve a la pantalla principal."
         accion={
-          <Link to="/">
+          <Link to={rutaInicio()}>
             <Boton variante="contorno">Ir al inicio</Boton>
           </Link>
         }
@@ -110,7 +111,7 @@ export default function Reserva() {
           'No alcanzamos a verificar el pago. Puedes reservar de nuevo: el puesto se lo lleva quien pague primero.'
         }
         accion={
-          <Link to="/">
+          <Link to={rutaInicio()}>
             <Boton>Volver a reservar</Boton>
           </Link>
         }
@@ -249,7 +250,7 @@ export default function Reserva() {
       )}
 
       <div className="mt-8 text-center">
-        <Link to="/" className="text-sm font-semibold text-humo-500 hover:text-humo-100">
+        <Link to={rutaInicio()} className="text-sm font-semibold text-humo-500 hover:text-humo-100">
           Volver al inicio
         </Link>
       </div>

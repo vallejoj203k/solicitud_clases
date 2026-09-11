@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client.js';
 import { IconoAtras } from '../components/Iconos.jsx';
+import { rutaInicio } from '../lib/tablet.js';
 
 /**
  * Política de tratamiento de datos (Ley 1581 de 2012 y Decreto 1074 de 2015).
@@ -19,7 +20,7 @@ export default function Privacidad() {
     <div className="min-h-dvh pb-16">
       <header className="px-5 pt-6 pb-4 flex items-center gap-3">
         <Link
-          to="/"
+          to={rutaInicio()}
           aria-label="Volver"
           className="p-2 -ml-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
         >
@@ -82,7 +83,7 @@ export default function Privacidad() {
         </Seccion>
 
         <div className="pt-4">
-          <Link to="/" className="text-volt-500 font-semibold hover:underline">
+          <Link to={rutaInicio()} className="text-volt-500 font-semibold hover:underline">
             Volver al inicio
           </Link>
         </div>

@@ -5,6 +5,7 @@ import { api, ApiError } from '../api/client.js';
 import { guardarToken, leerToken } from '../lib/sesion.js';
 import { hoyISO, hora12, fechaLarga, pesos } from '../lib/formato.js';
 import { abierta, etiquetaApertura } from '../lib/apertura.js';
+import { rutaInicio } from '../lib/tablet.js';
 import CalendarioDias, { semanasDelMes } from '../components/CalendarioDias.jsx';
 import TarjetaHorario from '../components/TarjetaHorario.jsx';
 import MapaPuestos from '../components/MapaPuestos.jsx';
@@ -227,7 +228,7 @@ export default function Reservar() {
             </button>
           ) : (
             <Link
-              to="/"
+              to={rutaInicio()}
               aria-label="Volver al inicio"
               className="p-2 -ml-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
             >

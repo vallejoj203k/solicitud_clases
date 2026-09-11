@@ -23,3 +23,42 @@ export const INICIO_TABLET = `/${RUTA_TABLET}`;
 
 /** Buscar y pedir canciones, colgando del inicio de la tablet. */
 export const MUSICA_TABLET = `/${RUTA_TABLET}/musica`;
+
+const CLAVE_TABLET = 'gimnasioEsTablet';
+
+/**
+ * Recuerda, en ESTE dispositivo, que su inicio es el de la tablet del salón.
+ *
+ * POR QUÉ HACE FALTA: desde el inicio de la tablet se navega a pantallas que
+ * también usa cualquier cliente desde su casa -reservar una clase, ver la
+ * tienda, sus reservas-, y esas pantallas tienen un solo botón de "volver al
+ * inicio" para las dos audiencias. Sin esta marca, ese botón siempre manda a
+ * "/" y la tablet pierde su inicio -con Música- cada vez que alguien entra a
+ * una clase o a la tienda. Con la marca puesta, `rutaInicio()` sabe volver
+ * adonde salió.
+ *
+ * Se guarda en `localStorage` -no en la sesión- porque es una propiedad del
+ * dispositivo, no de una visita: la tablet se queda encendida días enteros y
+ * el navegador se puede reiniciar sin que deje de ser la tablet del salón.
+ */
+export function marcarTablet() {
+  try {
+    localStorage.setItem(CLAVE_TABLET, '1');
+  } catch {
+    // Sin localStorage (privado, bloqueado): "volver" cae al inicio público,
+    // que sigue siendo una pantalla válida, solo sin el atajo a Música.
+  }
+}
+
+function esTablet() {
+  try {
+    return localStorage.getItem(CLAVE_TABLET) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** El inicio al que debe volver "volver al inicio" desde cualquier pantalla. */
+export function rutaInicio() {
+  return esTablet() ? INICIO_TABLET : '/';
+}

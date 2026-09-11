@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { guardarCliente, guardarToken } from '../lib/sesion.js';
 import { Aviso, Boton, Campo, Entrada } from '../components/ui.jsx';
 import { IconoAtras, IconoBuscar } from '../components/Iconos.jsx';
+import { rutaInicio } from '../lib/tablet.js';
 
 /**
  * Recuperar el acceso a las reservas desde otro dispositivo.
@@ -45,7 +46,7 @@ export default function Recuperar() {
     <div className="min-h-dvh flex flex-col">
       <header className="px-5 pt-6">
         <Link
-          to="/"
+          to={rutaInicio()}
           aria-label="Volver"
           className="inline-flex p-2 -ml-2 rounded-xl text-humo-300 hover:bg-carbon-700"
         >
