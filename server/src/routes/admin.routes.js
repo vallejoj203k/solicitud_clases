@@ -43,6 +43,12 @@ import {
 } from '../services/musica.service.js';
 import { buscar as buscarEnYoutube } from '../services/youtube.service.js';
 import {
+  listarProductos,
+  crearProducto,
+  actualizarProducto,
+  borrarProducto,
+} from '../services/producto.service.js';
+import {
   dashboard,
   buscarReservas,
   agendaRecepcion,
@@ -608,5 +614,52 @@ adminRouter.delete(
   '/musica/:pedidoId',
   asyncHandler(async (req, res) => {
     res.json(await quitarPedido({ pedidoId: req.params.pedidoId, porAdmin: true }));
+  })
+);
+
+/* --- Tienda ------------------------------------------------------------- */
+
+const macroSchema = z.object({ nombre: z.string(), valor: z.string() });
+const productoSchema = z.object({
+  nombre: z.string().trim().min(1).max(80),
+  descripcion: z.string().trim().min(1).max(2000),
+  // Cadena vacía = sin foto. Una foto real llega como "data:image/..." desde
+  // el navegador, ya reducida; no se valida el tamaño aquí porque express ya
+  // trae un tope de cuerpo (ver bodyParser en index.js).
+  foto: z.string().max(3_000_000).optional().or(z.literal('')),
+  precioCop: z.number().int().min(0).max(999_999_999),
+  macros: z.array(macroSchema).max(20),
+  orden: z.number().int().optional(),
+});
+
+/** Todo el catálogo, activo o no, para la pantalla de administración. */
+adminRouter.get(
+  '/productos',
+  asyncHandler(async (_req, res) => {
+    res.json(await listarProductos());
+  })
+);
+
+adminRouter.post(
+  '/productos',
+  asyncHandler(async (req, res) => {
+    const datos = productoSchema.parse(req.body);
+    res.status(201).json(await crearProducto(datos));
+  })
+);
+
+adminRouter.patch(
+  '/productos/:id',
+  asyncHandler(async (req, res) => {
+    const datos = productoSchema.partial().extend({ activo: z.boolean().optional() }).parse(req.body);
+    res.json(await actualizarProducto(req.params.id, datos));
+  })
+);
+
+adminRouter.delete(
+  '/productos/:id',
+  asyncHandler(async (req, res) => {
+    await borrarProducto(req.params.id);
+    res.json({ ok: true });
   })
 );

@@ -299,3 +299,39 @@ model PedidoMusica {
   @@index([cancionId, estado])
   @@index([claseId])
 }
+
+// Catalogo de la tienda (suplementos, snacks, lo que el gimnasio venda en
+// mostrador). SOLO INFORMATIVO: la app no cobra ni reserva stock, es la ficha
+// que el cliente mira antes de comprar en persona. Por eso no hay pedidos,
+// carrito ni inventario -si algun dia el gimnasio quiere vender desde la app,
+// eso es una funcion nueva, no una que quepa aqui sin repensar el cobro-.
+model Producto {
+  id String @id @default(cuid())
+
+  nombre      String
+  descripcion String
+
+  // Foto como URI de datos (base64), igual que el resto de la app: no hay
+  // subida a un bucket externo, asi que la imagen ya reducida por el
+  // navegador se guarda directo en la fila. Para un puñado de productos de
+  // un solo gimnasio esto pesa poco y no exige infraestructura nueva.
+  foto String?
+
+  precioCop Int @default(0)
+
+  // Lista libre de renglones nutricionales -"Proteina: 27 g", "Calorias: 120
+  // kcal"-, en el orden en que el admin los puso. No se fija a proteina/carbs/
+  // grasas porque no todo lo que se vende es igual de comparable a eso (una
+  // barra no se mide igual que una creatina sin sabor).
+  macros Json @default("[]")
+
+  // El orden en que se ven en la tienda; no tiene que coincidir con cuando se
+  // creo el producto. Inactivo lo saca de la vista del cliente sin borrar su
+  // historial de precios pasados.
+  orden  Int     @default(0)
+  activo Boolean @default(true)
+
+  creadoEn DateTime @default(now())
+
+  @@index([activo, orden])
+}

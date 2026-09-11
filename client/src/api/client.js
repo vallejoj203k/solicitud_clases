@@ -95,6 +95,7 @@ export const api = {
     pedir(`/reservas/${codigo}/estado-pago${idTransaccion ? `?id=${encodeURIComponent(idTransaccion)}` : ''}`),
   checkout: (codigo) => pedir(`/reservas/${codigo}/checkout`),
   avisarPago: (codigo) => pedir(`/reservas/${codigo}/aviso-pago`, { metodo: 'POST' }),
+  productos: () => pedir('/productos'),
 
   // --- Musica --------------------------------------------------------------
   buscarMusica: (q) => pedir(`/musica/buscar?q=${encodeURIComponent(q)}`),
@@ -245,5 +246,14 @@ export const api = {
       pedir(`/admin/musica/${pedidoId}`, { metodo: 'DELETE', tipoToken: 'admin' }),
     crearInstructor: (nombre) =>
       pedir('/admin/instructores', { metodo: 'POST', cuerpo: { nombre }, tipoToken: 'admin' }),
+
+    // --- Tienda --------------------------------------------------------------
+    productos: () => pedir('/admin/productos', { tipoToken: 'admin' }),
+    crearProducto: (datos) =>
+      pedir('/admin/productos', { metodo: 'POST', cuerpo: datos, tipoToken: 'admin' }),
+    actualizarProducto: (id, datos) =>
+      pedir(`/admin/productos/${id}`, { metodo: 'PATCH', cuerpo: datos, tipoToken: 'admin' }),
+    borrarProducto: (id) =>
+      pedir(`/admin/productos/${id}`, { metodo: 'DELETE', tipoToken: 'admin' }),
   },
 };

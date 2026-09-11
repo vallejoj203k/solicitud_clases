@@ -30,7 +30,10 @@ app.use(
   })
 );
 app.use(compression());
-app.use(express.json({ limit: '256kb' }));
+// 2mb, no 256kb: las fotos de la tienda viajan como data URI dentro del JSON
+// -el navegador ya las redujo antes de mandarlas, pero un base64 igual pesa
+// un tercio más que el binario original-.
+app.use(express.json({ limit: '2mb' }));
 app.use(morgan(env.esProduccion ? 'tiny' : 'dev'));
 
 // CORS solo hace falta cuando el frontend vive en otro dominio. Se usa la forma
