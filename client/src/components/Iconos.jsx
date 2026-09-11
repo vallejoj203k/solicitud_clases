@@ -193,3 +193,22 @@ export function IconoMusica({ className = 'w-5 h-5' }) {
     </svg>
   );
 }
+
+export function IconoTienda({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M5 8h14l-1.1 11.2a2 2 0 0 1-2 1.8H8.1a2 2 0 0 1-2-1.8L5 8Z" />
+      <path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2" />
+    </svg>
+  );
+}
+
+export function IconoFoto({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <circle cx="9" cy="10.5" r="1.7" />
+      <path d="m4.5 17.5 5-5 3 3 3.5-4 4.5 5.5" />
+    </svg>
+  );
+}

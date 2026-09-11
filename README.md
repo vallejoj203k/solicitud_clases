@@ -436,6 +436,29 @@ propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 
 ---
 
+## Tienda
+
+**Catálogo informativo, no una tienda en línea.** `/tienda` muestra los productos que el
+gimnasio vende en el mostrador (suplementos, snacks) con foto, descripción, información
+nutricional y precio. No hay carrito, pago ni control de inventario: quien quiera comprar
+lo hace en persona, ahí mismo. La tarjeta de la tienda aparece en el inicio para
+**cualquiera**, no solo en la tablet del salón (a diferencia de Música).
+
+El admin gestiona el catálogo completo en `/admin/tienda`: crear, editar, ocultar (sin
+borrar) y borrar productos. Cada producto tiene una lista libre de renglones
+nombre/valor para los macros (`Producto.macros`, ej. `Proteína: 27 g`), así que sirve
+tanto para un suplemento como para un snack sin una tabla nutricional fija.
+
+**La foto va embebida, sin bucket externo.** El navegador la reduce a máximo 1000px de
+lado con `canvas` y la convierte a `image/webp` en base64
+(`client/src/lib/imagen.js`), y esa cadena `data:image/webp;base64,...` se guarda
+directo en `Producto.foto`. Es una simplicidad deliberada para un catálogo pequeño: nada
+de credenciales de un servicio de imágenes ni de rutas de subida de archivos. Por eso el
+límite del body de Express subió de 256kb a 2mb (`server/src/index.js`): una foto
+codificada en base64 pesa más que el archivo original.
+
+---
+
 ## Música
 
 **La música suena de verdad, desde YouTube.** El cliente busca en todo YouTube desde su
@@ -989,6 +1012,7 @@ zona con horario de verano.
 | `GET` | `/api/canciones/de-la-casa` | Las que pone el gimnasio si nadie pide |
 | `POST` | `/api/musica/pedir` | Pedir (`{videoId}`; sin reserva ni cuenta) |
 | `DELETE` | `/api/musica/:pedidoId` | Quitar un pedido propio que no esté sonando |
+| `GET` | `/api/productos` | Catálogo de la tienda (solo los productos activos) |
 | `GET` | `/api/salud` | Healthcheck (lo usa Railway) |
 
 ### Admin — requiere `Authorization: Bearer <token>` de rol `ADMIN`
@@ -1023,6 +1047,8 @@ zona con horario de verano.
 | `GET` | `/api/admin/musica/cola` | La cola, con lo ya sonado |
 | `POST` | `/api/admin/musica/:pedidoId/sono` | Marcar que sonó (o devolverla a la fila) |
 | `DELETE` | `/api/admin/musica/:pedidoId` | Quitar un pedido |
+| `GET/POST` | `/api/admin/productos` | Catálogo completo de la tienda (incluye ocultos) / crear |
+| `PATCH/DELETE` | `/api/admin/productos/:id` | Editar (foto, descripción, macros, precio, `activo`) / borrar |
 
 ### Sesiones
 

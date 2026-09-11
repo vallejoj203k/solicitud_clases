@@ -4,6 +4,7 @@ import Reservar from './pages/Reservar.jsx';
 import Reserva from './pages/Reserva.jsx';
 import MisReservas from './pages/MisReservas.jsx';
 import Musica from './pages/Musica.jsx';
+import Tienda from './pages/Tienda.jsx';
 import Reproductor from './pages/Reproductor.jsx';
 import Recuperar from './pages/Recuperar.jsx';
 import Privacidad from './pages/Privacidad.jsx';
@@ -16,6 +17,7 @@ import AdminPagos from './pages/admin/Pagos.jsx';
 import AdminClientes from './pages/admin/Clientes.jsx';
 import AdminRecepcion from './pages/admin/Recepcion.jsx';
 import AdminMusica from './pages/admin/Musica.jsx';
+import AdminTienda from './pages/admin/Tienda.jsx';
 import { INICIO_TABLET, MUSICA_TABLET } from './lib/tablet.js';
 
 export default function App() {
@@ -26,6 +28,7 @@ export default function App() {
       <Route path="/reservar/:slug" element={<Reservar />} />
       <Route path="/reserva/:codigo" element={<Reserva />} />
       <Route path="/mis-reservas" element={<MisReservas />} />
+      <Route path="/tienda" element={<Tienda />} />
 
       {/* La tablet del salón: el mismo inicio, pero con Música, en una
           dirección que no está enlazada desde ninguna parte. Ver `lib/tablet.js`
@@ -52,6 +55,7 @@ export default function App() {
         <Route path="clases" element={<AdminClases />} />
         <Route path="clases/:id" element={<AdminClaseDetalle />} />
         <Route path="musica" element={<AdminMusica />} />
+        <Route path="tienda" element={<AdminTienda />} />
         <Route path="pagos" element={<AdminPagos />} />
         <Route path="clientes" element={<AdminClientes />} />
       </Route>

@@ -15,6 +15,7 @@ import {
 } from '../services/reserva.service.js';
 import { enviarConfirmacionReserva, enviarCancelacion } from '../services/notificaciones.service.js';
 import { wompiConfigurado, construirCheckout } from '../services/wompi.service.js';
+import { catalogoPublico } from '../services/producto.service.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errores.js';
 
@@ -367,3 +368,15 @@ publicRouter.get('/configuracion', (_req, res) => {
     gimnasio: env.gimnasio,
   });
 });
+
+/**
+ * Catálogo de la tienda. Solo informativo -sin carrito ni pago-, así que no
+ * hace falta sesión ni identificar el dispositivo: es la misma vidriera para
+ * cualquiera.
+ */
+publicRouter.get(
+  '/productos',
+  asyncHandler(async (_req, res) => {
+    res.json(await catalogoPublico());
+  })
+);
