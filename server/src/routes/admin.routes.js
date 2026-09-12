@@ -619,16 +619,28 @@ adminRouter.delete(
 
 /* --- Tienda ------------------------------------------------------------- */
 
-const macroSchema = z.object({ nombre: z.string(), valor: z.string() });
+// `null` borra el dato -"ya no aplica"-, distinto de no mandar el campo -"no
+// cambia lo que ya había"-, que es lo que permite `.partial()` en el PATCH.
+const numeroNutricion = z.number().min(0).max(99_999).nullable().optional();
 const productoSchema = z.object({
   nombre: z.string().trim().min(1).max(80),
   descripcion: z.string().trim().min(1).max(2000),
+  // Texto libre, pero solo un puñado de valores conocidos le pintan color a
+  // la tarjeta (ver `client/src/lib/categoriaTienda.js`).
+  categoria: z.string().trim().max(40).optional().or(z.literal('')),
   // Cadena vacía = sin foto. Una foto real llega como "data:image/..." desde
   // el navegador, ya reducida; no se valida el tamaño aquí porque express ya
   // trae un tope de cuerpo (ver bodyParser en index.js).
   foto: z.string().max(3_000_000).optional().or(z.literal('')),
   precioCop: z.number().int().min(0).max(999_999_999),
-  macros: z.array(macroSchema).max(20),
+  insignias: z.array(z.string().trim().min(1).max(40)).max(12),
+  porcion: z.string().trim().max(60).nullable().optional(),
+  caloriasKcal: numeroNutricion,
+  proteinaG: numeroNutricion,
+  carbohidratosG: numeroNutricion,
+  azucaresG: numeroNutricion,
+  grasasTotalesG: numeroNutricion,
+  sodioMg: numeroNutricion,
   orden: z.number().int().optional(),
 });
 
