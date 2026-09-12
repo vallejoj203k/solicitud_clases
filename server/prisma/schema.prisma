@@ -311,6 +311,12 @@ model Producto {
   nombre      String
   descripcion String
 
+  // Texto libre, pero de un puñado de valores conocidos (Proteina, Energia,
+  // Fuerza, Snack...) para que la tarjeta le pinte un color reconocible; uno
+  // que no esta en la lista simplemente sale en gris. Ver
+  // `client/src/lib/categoriaTienda.js`.
+  categoria String?
+
   // Foto como URI de datos (base64), igual que el resto de la app: no hay
   // subida a un bucket externo, asi que la imagen ya reducida por el
   // navegador se guarda directo en la fila. Para un puñado de productos de
@@ -319,11 +325,21 @@ model Producto {
 
   precioCop Int @default(0)
 
-  // Lista libre de renglones nutricionales -"Proteina: 27 g", "Calorias: 120
-  // kcal"-, en el orden en que el admin los puso. No se fija a proteina/carbs/
-  // grasas porque no todo lo que se vende es igual de comparable a eso (una
-  // barra no se mide igual que una creatina sin sabor).
-  macros Json @default("[]")
+  // Insignias cortas y libres -"Sin lactosa", "Sabor cacao"-, en el orden en
+  // que el admin las puso.
+  insignias Json @default("[]")
+
+  // Tabla nutricional. Todo opcional -no todo lo que se vende trae ficha
+  // completa (una barra vs. una creatina sin sabor)-, y en campos numéricos
+  // en vez de texto libre porque de aquí sale el %VD y las barras de
+  // proteína/carbs/grasas: un renglón de texto no se puede graficar.
+  porcion          String? // "1 medida · 30 g"
+  caloriasKcal     Int?
+  proteinaG        Float?
+  carbohidratosG   Float?
+  azucaresG        Float?
+  grasasTotalesG   Float?
+  sodioMg          Float?
 
   // El orden en que se ven en la tienda; no tiene que coincidir con cuando se
   // creo el producto. Inactivo lo saca de la vista del cliente sin borrar su

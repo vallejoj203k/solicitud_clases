@@ -445,9 +445,17 @@ lo hace en persona, ahí mismo. La tarjeta de la tienda aparece en el inicio par
 **cualquiera**, no solo en la tablet del salón (a diferencia de Música).
 
 El admin gestiona el catálogo completo en `/admin/tienda`: crear, editar, ocultar (sin
-borrar) y borrar productos. Cada producto tiene una lista libre de renglones
-nombre/valor para los macros (`Producto.macros`, ej. `Proteína: 27 g`), así que sirve
-tanto para un suplemento como para un snack sin una tabla nutricional fija.
+borrar) y borrar productos. Cada uno tiene una categoría de texto libre (le pinta un
+color a la tarjeta, ver `client/src/lib/categoriaTienda.js`), insignias cortas
+("Sin lactosa", "Sabor cacao") y una ficha nutricional con campos numéricos -calorías,
+proteína, carbohidratos, azúcares, grasas totales, sodio-, todos opcionales. El %VD que
+sale junto a cada dato, y el largo de las barras de proteína/carbohidratos/grasas de la
+ficha, salen de los valores diarios de referencia reales (`client/src/lib/nutricion.js`),
+no de un número inventado por producto.
+
+**Mientras haya 4 productos o menos, el catálogo no se desplaza**: la rejilla se reparte
+el alto disponible igual que el inicio (ver `Home.jsx`). Con 5 o más, encoger las
+tarjetas ya no tiene sentido y la pantalla vuelve a ser una página normal, con scroll.
 
 **La foto va embebida, sin bucket externo.** El navegador la reduce a máximo 1000px de
 lado con `canvas` y la convierte a `image/webp` en base64
