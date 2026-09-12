@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { Cargando, Aviso, Vacio, Hoja } from '../components/ui.jsx';
 import { IconoAtras, IconoTienda } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
+import { rutaInicio } from '../lib/tablet.js';
 
 /**
  * Vidriera de la tienda. SOLO INFORMATIVA: se ve la foto, la descripción, los
@@ -25,7 +26,7 @@ export default function Tienda() {
     <div className="min-h-dvh pb-10">
       <header className="px-5 pt-6 pb-4 flex items-center gap-3">
         <Link
-          to="/"
+          to={rutaInicio()}
           aria-label="Volver"
           className="p-2 -ml-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
         >

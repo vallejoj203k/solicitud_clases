@@ -6,6 +6,7 @@ import { Aviso, Boton, Cargando, Insignia, Vacio, cx } from '../components/ui.js
 import { IconoAtras, IconoFlecha } from '../components/Iconos.jsx';
 import { leerCliente, cerrarSesionCliente } from '../lib/sesion.js';
 import { pesos, ETIQUETA_RESERVA } from '../lib/formato.js';
+import { rutaInicio } from '../lib/tablet.js';
 
 export default function MisReservas() {
   const cliente = leerCliente();
@@ -42,7 +43,7 @@ export default function MisReservas() {
     <div className="min-h-dvh pb-16">
       <header className="px-5 pt-6 pb-4 flex items-center gap-3">
         <Link
-          to="/"
+          to={rutaInicio()}
           aria-label="Volver"
           className="p-2 -ml-2 rounded-xl text-humo-300 hover:bg-carbon-700 active:scale-95"
         >
@@ -64,7 +65,7 @@ export default function MisReservas() {
             descripcion="Cuando reserves un puesto lo verás aquí, con su código de ingreso."
             accion={
               <div className="space-y-3">
-                <Link to="/" className="block">
+                <Link to={rutaInicio()} className="block">
                   <Boton className="w-full">
                     Ver clases
                     <IconoFlecha />

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client.js';
@@ -16,7 +17,7 @@ import { hora12 } from '../lib/formato.js';
 import { abierta, avisoApertura, etiquetaApertura } from '../lib/apertura.js';
 import { leerCliente } from '../lib/sesion.js';
 import { usePantallaCompleta } from '../lib/pantalla.js';
-import { MUSICA_TABLET } from '../lib/tablet.js';
+import { MUSICA_TABLET, marcarTablet } from '../lib/tablet.js';
 
 /**
  * La dirección que se le enseña a la gente del salón.
@@ -53,6 +54,13 @@ export default function Home({ tablet = false }) {
   const navegar = useNavigate();
   const cliente = leerCliente();
   const pantalla = usePantallaCompleta();
+
+  // Deja marcado este dispositivo como la tablet del salón, para que "volver
+  // al inicio" desde reservar, la tienda o mis reservas vuelva aquí -con
+  // Música- y no al inicio público. Ver `lib/tablet.js`.
+  useEffect(() => {
+    if (tablet) marcarTablet();
+  }, [tablet]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['inicio'],
