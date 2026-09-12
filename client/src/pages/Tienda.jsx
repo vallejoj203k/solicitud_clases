@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client.js';
-import { Cargando, Aviso, Vacio, Hoja, cx } from '../components/ui.jsx';
-import { IconoAtras, IconoTienda, IconoFlecha } from '../components/Iconos.jsx';
+import { Cargando, Aviso, Vacio, cx } from '../components/ui.jsx';
+import { IconoAtras, IconoTienda, IconoFlecha, IconoCerrar } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
 import { rutaInicio } from '../lib/tablet.js';
 import { colorCategoria } from '../lib/categoriaTienda.js';
@@ -154,109 +154,169 @@ function TarjetaProducto({ producto, pocos, onAbrir }) {
 
 /* ------------------------------------------------------------- La ficha */
 
+/**
+ * A diferencia del resto de las "hojas" de la app (que suben desde abajo, en
+ * una sola columna), esta ficha va a dos columnas en pantallas anchas -foto a
+ * la derecha, a todo el alto, con las kcal encima- porque así se ve el
+ * catálogo de referencia. En un teléfono angosto, foto y contenido no caben
+ * lado a lado: la foto pasa arriba, del ancho de la pantalla, y el contenido
+ * queda debajo.
+ */
 function FichaProducto({ producto, onCerrar }) {
+  useEffect(() => {
+    const anterior = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const alPresionar = (e) => e.key === 'Escape' && onCerrar();
+    window.addEventListener('keydown', alPresionar);
+    return () => {
+      document.body.style.overflow = anterior;
+      window.removeEventListener('keydown', alPresionar);
+    };
+  }, [onCerrar]);
+
   const tieneMacros =
     producto.proteinaG != null || producto.carbohidratosG != null || producto.grasasTotalesG != null;
   const tieneTablaCompleta =
     tieneMacros || producto.caloriasKcal != null || producto.azucaresG != null || producto.sodioMg != null;
 
   return (
-    <Hoja abierta onCerrar={onCerrar} titulo={producto.nombre}>
-      <div className="space-y-4">
-        {producto.categoria && (
-          <span className={cx('block text-[11px] font-extrabold uppercase tracking-wider', colorCategoria(producto.categoria))}>
-            {producto.categoria}
-          </span>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
+      <button
+        aria-label="Cerrar"
+        onClick={onCerrar}
+        className="absolute inset-0 bg-carbon-950/70 backdrop-blur-sm animate-aparecer"
+      />
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={producto.nombre}
+        className={cx(
+          'relative w-full sm:max-w-3xl bg-carbon-800 border-t sm:border border-carbon-600',
+          'rounded-t-4xl sm:rounded-3xl max-h-[92vh] md:h-[640px]',
+          'overflow-y-auto md:overflow-hidden flex flex-col md:flex-row',
+          'animate-subirHoja sm:animate-surgir'
         )}
+      >
+        <button
+          onClick={onCerrar}
+          aria-label="Cerrar"
+          className="absolute top-3 right-3 z-30 p-2 rounded-full bg-carbon-900/70 backdrop-blur text-humo-100 hover:bg-carbon-700 active:scale-95"
+        >
+          <IconoCerrar className="w-4 h-4" />
+        </button>
 
-        {producto.foto && (
-          <img
-            src={producto.foto}
-            alt=""
-            className="w-full aspect-video rounded-2xl object-cover bg-carbon-700"
-          />
-        )}
-
-        <p className="text-sm text-humo-300 leading-relaxed whitespace-pre-line">
-          {producto.descripcion}
-        </p>
-
-        {tieneMacros && (
-          <div className="flex gap-3">
-            {producto.proteinaG != null && (
-              <BarraMacro
-                etiqueta="Proteína"
-                valor={producto.proteinaG}
-                campo="proteinaG"
-                claseTexto="text-volt-500"
-                claseBarra="bg-volt-500"
-              />
-            )}
-            {producto.carbohidratosG != null && (
-              <BarraMacro
-                etiqueta="Carbs"
-                valor={producto.carbohidratosG}
-                campo="carbohidratosG"
-                claseTexto="text-aqua-500"
-                claseBarra="bg-aqua-500"
-              />
-            )}
-            {producto.grasasTotalesG != null && (
-              <BarraMacro
-                etiqueta="Grasas"
-                valor={producto.grasasTotalesG}
-                campo="grasasTotalesG"
-                claseTexto="text-purple-400"
-                claseBarra="bg-purple-400"
-              />
-            )}
-          </div>
-        )}
-
-        {tieneTablaCompleta && (
-          <div>
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <p className="etiqueta">Información nutricional</p>
-              {producto.porcion && <p className="text-xs text-humo-500 truncate">{producto.porcion}</p>}
+        {/* Foto: arriba del todo en un teléfono, a la derecha y a todo el
+            alto en una pantalla ancha. */}
+        <div className="relative shrink-0 md:order-2 md:w-[46%] md:h-full">
+          {producto.foto ? (
+            <img
+              src={producto.foto}
+              alt=""
+              className="w-full aspect-video md:aspect-auto md:h-full object-cover bg-carbon-700"
+            />
+          ) : (
+            <div className="w-full aspect-video md:aspect-auto md:h-full bg-carbon-700 flex items-center justify-center">
+              <IconoTienda className="w-10 h-10 text-humo-500" />
             </div>
-            <ul className="rounded-2xl border border-carbon-600 divide-y divide-carbon-700 overflow-hidden">
-              <FilaNutricion etiqueta="Calorías" valor={producto.caloriasKcal} unidad=" kcal" campo="caloriasKcal" />
-              <FilaNutricion etiqueta="Proteína" valor={producto.proteinaG} unidad=" g" campo="proteinaG" />
-              <FilaNutricion etiqueta="Carbohidratos" valor={producto.carbohidratosG} unidad=" g" campo="carbohidratosG" />
-              <FilaNutricion etiqueta="Azúcares" valor={producto.azucaresG} unidad=" g" campo="azucaresG" sangria />
-              <FilaNutricion etiqueta="Grasas totales" valor={producto.grasasTotalesG} unidad=" g" campo="grasasTotalesG" />
-              <FilaNutricion etiqueta="Sodio" valor={producto.sodioMg} unidad=" mg" campo="sodioMg" />
-            </ul>
-            <p className="mt-1.5 text-[11px] text-humo-500">
-              % VD: porcentaje de un valor diario de 2.000 kcal.
+          )}
+          {producto.caloriasKcal != null && (
+            <span className="absolute left-3 bottom-3 z-20 px-3 py-1.5 rounded-xl bg-volt-500 text-carbon-900 text-xs font-extrabold uppercase tracking-wider">
+              {producto.caloriasKcal} kcal
+            </span>
+          )}
+        </div>
+
+        <div className="md:order-1 md:w-[54%] md:h-full md:overflow-y-auto p-5 sm:p-6 space-y-4">
+          {producto.categoria && (
+            <span className={cx('block text-[11px] font-extrabold uppercase tracking-wider', colorCategoria(producto.categoria))}>
+              {producto.categoria}
+            </span>
+          )}
+
+          <h2 className="text-2xl font-extrabold tracking-tightest">{producto.nombre}</h2>
+
+          <p className="text-sm text-humo-300 leading-relaxed whitespace-pre-line">
+            {producto.descripcion}
+          </p>
+
+          {tieneMacros && (
+            <div className="flex gap-3">
+              {producto.proteinaG != null && (
+                <BarraMacro
+                  etiqueta="Proteína"
+                  valor={producto.proteinaG}
+                  campo="proteinaG"
+                  claseTexto="text-volt-500"
+                  claseBarra="bg-volt-500"
+                />
+              )}
+              {producto.carbohidratosG != null && (
+                <BarraMacro
+                  etiqueta="Carbs"
+                  valor={producto.carbohidratosG}
+                  campo="carbohidratosG"
+                  claseTexto="text-aqua-500"
+                  claseBarra="bg-aqua-500"
+                />
+              )}
+              {producto.grasasTotalesG != null && (
+                <BarraMacro
+                  etiqueta="Grasas"
+                  valor={producto.grasasTotalesG}
+                  campo="grasasTotalesG"
+                  claseTexto="text-purple-400"
+                  claseBarra="bg-purple-400"
+                />
+              )}
+            </div>
+          )}
+
+          {tieneTablaCompleta && (
+            <div>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <p className="etiqueta">Información nutricional</p>
+                {producto.porcion && <p className="text-xs text-humo-500 truncate">{producto.porcion}</p>}
+              </div>
+              <ul className="rounded-2xl border border-carbon-600 divide-y divide-carbon-700 overflow-hidden">
+                <FilaNutricion etiqueta="Calorías" valor={producto.caloriasKcal} unidad=" kcal" campo="caloriasKcal" />
+                <FilaNutricion etiqueta="Proteína" valor={producto.proteinaG} unidad=" g" campo="proteinaG" />
+                <FilaNutricion etiqueta="Carbohidratos" valor={producto.carbohidratosG} unidad=" g" campo="carbohidratosG" />
+                <FilaNutricion etiqueta="Azúcares" valor={producto.azucaresG} unidad=" g" campo="azucaresG" sangria />
+                <FilaNutricion etiqueta="Grasas totales" valor={producto.grasasTotalesG} unidad=" g" campo="grasasTotalesG" />
+                <FilaNutricion etiqueta="Sodio" valor={producto.sodioMg} unidad=" mg" campo="sodioMg" />
+              </ul>
+              <p className="mt-1.5 text-[11px] text-humo-500">
+                % VD: porcentaje de un valor diario de 2.000 kcal.
+              </p>
+            </div>
+          )}
+
+          {producto.insignias?.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {producto.insignias.map((insignia, i) => (
+                <span
+                  key={i}
+                  className="px-3 py-1 rounded-full border border-volt-500/30 text-volt-500 text-xs font-semibold"
+                >
+                  {insignia}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <div>
+              <p className="etiqueta">Precio</p>
+              <p className="text-2xl font-extrabold tracking-tightest">{pesos(producto.precioCop)}</p>
+            </div>
+            <p className="text-xs text-humo-500 max-w-[45%] text-right">
+              Cómpralo en el mostrador del gimnasio.
             </p>
           </div>
-        )}
-
-        {producto.insignias?.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {producto.insignias.map((insignia, i) => (
-              <span
-                key={i}
-                className="px-3 py-1 rounded-full border border-volt-500/30 text-volt-500 text-xs font-semibold"
-              >
-                {insignia}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between pt-1">
-          <div>
-            <p className="etiqueta">Precio</p>
-            <p className="text-2xl font-extrabold tracking-tightest">{pesos(producto.precioCop)}</p>
-          </div>
-          <p className="text-xs text-humo-500 max-w-[45%] text-right">
-            Cómpralo en el mostrador del gimnasio.
-          </p>
         </div>
       </div>
-    </Hoja>
+    </div>
   );
 }
 
