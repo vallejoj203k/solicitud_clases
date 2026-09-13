@@ -390,7 +390,13 @@ function TarjetaMusica() {
           marco a propósito, para que se lea como textura y no como un botón. */}
       <IconoMusica className="absolute -top-8 -right-6 w-44 h-44 text-volt-500/[0.07] rotate-12" />
 
-      <div className="relative z-20 h-full p-4 flex flex-col justify-end pointer-events-none">
+      <div className="relative z-20 h-full p-4 flex flex-col pointer-events-none">
+        {/* El ecualizador se queda con el espacio que sobra por encima del
+            texto -sea cual sea el alto de la tarjeta, `flex-1 min-h-0` es lo
+            que se lo da sin invadirlo-, con las barras creciendo desde el
+            piso de esa franja. */}
+        <EcualizadorMusica />
+
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 bg-volt-500/20 text-volt-500">
@@ -407,6 +413,44 @@ function TarjetaMusica() {
         </div>
       </div>
     </Tarjeta>
+  );
+}
+
+// Alto en reposo de cada barra (% del contenedor) y su ritmo: ni todas a la
+// misma altura ni al mismo compás, para que se lea como sonido de verdad y no
+// como una animación repetida en bloque.
+const BARRAS_ECUALIZADOR = [
+  { alto: 45, duracion: 1.1, retraso: 0 },
+  { alto: 30, duracion: 0.9, retraso: 0.15 },
+  { alto: 55, duracion: 1.3, retraso: 0.3 },
+  { alto: 95, duracion: 1, retraso: 0.05 },
+  { alto: 70, duracion: 1.2, retraso: 0.25 },
+  { alto: 50, duracion: 0.95, retraso: 0.4 },
+  { alto: 75, duracion: 1.15, retraso: 0.1 },
+];
+
+/**
+ * Las barras de sonido de la tarjeta de Música: un ecualizador quieto no dice
+ * nada, así que cada barra sube y baja por su cuenta (`animate-sonido`,
+ * definida en `tailwind.config.js`) para leerse como audio sonando de
+ * verdad, no como un ícono más.
+ */
+function EcualizadorMusica() {
+  return (
+    <div aria-hidden="true" className="flex-1 min-h-0 flex items-end justify-center gap-1.5 pb-3 sm:gap-2">
+      {BARRAS_ECUALIZADOR.map((barra, i) => (
+        <span
+          key={i}
+          className="w-2 sm:w-2.5 rounded-full bg-volt-500/80 animate-sonido"
+          style={{
+            height: `${barra.alto}%`,
+            transformOrigin: 'bottom',
+            animationDuration: `${barra.duracion}s`,
+            animationDelay: `${barra.retraso}s`,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
