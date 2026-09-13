@@ -76,12 +76,19 @@ export default {
           '0%': { opacity: '0', transform: 'scale(.92) translateY(12px)' },
           '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
         },
+        // El ecualizador de la tarjeta de Música: cada barra crece desde su
+        // base -por eso `scaleY`, no `height`, que movería a las vecinas-.
+        sonido: {
+          '0%, 100%': { transform: 'scaleY(.35)' },
+          '50%': { transform: 'scaleY(1)' },
+        },
       },
       animation: {
         aparecer: 'aparecer .28s cubic-bezier(.16,1,.3,1) both',
         subirHoja: 'subirHoja .32s cubic-bezier(.16,1,.3,1) both',
         latido: 'latido .4s ease-in-out',
         surgir: 'surgir .3s cubic-bezier(.16,1,.3,1) both',
+        sonido: 'sonido 1.1s ease-in-out infinite',
       },
     },
   },
