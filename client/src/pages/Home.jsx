@@ -322,8 +322,9 @@ function TarjetaDisciplina({ tipo, desdeCuando, reservasDesde, onIrAPuestos }) {
 }
 
 /**
- * Tienda. Como Música, no tiene foto de salón propia -es un catálogo, no una
- * clase-, así que va con la paleta de la app en vez de una foto.
+ * Tienda. Igual que las tarjetas de disciplina: foto de fondo con degradado y
+ * el ícono/título/flecha encima -ver `TarjetaDisciplina`-, pero sin la
+ * pastilla de "próxima clase" porque la tienda no tiene horarios.
  *
  * A diferencia de Música, SÍ va en el inicio público: es un catálogo
  * informativo -sin carrito ni pago-, así que no hay razón para esconderlo de
@@ -332,23 +333,25 @@ function TarjetaDisciplina({ tipo, desdeCuando, reservasDesde, onIrAPuestos }) {
  */
 function TarjetaTienda() {
   return (
-    <Tarjeta className="bg-carbon-800">
+    <Tarjeta>
       <Link to="/tienda" className="absolute inset-0 z-10" aria-label="Ver la tienda" />
 
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: 'url(/images/store.png)' }}
+      />
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(130% 105% at 100% 0%, rgba(200,247,81,0.26) 0%, rgba(200,247,81,0.04) 55%, rgba(200,247,81,0) 75%)',
+            'linear-gradient(to top, #1C2028 0%, rgba(28,32,40,0.90) 26%, rgba(28,32,40,0.30) 58%, rgba(28,32,40,0) 100%)',
         }}
       />
-
-      <IconoTienda className="absolute -top-8 -right-6 w-44 h-44 text-volt-500/[0.07] rotate-12" />
 
       <div className="relative z-20 h-full p-4 flex flex-col justify-end pointer-events-none">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 bg-volt-500/20 text-volt-500">
+            <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 backdrop-blur-sm bg-volt-500/20 text-volt-500">
               <IconoTienda className="w-5 h-5" />
             </span>
             <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">Tienda</h2>
@@ -356,7 +359,7 @@ function TarjetaTienda() {
               Suplementos y snacks del gimnasio.
             </p>
           </div>
-          <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 text-humo-100 border border-white/10">
+          <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 backdrop-blur-sm text-humo-100 border border-white/10">
             <IconoFlecha />
           </span>
         </div>
