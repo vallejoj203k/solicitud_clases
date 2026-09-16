@@ -439,19 +439,14 @@ propia. Restaurar: `gunzip -c respaldos/ARCHIVO.sql.gz | psql "$DATABASE_URL"`.
 ## Tienda
 
 **Catálogo informativo, no una tienda en línea.** `/tienda` muestra los productos que el
-gimnasio vende en el mostrador (suplementos, snacks) con foto, descripción, información
-nutricional y precio. No hay carrito, pago ni control de inventario: quien quiera comprar
+gimnasio vende en el mostrador (suplementos, snacks) con foto, descripción y precio -sin
+categoría, ficha nutricional ni insignias: solo lo esencial para reconocer el producto y
+saber cuánto cuesta-. No hay carrito, pago ni control de inventario: quien quiera comprar
 lo hace en persona, ahí mismo. La tarjeta de la tienda aparece en el inicio para
 **cualquiera**, no solo en la tablet del salón (a diferencia de Música).
 
 El admin gestiona el catálogo completo en `/admin/tienda`: crear, editar, ocultar (sin
-borrar) y borrar productos. Cada uno tiene una categoría de texto libre (le pinta un
-color a la tarjeta, ver `client/src/lib/categoriaTienda.js`), insignias cortas
-("Sin lactosa", "Sabor cacao") y una ficha nutricional con campos numéricos -calorías,
-proteína, carbohidratos, azúcares, grasas totales, sodio-, todos opcionales. El %VD que
-sale junto a cada dato, y el largo de las barras de proteína/carbohidratos/grasas de la
-ficha, salen de los valores diarios de referencia reales (`client/src/lib/nutricion.js`),
-no de un número inventado por producto.
+borrar) y borrar productos, con foto, nombre, descripción y precio.
 
 **Mientras haya 4 productos o menos, el catálogo no se desplaza**: la rejilla se reparte
 el alto disponible igual que el inicio (ver `Home.jsx`). Con 5 o más, encoger las

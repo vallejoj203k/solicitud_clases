@@ -6,14 +6,12 @@ import { Cargando, Aviso, Vacio, cx } from '../components/ui.jsx';
 import { IconoAtras, IconoTienda, IconoFlecha, IconoCerrar } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
 import { rutaInicio } from '../lib/tablet.js';
-import { colorCategoria } from '../lib/categoriaTienda.js';
-import { porcentajeVD } from '../lib/nutricion.js';
 
 /**
- * Vidriera de la tienda. SOLO INFORMATIVA: se ve la foto, la descripción, la
- * ficha nutricional y el precio de cada producto, y se compra en el
- * mostrador -no hay carrito ni pago aquí-. Por eso no exige sesión ni
- * dispositivo: es la misma vista para cualquiera.
+ * Vidriera de la tienda. SOLO INFORMATIVA: se ve la foto, la descripción y el
+ * precio de cada producto, y se compra en el mostrador -no hay carrito ni
+ * pago aquí-. Por eso no exige sesión ni dispositivo: es la misma vista para
+ * cualquiera.
  *
  * MIENTRAS HAYA 4 PRODUCTOS O MENOS, la rejilla no se desplaza: se reparte el
  * alto disponible igual que hace el inicio (ver `Home.jsx`). Con 5 o más deja
@@ -97,6 +95,9 @@ export default function Tienda() {
  * que quepan las 4 sin scroll-. Sin productos por mostrar todavía (más de 4
  * en catálogo, rejilla normal con scroll) se le da una proporción fija para
  * que no quede ni gigante ni aplastada.
+ *
+ * Solo nombre y precio: nada de categoría ni datos nutricionales encima de
+ * la foto.
  */
 function TarjetaProducto({ producto, pocos, onAbrir }) {
   return (
@@ -107,18 +108,6 @@ function TarjetaProducto({ producto, pocos, onAbrir }) {
       )}
     >
       <button onClick={onAbrir} aria-label={`Ver ${producto.nombre}`} className="absolute inset-0 z-10 active:scale-[.98] transition-transform" />
-
-      {producto.categoria && (
-        <span
-          className={cx(
-            'absolute top-2.5 left-2.5 z-20 px-2 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider',
-            'bg-carbon-900/80 backdrop-blur-sm border border-white/10',
-            colorCategoria(producto.categoria)
-          )}
-        >
-          {producto.categoria}
-        </span>
-      )}
 
       {producto.foto ? (
         <img src={producto.foto} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -139,10 +128,7 @@ function TarjetaProducto({ producto, pocos, onAbrir }) {
       <div className="relative z-20 h-full p-3 flex flex-col justify-end pointer-events-none">
         <p className="font-bold tracking-tight text-sm truncate">{producto.nombre}</p>
         <div className="mt-1 flex items-end justify-between gap-2">
-          <p className="text-xs text-humo-300 truncate">
-            {producto.caloriasKcal != null ? `${producto.caloriasKcal} kcal · ` : ''}
-            <span className="font-bold text-volt-500">{pesos(producto.precioCop)}</span>
-          </p>
+          <span className="font-bold text-volt-500 text-sm">{pesos(producto.precioCop)}</span>
           <span className="shrink-0 p-1.5 rounded-full bg-carbon-900/70 text-humo-100 border border-white/10">
             <IconoFlecha className="w-3.5 h-3.5" />
           </span>
@@ -157,10 +143,11 @@ function TarjetaProducto({ producto, pocos, onAbrir }) {
 /**
  * A diferencia del resto de las "hojas" de la app (que suben desde abajo, en
  * una sola columna), esta ficha va a dos columnas en pantallas anchas -foto a
- * la derecha, a todo el alto, con las kcal encima- porque así se ve el
- * catálogo de referencia. En un teléfono angosto, foto y contenido no caben
- * lado a lado: la foto pasa arriba, del ancho de la pantalla, y el contenido
- * queda debajo.
+ * la derecha, a todo el alto- porque así se ve el catálogo de referencia. En
+ * un teléfono angosto, foto y contenido no caben lado a lado: la foto pasa
+ * arriba, del ancho de la pantalla, y el contenido queda debajo.
+ *
+ * Solo nombre, descripción y precio: sin categoría, macros ni insignias.
  */
 function FichaProducto({ producto, onCerrar }) {
   useEffect(() => {
@@ -173,11 +160,6 @@ function FichaProducto({ producto, onCerrar }) {
       window.removeEventListener('keydown', alPresionar);
     };
   }, [onCerrar]);
-
-  const tieneMacros =
-    producto.proteinaG != null || producto.carbohidratosG != null || producto.grasasTotalesG != null;
-  const tieneTablaCompleta =
-    tieneMacros || producto.caloriasKcal != null || producto.azucaresG != null || producto.sodioMg != null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
@@ -193,7 +175,7 @@ function FichaProducto({ producto, onCerrar }) {
         aria-label={producto.nombre}
         className={cx(
           'relative w-full sm:max-w-3xl bg-carbon-800 border-t sm:border border-carbon-600',
-          'rounded-t-4xl sm:rounded-3xl max-h-[92vh] md:h-[640px]',
+          'rounded-t-4xl sm:rounded-3xl max-h-[92vh] md:h-[520px]',
           'overflow-y-auto md:overflow-hidden flex flex-col md:flex-row',
           'animate-subirHoja sm:animate-surgir'
         )}
@@ -220,90 +202,14 @@ function FichaProducto({ producto, onCerrar }) {
               <IconoTienda className="w-10 h-10 text-humo-500" />
             </div>
           )}
-          {producto.caloriasKcal != null && (
-            <span className="absolute left-3 bottom-3 z-20 px-3 py-1.5 rounded-xl bg-volt-500 text-carbon-900 text-xs font-extrabold uppercase tracking-wider">
-              {producto.caloriasKcal} kcal
-            </span>
-          )}
         </div>
 
         <div className="md:order-1 md:w-[54%] md:h-full md:overflow-y-auto p-5 sm:p-6 space-y-4">
-          {producto.categoria && (
-            <span className={cx('block text-[11px] font-extrabold uppercase tracking-wider', colorCategoria(producto.categoria))}>
-              {producto.categoria}
-            </span>
-          )}
-
           <h2 className="text-2xl font-extrabold tracking-tightest">{producto.nombre}</h2>
 
           <p className="text-sm text-humo-300 leading-relaxed whitespace-pre-line">
             {producto.descripcion}
           </p>
-
-          {tieneMacros && (
-            <div className="flex gap-3">
-              {producto.proteinaG != null && (
-                <BarraMacro
-                  etiqueta="Proteína"
-                  valor={producto.proteinaG}
-                  campo="proteinaG"
-                  claseTexto="text-volt-500"
-                  claseBarra="bg-volt-500"
-                />
-              )}
-              {producto.carbohidratosG != null && (
-                <BarraMacro
-                  etiqueta="Carbs"
-                  valor={producto.carbohidratosG}
-                  campo="carbohidratosG"
-                  claseTexto="text-aqua-500"
-                  claseBarra="bg-aqua-500"
-                />
-              )}
-              {producto.grasasTotalesG != null && (
-                <BarraMacro
-                  etiqueta="Grasas"
-                  valor={producto.grasasTotalesG}
-                  campo="grasasTotalesG"
-                  claseTexto="text-purple-400"
-                  claseBarra="bg-purple-400"
-                />
-              )}
-            </div>
-          )}
-
-          {tieneTablaCompleta && (
-            <div>
-              <div className="mb-2 flex items-baseline justify-between gap-2">
-                <p className="etiqueta">Información nutricional</p>
-                {producto.porcion && <p className="text-xs text-humo-500 truncate">{producto.porcion}</p>}
-              </div>
-              <ul className="rounded-2xl border border-carbon-600 divide-y divide-carbon-700 overflow-hidden">
-                <FilaNutricion etiqueta="Calorías" valor={producto.caloriasKcal} unidad=" kcal" campo="caloriasKcal" />
-                <FilaNutricion etiqueta="Proteína" valor={producto.proteinaG} unidad=" g" campo="proteinaG" />
-                <FilaNutricion etiqueta="Carbohidratos" valor={producto.carbohidratosG} unidad=" g" campo="carbohidratosG" />
-                <FilaNutricion etiqueta="Azúcares" valor={producto.azucaresG} unidad=" g" campo="azucaresG" sangria />
-                <FilaNutricion etiqueta="Grasas totales" valor={producto.grasasTotalesG} unidad=" g" campo="grasasTotalesG" />
-                <FilaNutricion etiqueta="Sodio" valor={producto.sodioMg} unidad=" mg" campo="sodioMg" />
-              </ul>
-              <p className="mt-1.5 text-[11px] text-humo-500">
-                % VD: porcentaje de un valor diario de 2.000 kcal.
-              </p>
-            </div>
-          )}
-
-          {producto.insignias?.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {producto.insignias.map((insignia, i) => (
-                <span
-                  key={i}
-                  className="px-3 py-1 rounded-full border border-volt-500/30 text-volt-500 text-xs font-semibold"
-                >
-                  {insignia}
-                </span>
-              ))}
-            </div>
-          )}
 
           <div className="flex items-center justify-between pt-1">
             <div>
@@ -318,50 +224,4 @@ function FichaProducto({ producto, onCerrar }) {
       </div>
     </div>
   );
-}
-
-/** Una de las tres barras destacadas (proteína/carbs/grasas). El largo es el
- *  %VD de ese macro -la misma cuenta que en la tabla de abajo-, no un número
- *  aparte por producto. */
-function BarraMacro({ etiqueta, valor, campo, claseTexto, claseBarra }) {
-  const pct = porcentajeVD(campo, valor);
-  return (
-    <div className="min-w-0 flex-1">
-      <p className={cx('text-[11px] font-bold uppercase tracking-wider truncate', claseTexto)}>{etiqueta}</p>
-      <p className={cx('text-lg font-extrabold tabular-nums', claseTexto)}>{formatearGramos(valor)} g</p>
-      <div className="mt-1.5 h-1.5 rounded-full bg-carbon-700 overflow-hidden">
-        <div
-          className={cx('h-full rounded-full', claseBarra)}
-          style={{ width: `${Math.max(4, Math.min(100, pct ?? 0))}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** Un renglón de la tabla nutricional; no sale si el producto no trae ese
- *  dato -no todo lo que se vende tiene ficha completa-. */
-function FilaNutricion({ etiqueta, valor, unidad, campo, sangria = false }) {
-  if (valor == null) return null;
-  const pct = porcentajeVD(campo, valor);
-  return (
-    <li className={cx('flex items-center justify-between px-4 py-2.5 text-sm', sangria && 'pl-7')}>
-      <span className={sangria ? 'text-humo-500' : 'text-humo-300'}>
-        {sangria && '— '}
-        {etiqueta}
-      </span>
-      <span className="flex items-center gap-3">
-        <span className="font-bold tabular-nums">
-          {formatearGramos(valor)}
-          {unidad}
-        </span>
-        {pct != null && <span className="w-9 text-right text-xs text-humo-500 tabular-nums">{pct}%</span>}
-      </span>
-    </li>
-  );
-}
-
-/** "27" en vez de "27.0", pero "27.5" se queda igual. */
-function formatearGramos(valor) {
-  return Number.isInteger(valor) ? valor : Number(valor.toFixed(1));
 }
