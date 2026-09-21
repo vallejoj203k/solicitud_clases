@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cx } from '../components/ui.jsx';
-import { IconoAtras, IconoComposicion, IconoFlecha, IconoCheck } from '../components/Iconos.jsx';
+import { IconoAtras, IconoFlecha, IconoCheck } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
 import { rutaInicio } from '../lib/tablet.js';
 
@@ -155,9 +155,11 @@ export default function ComposicionCorporal() {
  */
 function Diapo({ visual, titulo, bajada, children }) {
   const visualFinal = visual ?? (
-    <span className="inline-flex w-14 h-14 md:landscape:w-28 md:landscape:h-28 rounded-2xl items-center justify-center bg-volt-500/15 text-volt-500">
-      <IconoComposicion className="w-7 h-7 md:landscape:w-14 md:landscape:h-14" />
-    </span>
+    <img
+      src="/images/logo-megavital.jpg"
+      alt="Gimnasio Mega Vital"
+      className="w-32 md:landscape:w-56 h-auto object-contain rounded-2xl"
+    />
   );
 
   return (
