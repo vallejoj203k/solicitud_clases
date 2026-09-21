@@ -371,32 +371,34 @@ function TarjetaTienda() {
 }
 
 /**
- * Composición corporal. Sin foto propia -la del equipo tiene fondo blanco de
- * catálogo, no pega con las fotos oscuras del salón-, así que va con la
- * paleta de la app, igual que Música.
+ * Composición corporal. Igual que las tarjetas de disciplina y la Tienda:
+ * foto de fondo con degradado y el ícono/título/flecha encima -ver
+ * `TarjetaDisciplina`-, pero sin pastilla de horario.
  *
  * Va en el inicio público, como Tienda: es informativa y ayuda a decidir
  * venir a hacérselo antes de estar ya en el gimnasio.
  */
 function TarjetaComposicion() {
   return (
-    <Tarjeta className="bg-carbon-800">
+    <Tarjeta>
       <Link to="/composicion-corporal" className="absolute inset-0 z-10" aria-label="Ver composición corporal" />
 
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: 'url(/images/bodyanalyse.jpg)' }}
+      />
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(130% 105% at 100% 0%, rgba(200,247,81,0.26) 0%, rgba(200,247,81,0.04) 55%, rgba(200,247,81,0) 75%)',
+            'linear-gradient(to top, #1C2028 0%, rgba(28,32,40,0.90) 26%, rgba(28,32,40,0.30) 58%, rgba(28,32,40,0) 100%)',
         }}
       />
-
-      <IconoComposicion className="absolute -top-8 -right-6 w-44 h-44 text-volt-500/[0.07] rotate-12" />
 
       <div className="relative z-20 h-full p-4 flex flex-col justify-end pointer-events-none">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 bg-volt-500/20 text-volt-500">
+            <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 backdrop-blur-sm bg-volt-500/20 text-volt-500">
               <IconoComposicion className="w-5 h-5" />
             </span>
             <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">Body Scanner</h2>
@@ -404,7 +406,7 @@ function TarjetaComposicion() {
               Analiza tu cuerpo, desde $20.000.
             </p>
           </div>
-          <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 text-humo-100 border border-white/10">
+          <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 backdrop-blur-sm text-humo-100 border border-white/10">
             <IconoFlecha />
           </span>
         </div>
