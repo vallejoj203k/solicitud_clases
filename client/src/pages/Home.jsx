@@ -399,7 +399,7 @@ function TarjetaComposicion() {
             <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 bg-volt-500/20 text-volt-500">
               <IconoComposicion className="w-5 h-5" />
             </span>
-            <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">Composición</h2>
+            <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">Body Scanner</h2>
             <p className="mt-1.5 text-sm text-humo-500 leading-snug truncate">
               Analiza tu cuerpo, desde $20.000.
             </p>

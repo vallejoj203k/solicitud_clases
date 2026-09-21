@@ -20,6 +20,13 @@ import { rutaInicio } from '../lib/tablet.js';
  * aquí hay demasiado contenido para una sola pantalla, así que en vez de
  * romper la regla se reparte en varias pantallas completas y una flecha
  * avanza de una a la siguiente.
+ *
+ * PENSADA PARA LA TABLET, EN HORIZONTAL: cada diapositiva (`Diapo`) es una
+ * columna en un teléfono angosto -ícono/foto arriba, texto abajo-, pero pasa
+ * a dos columnas lado a lado (`md:landscape:`) en una pantalla ancha, igual
+ * que la ficha de producto de la Tienda: así la tablet aprovecha el ancho en
+ * vez de dejar una columna angosta y centrada con medio salón de margen a
+ * cada lado.
  */
 export default function ComposicionCorporal() {
   const [indice, setIndice] = useState(0);
@@ -47,7 +54,7 @@ export default function ComposicionCorporal() {
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
-      <header className="shrink-0 px-5 pt-6 pb-3 flex items-center gap-3">
+      <header className="shrink-0 px-5 md:landscape:px-8 pt-6 pb-3 flex items-center gap-3">
         {indice > 0 ? (
           <button
             onClick={alPresionarAtras}
@@ -96,7 +103,7 @@ export default function ComposicionCorporal() {
         key={indice}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        className="flex-1 min-h-0 px-6 pb-4 flex flex-col items-center justify-center text-center animate-aparecer"
+        className="flex-1 min-h-0 px-6 md:landscape:px-14 pb-4 flex flex-col items-center justify-center animate-aparecer"
       >
         <Diapositiva />
       </main>
@@ -115,9 +122,9 @@ export default function ComposicionCorporal() {
             key={indice}
             onClick={siguiente}
             aria-label="Ver más"
-            className="w-14 h-14 rounded-full bg-volt-500 text-carbon-900 flex items-center justify-center shadow-volt active:scale-95 transition-transform animate-latido"
+            className="w-14 h-14 md:landscape:w-16 md:landscape:h-16 rounded-full bg-volt-500 text-carbon-900 flex items-center justify-center shadow-volt active:scale-95 transition-transform animate-latido"
           >
-            <IconoFlecha className="w-6 h-6" />
+            <IconoFlecha className="w-6 h-6 md:landscape:w-7 md:landscape:h-7" />
           </button>
         )}
       </footer>
@@ -127,24 +134,47 @@ export default function ComposicionCorporal() {
 
 /* ------------------------------------------------------------ Contenido */
 
-function EncabezadoDiapositiva({ titulo, bajada }) {
+/**
+ * Esqueleto de cada diapositiva: visual (ícono o foto) de un lado, título +
+ * bajada + contenido del otro. En un teléfono, uno debajo del otro; en la
+ * tablet horizontal, lado a lado -ver el comentario grande arriba-.
+ */
+function Diapo({ visual, titulo, bajada, children }) {
+  const visualFinal = visual ?? (
+    <span className="inline-flex w-14 h-14 md:landscape:w-28 md:landscape:h-28 rounded-2xl items-center justify-center bg-volt-500/15 text-volt-500">
+      <IconoComposicion className="w-7 h-7 md:landscape:w-14 md:landscape:h-14" />
+    </span>
+  );
+
   return (
-    <div className="mb-5">
-      <span className="inline-flex w-12 h-12 rounded-2xl items-center justify-center mb-3 bg-volt-500/15 text-volt-500">
-        <IconoComposicion className="w-6 h-6" />
-      </span>
-      <h1 className="text-[26px] leading-tight font-extrabold tracking-tightest">{titulo}</h1>
-      {bajada && <p className="mt-1.5 text-sm text-humo-500 max-w-xs mx-auto">{bajada}</p>}
+    <div className="w-full max-w-5xl md:landscape:max-w-6xl mx-auto flex flex-col md:landscape:flex-row md:landscape:items-center gap-5 md:landscape:gap-16 text-center md:landscape:text-left">
+      <div className="flex items-center justify-center shrink-0 md:landscape:w-[34%]">{visualFinal}</div>
+
+      <div className="flex flex-col items-center md:landscape:items-start w-full md:landscape:flex-1 md:landscape:min-w-0">
+        <h1 className="text-[26px] md:landscape:text-[42px] leading-tight font-extrabold tracking-tightest">
+          {titulo}
+        </h1>
+        {bajada && (
+          <p className="mt-1.5 text-sm md:landscape:text-lg text-humo-500 max-w-xs md:landscape:max-w-lg">
+            {bajada}
+          </p>
+        )}
+        {children && (
+          <div className="mt-4 md:landscape:mt-7 w-full flex flex-col items-center md:landscape:items-start">
+            {children}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function ListaDatos({ items }) {
   return (
-    <ul className="space-y-2 text-left inline-block">
+    <ul className="grid grid-cols-1 md:landscape:grid-cols-2 gap-x-10 gap-y-2.5 md:landscape:gap-y-3 text-left w-full max-w-md md:landscape:max-w-2xl">
       {items.map((item) => (
-        <li key={item} className="flex items-center gap-2.5 text-[15px] text-humo-100">
-          <span className="w-1.5 h-1.5 rounded-full bg-volt-500 shrink-0" />
+        <li key={item} className="flex items-center gap-2.5 text-[15px] md:landscape:text-lg text-humo-100">
+          <span className="w-1.5 h-1.5 md:landscape:w-2 md:landscape:h-2 rounded-full bg-volt-500 shrink-0" />
           {item}
         </li>
       ))}
@@ -152,76 +182,78 @@ function ListaDatos({ items }) {
   );
 }
 
+/** Las dos tarjetas de precio: se repiten en la portada de precios y en el
+ *  cierre, así que van en un solo lugar. */
+function PrecioTarjetas() {
+  return (
+    <div className="grid grid-cols-2 gap-3 md:landscape:gap-4 w-full max-w-xs md:landscape:max-w-md">
+      <div className="tarjeta p-4 md:landscape:p-6 border-volt-500/40">
+        <p className="etiqueta md:landscape:text-sm text-volt-500">1.º análisis</p>
+        <p className="mt-1 text-xl md:landscape:text-3xl font-extrabold tracking-tightest">{pesos(20000)}</p>
+      </div>
+      <div className="tarjeta p-4 md:landscape:p-6">
+        <p className="etiqueta md:landscape:text-sm">Control</p>
+        <p className="mt-1 text-xl md:landscape:text-3xl font-extrabold tracking-tightest">{pesos(50000)}</p>
+      </div>
+    </div>
+  );
+}
+
 function Portada() {
   return (
-    <>
-      <div className="mb-6 rounded-3xl bg-white p-4 max-w-[280px]">
-        <img
-          src="/images/bodyanalyse.png"
-          alt="Báscula de composición corporal BodyAnalyse"
-          className="w-full h-auto object-contain"
-        />
-      </div>
-      <h1 className="text-[28px] leading-tight font-extrabold tracking-tightest">
-        Composición <span className="text-volt-500">corporal</span>
-      </h1>
-      <p className="mt-2 text-sm text-humo-500 max-w-xs">
-        Un análisis completo de tu cuerpo, hecho en un minuto, en la báscula del gimnasio.
-      </p>
-    </>
+    <Diapo
+      visual={
+        <div className="rounded-3xl bg-white p-4 w-full max-w-[280px] md:landscape:max-w-none">
+          <img
+            src="/images/bodyanalyse.png"
+            alt="Báscula de composición corporal BodyAnalyse"
+            className="w-full h-auto object-contain md:landscape:max-h-[50vh]"
+          />
+        </div>
+      }
+      titulo={
+        <>
+          Composición <span className="text-volt-500">corporal</span>
+        </>
+      }
+      bajada="Un análisis completo de tu cuerpo, hecho en un minuto, en la báscula del gimnasio."
+    />
   );
 }
 
 function QueEsYPrecio() {
   return (
-    <>
-      <EncabezadoDiapositiva
-        titulo="¿Qué es?"
-        bajada="Bioimpedancia: de pie y descalzo sobre la báscula, en menos de un minuto."
-      />
-      <p className="text-sm text-humo-300 leading-relaxed max-w-xs mx-auto mb-6">
-        Al terminar te entregan un reporte impreso con todos tus resultados, para que lo
-        guardes y lo compares con el de la próxima vez.
-      </p>
-      <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
-        <div className="tarjeta p-4 border-volt-500/40">
-          <p className="etiqueta text-volt-500">1.º análisis</p>
-          <p className="mt-1 text-xl font-extrabold tracking-tightest">{pesos(20000)}</p>
-        </div>
-        <div className="tarjeta p-4">
-          <p className="etiqueta">Desde el 2.º</p>
-          <p className="mt-1 text-xl font-extrabold tracking-tightest">{pesos(50000)}</p>
-        </div>
-      </div>
-    </>
+    <Diapo
+      titulo="¿Qué es?"
+      bajada="Bioimpedancia: de pie y descalzo sobre la báscula, en menos de un minuto. Al terminar te entregan un reporte impreso con todos tus resultados, para que lo guardes y lo compares con el de la próxima vez."
+    >
+      <PrecioTarjetas />
+    </Diapo>
   );
 }
 
 function ComposicionCorporalDiapositiva() {
   return (
-    <>
-      <EncabezadoDiapositiva titulo="Composición corporal" />
+    <Diapo titulo="Composición corporal">
       <ListaDatos items={['Agua corporal', 'Proteínas', 'Sales minerales', 'Grasa corporal']} />
-    </>
+    </Diapo>
   );
 }
 
 function MusculoYGrasa() {
   return (
-    <>
-      <EncabezadoDiapositiva titulo="Músculo y grasa" />
+    <Diapo
+      titulo="Músculo y grasa"
+      bajada="Cada uno con su rango normal, para saber si estás por debajo, dentro o por encima."
+    >
       <ListaDatos items={['Peso', 'Músculo esquelético', 'Grasa corporal']} />
-      <p className="mt-4 text-xs text-humo-500 max-w-xs">
-        Cada uno con su rango normal, para saber si estás por debajo, dentro o por encima.
-      </p>
-    </>
+    </Diapo>
   );
 }
 
 function Sobrepeso() {
   return (
-    <>
-      <EncabezadoDiapositiva titulo="Análisis de sobrepeso" />
+    <Diapo titulo="Análisis de sobrepeso">
       <ListaDatos
         items={[
           'Índice de masa corporal',
@@ -230,33 +262,30 @@ function Sobrepeso() {
           'Grasa subcutánea',
         ]}
       />
-    </>
+    </Diapo>
   );
 }
 
 function Segmentales() {
   return (
-    <>
-      <EncabezadoDiapositiva titulo="Músculos segmentales" />
+    <Diapo
+      titulo="Músculos segmentales"
+      bajada="Músculo y grasa medidos por separado en cada extremidad, más la grasa que rodea los órganos -la visceral-, no solo la que se ve."
+    >
       <ListaDatos
         items={['Brazo izquierdo y derecho', 'Pierna izquierda y derecha', 'Índice de grasa visceral']}
       />
-      <p className="mt-4 text-xs text-humo-500 max-w-xs">
-        Músculo y grasa medidos por separado en cada extremidad, más la grasa que rodea los
-        órganos -la visceral-, no solo la que se ve.
-      </p>
-    </>
+    </Diapo>
   );
 }
 
 function Diagnostico() {
   return (
-    <>
-      <EncabezadoDiapositiva
-        titulo="Diagnóstico de tipo corporal"
-        bajada="Con el músculo y la grasa medidos, tu cuerpo queda en uno de estos tipos:"
-      />
-      <div className="flex flex-wrap justify-center gap-1.5 max-w-sm">
+    <Diapo
+      titulo="Diagnóstico de tipo corporal"
+      bajada="Con el músculo y la grasa medidos, tu cuerpo queda en uno de estos tipos:"
+    >
+      <div className="flex flex-wrap justify-center md:landscape:justify-start gap-1.5 md:landscape:gap-2 max-w-sm md:landscape:max-w-2xl">
         {[
           'Delgado',
           'Musculoso delgado',
@@ -270,61 +299,51 @@ function Diagnostico() {
         ].map((tipo) => (
           <span
             key={tipo}
-            className="px-2.5 py-1.5 rounded-full bg-carbon-700 text-humo-300 text-xs font-semibold"
+            className="px-2.5 md:landscape:px-3.5 py-1.5 md:landscape:py-2 rounded-full bg-carbon-700 text-humo-300 text-xs md:landscape:text-base font-semibold"
           >
             {tipo}
           </span>
         ))}
       </div>
-    </>
+    </Diapo>
   );
 }
 
 function EvaluacionIntegral() {
   return (
-    <>
-      <EncabezadoDiapositiva titulo="Evaluación integral" />
-      <p className="text-sm text-humo-300 leading-relaxed max-w-xs mx-auto">
+    <Diapo titulo="Evaluación integral">
+      <p className="text-sm md:landscape:text-lg text-humo-300 leading-relaxed max-w-xs md:landscape:max-w-xl">
         Un resumen de "normal, insuficiente o excesivo" para lo nutricional (proteínas, sales
         minerales, grasa), el peso (peso, músculo esquelético, grasa) y la obesidad (masa
         corporal, porcentaje de grasa).
       </p>
-    </>
+    </Diapo>
   );
 }
 
 function ControlDePeso() {
   return (
-    <>
-      <EncabezadoDiapositiva titulo="Control de peso" />
+    <Diapo titulo="Control de peso">
       <ListaDatos
         items={['Peso objetivo', 'Cuánto peso, grasa o músculo controlar', 'Metabolismo basal', 'Edad corporal']}
       />
-    </>
+    </Diapo>
   );
 }
 
 function Cierre() {
   return (
-    <>
-      <span className="inline-flex w-14 h-14 rounded-2xl items-center justify-center mb-4 bg-volt-500/15 text-volt-500">
-        <IconoCheck className="w-7 h-7" />
-      </span>
-      <h1 className="text-[26px] leading-tight font-extrabold tracking-tightest">Eso es todo</h1>
-      <p className="mt-2 text-sm text-humo-300 max-w-xs">
-        Se hace en el gimnasio, en la báscula del mostrador. Pregunta en recepción.
-      </p>
-      <div className="mt-5 grid grid-cols-2 gap-3 w-full max-w-xs">
-        <div className="tarjeta p-4 border-volt-500/40">
-          <p className="etiqueta text-volt-500">1.º análisis</p>
-          <p className="mt-1 text-xl font-extrabold tracking-tightest">{pesos(20000)}</p>
-        </div>
-        <div className="tarjeta p-4">
-          <p className="etiqueta">Desde el 2.º</p>
-          <p className="mt-1 text-xl font-extrabold tracking-tightest">{pesos(50000)}</p>
-        </div>
-      </div>
-    </>
+    <Diapo
+      visual={
+        <span className="inline-flex w-14 h-14 md:landscape:w-24 md:landscape:h-24 rounded-2xl items-center justify-center bg-volt-500/15 text-volt-500">
+          <IconoCheck className="w-7 h-7 md:landscape:w-12 md:landscape:h-12" />
+        </span>
+      }
+      titulo="Eso es todo"
+      bajada="Se hace en el gimnasio, en la báscula del mostrador. Pregunta en recepción."
+    >
+      <PrecioTarjetas />
+    </Diapo>
   );
 }
 
