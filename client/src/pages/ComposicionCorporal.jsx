@@ -30,13 +30,24 @@ import { rutaInicio } from '../lib/tablet.js';
  */
 export default function ComposicionCorporal() {
   const [indice, setIndice] = useState(0);
+  // Hacia dónde se navegó la última vez, para que la diapositiva que entra
+  // lo haga desde el lado que corresponde: de la derecha al avanzar, de la
+  // izquierda al retroceder -no siempre el mismo lado, como sería con una
+  // sola animación fija-.
+  const [direccion, setDireccion] = useState(1);
   const inicioX = useRef(null);
 
   const total = DIAPOSITIVAS.length;
   const esUltima = indice === total - 1;
 
-  const siguiente = () => setIndice((i) => Math.min(i + 1, total - 1));
-  const anterior = () => setIndice((i) => Math.max(i - 1, 0));
+  const irA = (destino) => {
+    const acotado = Math.max(0, Math.min(total - 1, destino));
+    setDireccion(acotado >= indice ? 1 : -1);
+    setIndice(acotado);
+  };
+
+  const siguiente = () => irA(indice + 1);
+  const anterior = () => irA(indice - 1);
   const alPresionarAtras = () => (indice > 0 ? anterior() : null);
 
   const onTouchStart = (e) => {
@@ -80,7 +91,7 @@ export default function ComposicionCorporal() {
           {DIAPOSITIVAS.map((_, i) => (
             <button
               key={i}
-              onClick={() => setIndice(i)}
+              onClick={() => irA(i)}
               aria-label={`Ir a la pantalla ${i + 1} de ${total}`}
               className="p-1.5 -m-1.5"
             >
@@ -103,7 +114,10 @@ export default function ComposicionCorporal() {
         key={indice}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
-        className="flex-1 min-h-0 px-6 md:landscape:px-14 pb-4 flex flex-col items-center justify-center animate-aparecer"
+        className={cx(
+          'flex-1 min-h-0 px-6 md:landscape:px-14 pb-4 flex flex-col items-center justify-center',
+          direccion === 1 ? 'animate-entrarDesdeDerecha' : 'animate-entrarDesdeIzquierda'
+        )}
       >
         <Diapositiva />
       </main>

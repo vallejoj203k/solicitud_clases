@@ -82,6 +82,16 @@ export default {
           '0%, 100%': { transform: 'scaleY(.35)' },
           '50%': { transform: 'scaleY(1)' },
         },
+        // Las diapositivas de Composición corporal: entran desde el lado que
+        // corresponde según hacia dónde se navega (ver `ComposicionCorporal.jsx`).
+        entrarDesdeDerecha: {
+          '0%': { opacity: '0', transform: 'translateX(36px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+        entrarDesdeIzquierda: {
+          '0%': { opacity: '0', transform: 'translateX(-36px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
       },
       animation: {
         aparecer: 'aparecer .28s cubic-bezier(.16,1,.3,1) both',
@@ -89,6 +99,8 @@ export default {
         latido: 'latido .4s ease-in-out',
         surgir: 'surgir .3s cubic-bezier(.16,1,.3,1) both',
         sonido: 'sonido 1.1s ease-in-out infinite',
+        entrarDesdeDerecha: 'entrarDesdeDerecha .3s cubic-bezier(.16,1,.3,1) both',
+        entrarDesdeIzquierda: 'entrarDesdeIzquierda .3s cubic-bezier(.16,1,.3,1) both',
       },
     },
   },
