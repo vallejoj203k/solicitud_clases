@@ -205,7 +205,7 @@ function Portada() {
       visual={
         <div className="rounded-3xl bg-white p-4 w-full max-w-[280px] md:landscape:max-w-none">
           <img
-            src="/images/bodyanalyse.png"
+            src="/images/bodyanalyse.jpg"
             alt="Báscula de composición corporal BodyAnalyse"
             className="w-full h-auto object-contain md:landscape:max-h-[50vh]"
           />
