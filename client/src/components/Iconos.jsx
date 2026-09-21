@@ -212,3 +212,13 @@ export function IconoFoto({ className = 'w-5 h-5' }) {
     </svg>
   );
 }
+
+export function IconoComposicion({ className = 'w-5 h-5' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <circle cx="12" cy="4.6" r="2.1" />
+      <path d="M12 6.7v6.3M8.2 9.4 12 8.1l3.8 1.3M9.2 20.2l1.5-6.2h2.6l1.5 6.2" />
+      <path d="M4.2 12.8h15.6" strokeDasharray="2.2 2.2" />
+    </svg>
+  );
+}
