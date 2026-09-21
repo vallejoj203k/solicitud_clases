@@ -10,6 +10,7 @@ import {
   IconoCalendario,
   IconoMusica,
   IconoTienda,
+  IconoComposicion,
   IconoExpandir,
   IconoContraer,
 } from '../components/Iconos.jsx';
@@ -46,9 +47,9 @@ const DIRECCION_PUBLICA = 'megavital.app';
  * `tablet` marca la ÚNICA diferencia entre las dos versiones de esta pantalla:
  * la de la tablet del salón añade Música, porque pedir canciones dejó de ser
  * algo que se hace desde casa y pasó a hacerse ahí, de pie, delante del
- * mostrador. Ver `lib/tablet.js`. Tienda, en cambio, va en las DOS: es un
- * catálogo informativo -sin carrito ni pago-, así que no hay razón para
- * escondérselo a quien todavía no está en el gimnasio.
+ * mostrador. Ver `lib/tablet.js`. Tienda y Composición corporal, en cambio,
+ * van en las DOS: son informativas -sin carrito ni pago-, así que no hay
+ * razón para escondérselas a quien todavía no está en el gimnasio.
  */
 export default function Home({ tablet = false }) {
   const navegar = useNavigate();
@@ -161,9 +162,9 @@ export default function Home({ tablet = false }) {
             // Tailwind las busca por texto en el código: un `grid-rows-${n}`
             // no llegaría a la hoja de estilos.
             //
-            // Público: Running, Spinning, Tienda -3-. Tablet: esas tres más
-            // Música -4-.
-            tablet ? 'grid-rows-4 md:landscape:grid-cols-4' : 'grid-rows-3 md:landscape:grid-cols-3'
+            // Público: Running, Spinning, Tienda, Composición corporal -4-.
+            // Tablet: esas cuatro más Música -5-.
+            tablet ? 'grid-rows-5 md:landscape:grid-cols-5' : 'grid-rows-4 md:landscape:grid-cols-4'
           )}
         >
           {data.tipos.map((tipo) => (
@@ -176,6 +177,7 @@ export default function Home({ tablet = false }) {
             />
           ))}
           <TarjetaTienda />
+          <TarjetaComposicion />
           {tablet && <TarjetaMusica />}
         </main>
       )}
@@ -360,6 +362,49 @@ function TarjetaTienda() {
             </p>
           </div>
           <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 backdrop-blur-sm text-humo-100 border border-white/10">
+            <IconoFlecha />
+          </span>
+        </div>
+      </div>
+    </Tarjeta>
+  );
+}
+
+/**
+ * Composición corporal. Sin foto propia -la del equipo tiene fondo blanco de
+ * catálogo, no pega con las fotos oscuras del salón-, así que va con la
+ * paleta de la app, igual que Música.
+ *
+ * Va en el inicio público, como Tienda: es informativa y ayuda a decidir
+ * venir a hacérselo antes de estar ya en el gimnasio.
+ */
+function TarjetaComposicion() {
+  return (
+    <Tarjeta className="bg-carbon-800">
+      <Link to="/composicion-corporal" className="absolute inset-0 z-10" aria-label="Ver composición corporal" />
+
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(130% 105% at 100% 0%, rgba(200,247,81,0.26) 0%, rgba(200,247,81,0.04) 55%, rgba(200,247,81,0) 75%)',
+        }}
+      />
+
+      <IconoComposicion className="absolute -top-8 -right-6 w-44 h-44 text-volt-500/[0.07] rotate-12" />
+
+      <div className="relative z-20 h-full p-4 flex flex-col justify-end pointer-events-none">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <span className="inline-flex w-9 h-9 rounded-xl items-center justify-center mb-1.5 bg-volt-500/20 text-volt-500">
+              <IconoComposicion className="w-5 h-5" />
+            </span>
+            <h2 className="text-[22px] leading-none font-extrabold tracking-tightest">Composición</h2>
+            <p className="mt-1.5 text-sm text-humo-500 leading-snug truncate">
+              Analiza tu cuerpo, desde $20.000.
+            </p>
+          </div>
+          <span className="shrink-0 p-2 rounded-full bg-carbon-900/60 text-humo-100 border border-white/10">
             <IconoFlecha />
           </span>
         </div>

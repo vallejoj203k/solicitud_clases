@@ -5,6 +5,7 @@ import Reserva from './pages/Reserva.jsx';
 import MisReservas from './pages/MisReservas.jsx';
 import Musica from './pages/Musica.jsx';
 import Tienda from './pages/Tienda.jsx';
+import ComposicionCorporal from './pages/ComposicionCorporal.jsx';
 import Reproductor from './pages/Reproductor.jsx';
 import Recuperar from './pages/Recuperar.jsx';
 import Privacidad from './pages/Privacidad.jsx';
@@ -29,6 +30,7 @@ export default function App() {
       <Route path="/reserva/:codigo" element={<Reserva />} />
       <Route path="/mis-reservas" element={<MisReservas />} />
       <Route path="/tienda" element={<Tienda />} />
+      <Route path="/composicion-corporal" element={<ComposicionCorporal />} />
 
       {/* La tablet del salón: el mismo inicio, pero con Música, en una
           dirección que no está enlazada desde ninguna parte. Ver `lib/tablet.js`
