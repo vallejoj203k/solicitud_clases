@@ -127,6 +127,7 @@ export function Aviso({ tono = 'peligro', children, className = '' }) {
     peligro: 'bg-alerta/10 border-alerta/30 text-alerta',
     info: 'bg-aqua-500/10 border-aqua-500/30 text-aqua-400',
     exito: 'bg-volt-500/10 border-volt-500/30 text-volt-500',
+    aviso: 'bg-amber-400/10 border-amber-400/30 text-amber-300',
   };
   return (
     <div className={cx('rounded-2xl border px-4 py-3 text-sm animate-aparecer', tonos[tono], className)}>
