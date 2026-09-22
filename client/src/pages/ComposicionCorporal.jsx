@@ -1,9 +1,24 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { cx } from '../components/ui.jsx';
-import { IconoAtras, IconoFlecha, IconoCheck } from '../components/Iconos.jsx';
+import { Aviso, cx } from '../components/ui.jsx';
+import { IconoAtras, IconoAlerta, IconoFlecha, IconoCheck } from '../components/Iconos.jsx';
 import { pesos } from '../lib/formato.js';
 import { rutaInicio } from '../lib/tablet.js';
+
+/**
+ * Fecha fija, no calculada sobre "hoy" en cada visita: un precio de
+ * lanzamiento tiene una fecha de cierre real, no una que se recorra sola 15
+ * días hacia adelante cada vez que alguien entra a la página. Puesta a mano
+ * el 22 de septiembre de 2026 (hoy + 15 días); para extenderla o cerrarla
+ * antes, se cambia aquí.
+ */
+const FIN_LANZAMIENTO_ISO = '2026-10-07';
+const FECHA_FIN_LANZAMIENTO = (() => {
+  const [a, m, d] = FIN_LANZAMIENTO_ISO.split('-').map(Number);
+  return new Intl.DateTimeFormat('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(
+    new Date(Date.UTC(a, m - 1, d))
+  );
+})();
 
 /**
  * Página informativa del análisis de composición corporal. SOLO INFORMATIVA,
@@ -198,20 +213,23 @@ function ListaDatos({ items }) {
   );
 }
 
-/** Las dos tarjetas de precio: se repiten en la portada de precios y en el
- *  cierre, así que van en un solo lugar. */
-function PrecioTarjetas() {
+/** Precio único de lanzamiento: se repite en la portada de precios y en el
+ *  cierre, así que va en un solo lugar. Con estilo de advertencia -es una
+ *  oferta con fecha de cierre, no el precio de siempre-. */
+function PrecioLanzamiento() {
   return (
-    <div className="grid grid-cols-2 gap-3 md:landscape:gap-4 w-full max-w-xs md:landscape:max-w-md">
-      <div className="tarjeta p-4 md:landscape:p-6 border-volt-500/40">
-        <p className="etiqueta md:landscape:text-sm text-volt-500">1.º análisis</p>
-        <p className="mt-1 text-xl md:landscape:text-3xl font-extrabold tracking-tightest">{pesos(20000)}</p>
+    <Aviso tono="aviso" className="w-full max-w-xs md:landscape:max-w-md text-center md:landscape:text-left">
+      <div className="flex items-center gap-2 justify-center md:landscape:justify-start">
+        <IconoAlerta className="w-4 h-4 shrink-0" />
+        <p className="etiqueta md:landscape:text-sm text-amber-300">Precio de lanzamiento</p>
       </div>
-      <div className="tarjeta p-4 md:landscape:p-6">
-        <p className="etiqueta md:landscape:text-sm">Control</p>
-        <p className="mt-1 text-xl md:landscape:text-3xl font-extrabold tracking-tightest">{pesos(50000)}</p>
-      </div>
-    </div>
+      <p className="mt-1.5 text-2xl md:landscape:text-4xl font-extrabold tracking-tightest text-humo-100">
+        {pesos(40000)}
+      </p>
+      <p className="mt-1 text-xs md:landscape:text-sm text-amber-300/80">
+        Válido hasta el {FECHA_FIN_LANZAMIENTO}.
+      </p>
+    </Aviso>
   );
 }
 
@@ -243,7 +261,7 @@ function QueEsYPrecio() {
       titulo="¿Qué es?"
       bajada="Bioimpedancia: de pie y descalzo sobre la báscula, en menos de un minuto. Al terminar te entregan un reporte impreso con todos tus resultados, para que lo guardes y lo compares con el de la próxima vez."
     >
-      <PrecioTarjetas />
+      <PrecioLanzamiento />
     </Diapo>
   );
 }
@@ -358,7 +376,7 @@ function Cierre() {
       titulo="Eso es todo"
       bajada="Se hace en el gimnasio, en la báscula del mostrador. Pregunta en recepción."
     >
-      <PrecioTarjetas />
+      <PrecioLanzamiento />
     </Diapo>
   );
 }
