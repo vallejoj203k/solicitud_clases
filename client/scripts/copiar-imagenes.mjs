@@ -1,9 +1,10 @@
 /**
  * Copia /images (raíz del repositorio) a client/public/images.
  *
- * Vite solo publica lo que está dentro de `client/public`, pero las fotos del
- * gimnasio se guardan en la raíz para que se puedan reemplazar sin entrar al
- * código del frontend. Este script corre solo, antes de `dev` y de `build`.
+ * Vite solo publica lo que está dentro de `client/public`, pero las fotos -y
+ * algún video, como el de carga- del gimnasio se guardan en la raíz para que
+ * se puedan reemplazar sin entrar al código del frontend. Este script corre
+ * solo, antes de `dev` y de `build`.
  *
  * El destino está en .gitignore: la copia es un artefacto de build, el original
  * es el que se versiona.
@@ -24,7 +25,7 @@ if (!fs.existsSync(origen)) {
 fs.rmSync(destino, { recursive: true, force: true });
 fs.mkdirSync(destino, { recursive: true });
 
-const EXTENSIONES = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.svg']);
+const EXTENSIONES = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.svg', '.mp4', '.webm']);
 let copiadas = 0;
 
 for (const archivo of fs.readdirSync(origen)) {
