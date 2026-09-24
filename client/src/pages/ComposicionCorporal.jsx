@@ -237,12 +237,14 @@ function Portada() {
   return (
     <Diapo
       visual={
-        <div className="rounded-3xl bg-white p-4 w-full max-w-[280px] md:landscape:max-w-none">
-          <img
-            src="/images/bodyanalyse.jpg"
-            alt="Báscula de composición corporal BodyAnalyse"
-            className="w-full h-auto object-contain md:landscape:max-h-[50vh]"
-          />
+        // Cuadrado, como el video (720x720): a diferencia de la foto del
+        // equipo, este ya trae su propio fondo oscuro, así que no necesita
+        // la tarjeta blanca -solo redondear las esquinas y recortar-.
+        <div className="rounded-3xl overflow-hidden w-[260px] md:landscape:w-[46vh] aspect-square bg-carbon-800">
+          <video autoPlay muted loop playsInline className="w-full h-full object-cover">
+            <source src="/images/video-carga.webm" type="video/webm" />
+            <source src="/images/video-carga.mp4" type="video/mp4" />
+          </video>
         </div>
       }
       titulo={
