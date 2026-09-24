@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Home from './pages/Home.jsx';
 import Reservar from './pages/Reservar.jsx';
@@ -20,6 +21,10 @@ import AdminRecepcion from './pages/admin/Recepcion.jsx';
 import AdminMusica from './pages/admin/Musica.jsx';
 import AdminTienda from './pages/admin/Tienda.jsx';
 import { INICIO_TABLET, MUSICA_TABLET } from './lib/tablet.js';
+import { Cargando } from './components/ui.jsx';
+
+// El visor 3D trae three.js (cientos de KB): se carga aparte, solo al entrar ahí.
+const PaginaModelo3D = lazy(() => import('./modelo3d/PaginaModelo3D.tsx'));
 
 export default function App() {
   return (
@@ -31,6 +36,14 @@ export default function App() {
       <Route path="/mis-reservas" element={<MisReservas />} />
       <Route path="/tienda" element={<Tienda />} />
       <Route path="/composicion-corporal" element={<ComposicionCorporal />} />
+      <Route
+        path="/composicion-corporal/3d"
+        element={
+          <Suspense fallback={<Cargando texto="Cargando visor 3D…" />}>
+            <PaginaModelo3D />
+          </Suspense>
+        }
+      />
 
       {/* La tablet del salón: el mismo inicio, pero con Música, en una
           dirección que no está enlazada desde ninguna parte. Ver `lib/tablet.js`

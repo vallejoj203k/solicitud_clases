@@ -24,9 +24,14 @@
     "db:backup": "node server/scripts/respaldo.mjs",
     "admin:listar": "node server/scripts/admin.mjs listar",
     "admin:crear": "node server/scripts/admin.mjs crear",
+    "modelo3d:comprimir": "node tools/comprimir_glb.mjs tools/build client/public/modelo3d",
     "postinstall": "npm run prisma:generate -w server"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "meshoptimizer": "^0.25.0"
+  },
+  "overrides": {
+    "@types/three": "0.170.0"
   }
 }
