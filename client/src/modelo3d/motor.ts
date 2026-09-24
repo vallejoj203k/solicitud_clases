@@ -39,3 +39,25 @@ export function estatura(pos: Float32Array): number {
   for (let v = 1; v < pos.length; v += 3) if (pos[v] > maxY) maxY = pos[v];
   return maxY;
 }
+
+/**
+ * Mete el cuerpo sin grasa dentro del cuerpo completo: si un vértice interior
+ * queda afuera (o a menos de `margen`) de la superficie exterior, medido sobre
+ * la normal exterior de ese mismo vértice, se empuja hacia adentro. Los dos
+ * cuerpos comparten topología, así que el vértice i de uno es el i del otro.
+ */
+export function contenerDentro(interior: Float32Array, exterior: Float32Array, normalesExterior: Float32Array, margen = 0.001) {
+  for (let v = 0; v < interior.length; v += 3) {
+    const nx = normalesExterior[v];
+    const ny = normalesExterior[v + 1];
+    const nz = normalesExterior[v + 2];
+    const d = (interior[v] - exterior[v]) * nx + (interior[v + 1] - exterior[v + 1]) * ny + (interior[v + 2] - exterior[v + 2]) * nz;
+    if (d > -margen) {
+      const k = d + margen;
+      interior[v] -= k * nx;
+      interior[v + 1] -= k * ny;
+      interior[v + 2] -= k * nz;
+    }
+  }
+  return interior;
+}

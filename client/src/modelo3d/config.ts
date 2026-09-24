@@ -19,3 +19,7 @@ export const COLOR_SEGMENTO: Record<string, string> = {
   pierna_izq: '#F5A524',
   pierna_der: '#D9822B',
 };
+
+/** Vista "grasa sobre músculo" (como la silueta negra con borde amarillo). */
+export const COLOR_MAGRO = '#A9AEB6';
+export const COLOR_GRASA = '#F5B323';
