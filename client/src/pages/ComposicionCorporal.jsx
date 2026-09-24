@@ -123,6 +123,13 @@ export default function ComposicionCorporal() {
         <span className="text-xs font-semibold text-humo-500 tabular-nums w-10 text-right">
           {indice + 1}/{total}
         </span>
+
+        <Link
+          to="/composicion-corporal/3d"
+          className="shrink-0 rounded-xl border border-volt-500/50 px-3 py-1.5 text-xs font-semibold text-volt-500 hover:bg-volt-500/10"
+        >
+          Resultado 3D
+        </Link>
       </header>
 
       <main
