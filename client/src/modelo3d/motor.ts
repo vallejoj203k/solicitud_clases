@@ -8,9 +8,15 @@ const PESO_MINIMO = 1e-4;
  * (y mínima = 0), porque los morphs de altura y de piernas mueven los pies.
  *
  * Escribe en `destino` si se pasa (para no reservar memoria en cada cuadro).
+ * En `info.desplazoY` deja cuánto se subió el cuerpo para apoyarlo.
  * Es una función pura sobre arrays: la misma que correrá en el Worker.
  */
-export function aplicarMorphs(cuerpo: CuerpoBase, pesos: PesosMorph, destino?: Float32Array): Float32Array {
+export function aplicarMorphs(
+  cuerpo: CuerpoBase,
+  pesos: PesosMorph,
+  destino?: Float32Array,
+  info?: { desplazoY: number },
+): Float32Array {
   const pos = destino ?? new Float32Array(cuerpo.posiciones.length);
   pos.set(cuerpo.posiciones);
 
@@ -30,6 +36,7 @@ export function aplicarMorphs(cuerpo: CuerpoBase, pesos: PesosMorph, destino?: F
   let minY = Infinity;
   for (let v = 1; v < pos.length; v += 3) if (pos[v] < minY) minY = pos[v];
   for (let v = 1; v < pos.length; v += 3) pos[v] -= minY;
+  if (info) info.desplazoY = -minY;
   return pos;
 }
 

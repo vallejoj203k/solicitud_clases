@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { Line, OrbitControls } from '@react-three/drei';
 import {
   AlwaysStencilFunc,
   BufferAttribute,
@@ -15,23 +15,29 @@ import {
 } from 'three';
 import { IconoAtras } from '../components/Iconos.jsx';
 import { cargarCuerpo } from './cargar';
-import { aplicarMorphs, contenerDentro, estatura } from './motor';
 import { controlesLocales, pesosLocales, pesosMacro, type ControlLocal, type ControlesMacro } from './controles';
-import { COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO } from './config';
 import { useVisor } from './estado';
+import { usarMotor } from './usarMotor';
+import type { ResultadoMotor } from './motor.worker';
 import type { CuerpoBase, Sexo } from './tipos';
 
 /**
- * Visor mínimo de la fase 1: carga los GLB exportados de MakeHuman y deja mover
- * cada morph a mano para revisarlos. Todavía sin solver ni datos del scanner.
+ * Visor de prueba (fases 1 y 2): carga los GLB exportados de MakeHuman, deja
+ * mover cada morph a mano y muestra en vivo lo que mide el motor (estatura,
+ * volumen total y por segmento, circunferencias). Los morphs y las medidas se
+ * calculan en un Worker. Todavía sin solver ni datos del scanner.
  *
  * Todo se calcula en el navegador y no se guarda nada.
  */
 export default function PaginaModelo3D() {
   const sexo = useVisor((s) => s.sexo);
+  const macro = useVisor((s) => s.macro);
+  const locales = useVisor((s) => s.locales);
+  const verGrasa = useVisor((s) => s.verGrasa);
+  const verAnillos = useVisor((s) => s.verAnillos);
   const [cuerpo, setCuerpo] = useState<CuerpoBase | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [medida, setMedida] = useState({ ms: 0, estaturaCm: 0 });
 
   useEffect(() => {
     let vivo = true;
@@ -45,6 +51,20 @@ export default function PaginaModelo3D() {
     };
   }, [sexo]);
 
+  const controles = useMemo(() => (cuerpo ? controlesLocales(cuerpo.meta) : []), [cuerpo]);
+  const pedido = useMemo(() => {
+    if (!cuerpo) return null;
+    const pesos = { ...pesosMacro(macro, cuerpo.sexo), ...pesosLocales(locales, controles) };
+    let pesosMagro = null;
+    if (verGrasa) {
+      const m = controlesMagros(macro, locales, controles);
+      pesosMagro = { ...pesosMacro(m.macro, cuerpo.sexo), ...pesosLocales(m.locales, controles) };
+    }
+    return { cuerpo, pesos, pesosMagro, conAnillos: verAnillos };
+  }, [cuerpo, macro, locales, controles, verGrasa, verAnillos]);
+  const { resultado, error: errorMotor } = usarMotor(pedido);
+  const vigente = resultado && cuerpo && resultado.sexo === cuerpo.sexo ? resultado : null;
+
   return (
     <div className="h-dvh flex flex-col md:landscape:flex-row overflow-hidden bg-carbon-900">
       <div className="relative h-[55%] md:landscape:h-full md:landscape:flex-1 min-h-0">
@@ -54,7 +74,8 @@ export default function PaginaModelo3D() {
             <hemisphereLight args={['#ffffff', '#3a3f4a', 0.9]} />
             <directionalLight position={[2.5, 4, 3]} intensity={1.6} />
             <directionalLight position={[-3, 2, -2]} intensity={0.5} />
-            <Cuerpo cuerpo={cuerpo} onMedida={setMedida} />
+            <Cuerpo cuerpo={cuerpo} resultado={vigente} />
+            {verAnillos && vigente && <AnillosMedida anillos={vigente.anillos} />}
             <mesh rotation-x={-Math.PI / 2} position-y={-0.001}>
               <circleGeometry args={[0.9, 48]} />
               <meshStandardMaterial color="#1C2028" roughness={1} />
@@ -72,9 +93,12 @@ export default function PaginaModelo3D() {
             {error ? `No se pudo cargar el modelo: ${error}` : 'Cargando modelo…'}
           </div>
         )}
+        {errorMotor && (
+          <p className="absolute bottom-3 left-3 right-3 rounded-xl bg-red-900/80 px-3 py-2 text-xs">Error del motor: {errorMotor}</p>
+        )}
       </div>
 
-      <Panel cuerpo={cuerpo} medida={medida} />
+      <Panel cuerpo={cuerpo} resultado={vigente} />
     </div>
   );
 }
@@ -96,11 +120,18 @@ function crearGeometria(cuerpo: CuerpoBase) {
   return g;
 }
 
-function volcar(geometria: BufferGeometry, pos: Float32Array) {
-  const attr = geometria.getAttribute('position') as BufferAttribute;
-  (attr.array as Float32Array).set(pos);
-  attr.needsUpdate = true;
-  geometria.computeVertexNormals();
+/** Copia posiciones y normales calculadas en el Worker a la geometría. */
+function volcar(geometria: BufferGeometry, malla: { pos: Float32Array; normales: Float32Array }) {
+  const pos = geometria.getAttribute('position') as BufferAttribute;
+  (pos.array as Float32Array).set(malla.pos);
+  pos.needsUpdate = true;
+  let nor = geometria.getAttribute('normal') as BufferAttribute | undefined;
+  if (!nor) {
+    nor = new BufferAttribute(new Float32Array(malla.normales.length), 3);
+    geometria.setAttribute('normal', nor);
+  }
+  (nor.array as Float32Array).set(malla.normales);
+  nor.needsUpdate = true;
   geometria.computeBoundingSphere();
 }
 
@@ -169,15 +200,9 @@ function crearMaterialesGrasa() {
   return { magro, fuera: capa(0.9, 1.0, false), encima: capa(0.07, 0.35, true) };
 }
 
-function Cuerpo({ cuerpo, onMedida }: { cuerpo: CuerpoBase; onMedida: (m: { ms: number; estaturaCm: number }) => void }) {
-  const macro = useVisor((s) => s.macro);
-  const locales = useVisor((s) => s.locales);
+function Cuerpo({ cuerpo, resultado }: { cuerpo: CuerpoBase; resultado: ResultadoMotor | null }) {
   const verSegmentos = useVisor((s) => s.verSegmentos);
   const verGrasa = useVisor((s) => s.verGrasa);
-  const controles = useMemo(() => controlesLocales(cuerpo.meta), [cuerpo]);
-  const destino = useRef<Float32Array>(new Float32Array(cuerpo.posiciones.length));
-  const destinoMagro = useRef<Float32Array>(new Float32Array(cuerpo.posiciones.length));
-
   const geometria = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
   const geometriaMagra = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
   const materiales = useMemo(crearMaterialesGrasa, []);
@@ -192,27 +217,18 @@ function Cuerpo({ cuerpo, onMedida }: { cuerpo: CuerpoBase; onMedida: (m: { ms: 
     [materiales],
   );
 
+  // Antes del primer resultado del Worker se ve la malla base con sus normales.
   useEffect(() => {
-    const t0 = performance.now();
-    const pesos = { ...pesosMacro(macro, cuerpo.sexo), ...pesosLocales(locales, controles) };
-    const pos = aplicarMorphs(cuerpo, pesos, destino.current);
-    volcar(geometria, pos);
-    onMedida({ ms: performance.now() - t0, estaturaCm: estatura(pos) * 100 });
-  }, [cuerpo, geometria, macro, locales, controles, onMedida]);
+    if (!geometria.getAttribute('normal')) geometria.computeVertexNormals();
+  }, [geometria]);
 
   useEffect(() => {
-    if (!verGrasa) return;
-    const m = controlesMagros(macro, locales, controles);
-    const pesos = { ...pesosMacro(m.macro, cuerpo.sexo), ...pesosLocales(m.locales, controles) };
-    const magro = aplicarMorphs(cuerpo, pesos, destinoMagro.current);
-    // El efecto del cuerpo completo corre antes (mismo render, declarado antes):
-    // sus normales ya están al día.
-    const exterior = geometria.getAttribute('position').array as Float32Array;
-    const normales = geometria.getAttribute('normal').array as Float32Array;
-    volcar(geometriaMagra, contenerDentro(magro, exterior, normales));
-  }, [cuerpo, geometria, geometriaMagra, macro, locales, controles, verGrasa]);
+    if (!resultado) return;
+    volcar(geometria, resultado.cuerpo);
+    if (resultado.magro) volcar(geometriaMagra, resultado.magro);
+  }, [resultado, geometria, geometriaMagra]);
 
-  if (verGrasa) {
+  if (verGrasa && resultado?.magro) {
     return (
       <>
         <mesh geometry={geometriaMagra} material={materiales.magro} />
@@ -235,6 +251,21 @@ function Cuerpo({ cuerpo, onMedida }: { cuerpo: CuerpoBase; onMedida: (m: { ms: 
   );
 }
 
+/** Contornos de cinta métrica donde se mide cada circunferencia. */
+function AnillosMedida({ anillos }: { anillos: Record<string, Float32Array> }) {
+  return (
+    <>
+      {Object.entries(anillos).map(([nombre, a]) => {
+        if (a.length < 9) return null;
+        const puntos: [number, number, number][] = [];
+        for (let i = 0; i < a.length; i += 3) puntos.push([a[i], a[i + 1], a[i + 2]]);
+        puntos.push(puntos[0]);
+        return <Line key={nombre} points={puntos} color="#8CC63F" lineWidth={2} depthTest={false} renderOrder={3} />;
+      })}
+    </>
+  );
+}
+
 /* ------------------------------------------------------------------ Panel */
 
 const TITULO_GRUPO: Record<string, string> = {
@@ -245,9 +276,22 @@ const TITULO_GRUPO: Record<string, string> = {
   grasa: 'Grasa',
 };
 
-function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: number; estaturaCm: number } }) {
-  const { sexo, macro, locales, verSegmentos, verGrasa, setSexo, setMacro, setLocal, setVerSegmentos, setVerGrasa, reiniciar } =
-    useVisor();
+function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: ResultadoMotor | null }) {
+  const {
+    sexo,
+    macro,
+    locales,
+    verSegmentos,
+    verGrasa,
+    verAnillos,
+    setSexo,
+    setMacro,
+    setLocal,
+    setVerSegmentos,
+    setVerGrasa,
+    setVerAnillos,
+    reiniciar,
+  } = useVisor();
   const controles = useMemo(() => (cuerpo ? controlesLocales(cuerpo.meta) : []), [cuerpo]);
   const grupos = useMemo(() => {
     const g: Record<string, ControlLocal[]> = {};
@@ -268,7 +312,7 @@ function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: nu
           </Link>
           <div className="min-w-0">
             <h1 className="text-lg font-extrabold tracking-tightest">Resultado 3D</h1>
-            <p className="text-xs text-humo-500">Visor de prueba · fase 1</p>
+            <p className="text-xs text-humo-500">Visor de prueba · fase 2 (medición)</p>
           </div>
         </header>
 
@@ -287,13 +331,12 @@ function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: nu
           ))}
         </div>
 
-        {cuerpo && (
-          <dl className="grid grid-cols-3 gap-2 text-center">
-            <Dato titulo="Estatura" valor={`${medida.estaturaCm.toFixed(1)} cm`} />
-            <Dato titulo="Ajuste" valor={`${medida.ms.toFixed(1)} ms`} />
-            <Dato titulo="Morphs" valor={String(cuerpo.morphs.length)} />
-          </dl>
-        )}
+        {cuerpo && resultado && <PanelMedidas cuerpo={cuerpo} resultado={resultado} />}
+
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={verAnillos} onChange={(e) => setVerAnillos(e.target.checked)} />
+          Anillos de medida
+        </label>
 
         <label className="flex items-center gap-3 text-sm">
           <input type="checkbox" checked={verSegmentos} onChange={(e) => setVerSegmentos(e.target.checked)} />
@@ -342,19 +385,6 @@ function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: nu
           )}
         </Seccion>
 
-        <Seccion titulo="Etnia (se normaliza a 100 %)">
-          {(['asiatica', 'caucasica', 'africana'] as const).map((e) => (
-            <Deslizador
-              key={e}
-              etiqueta={{ asiatica: 'Asiática', caucasica: 'Caucásica', africana: 'Africana' }[e]}
-              min={0}
-              max={1}
-              paso={0.01}
-              valor={macro.etnia[e]}
-              onChange={(v) => setMacro('etnia', { ...macro.etnia, [e]: v })}
-            />
-          ))}
-        </Seccion>
 
         {Object.entries(grupos).map(([grupo, lista]) => (
           <Seccion key={grupo} titulo={TITULO_GRUPO[grupo] ?? grupo}>
@@ -382,6 +412,44 @@ function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: nu
         <p className="text-[11px] text-humo-500">Datos de referencia deportiva, no para fines médicos.</p>
       </div>
     </aside>
+  );
+}
+
+/** Lo que mide el motor, en vivo. */
+function PanelMedidas({ cuerpo, resultado }: { cuerpo: CuerpoBase; resultado: ResultadoMotor }) {
+  const m = resultado.medidas;
+  const fila = (etiqueta: string, valor: string) => (
+    <div key={etiqueta} className="flex justify-between gap-2 py-0.5">
+      <dt className="text-humo-300">{etiqueta}</dt>
+      <dd className="tabular-nums font-semibold">{valor}</dd>
+    </div>
+  );
+  return (
+    <div className="space-y-3">
+      <dl className="grid grid-cols-3 gap-2 text-center">
+        <Dato titulo="Estatura" valor={`${m.estaturaCm.toFixed(1)} cm`} />
+        <Dato titulo="Volumen" valor={`${m.volumenL.toFixed(2)} L`} />
+        <Dato titulo="Cálculo" valor={`${resultado.ms.toFixed(1)} ms`} />
+      </dl>
+      <details className="rounded-xl bg-carbon-700/60 px-3 py-2 text-xs" open>
+        <summary className="cursor-pointer font-semibold text-humo-100">Circunferencias y entrepierna</summary>
+        <dl className="mt-2" data-medidas="circunferencias">
+          {Object.entries(m.circunferenciasCm).map(([n, cm]) => fila(CIRCUNFERENCIAS[n]?.etiqueta ?? n, `${cm.toFixed(1)} cm`))}
+          {fila('Entrepierna', `${m.entrepiernaCm.toFixed(1)} cm`)}
+        </dl>
+      </details>
+      <details className="rounded-xl bg-carbon-700/60 px-3 py-2 text-xs">
+        <summary className="cursor-pointer font-semibold text-humo-100">Volumen por segmento</summary>
+        <dl className="mt-2" data-medidas="segmentos">
+          {Object.entries(m.volumenSegmentoL).map(([n, l]) => fila(n.replace('_', ' '), `${l.toFixed(2)} L`))}
+          {fila('Suma', `${Object.values(m.volumenSegmentoL).reduce((a, b) => a + b, 0).toFixed(2)} L`)}
+        </dl>
+      </details>
+      <p className="text-[11px] text-humo-500">
+        {cuerpo.morphs.length} morphs · morphs {resultado.msMorphs.toFixed(1)} ms · cálculo total en el Worker{' '}
+        {resultado.ms.toFixed(1)} ms
+      </p>
+    </div>
   );
 }
 

@@ -1,4 +1,3 @@
-import { ETNIA_POR_DEFECTO } from './config';
 import type { MetaCuerpo, PesosMorph, Sexo } from './tipos';
 
 /**
@@ -22,8 +21,6 @@ export interface ControlesMacro {
   proporciones: number;
   /** 0..1 (0,5 = base). Solo mujer. */
   copa: number;
-  /** Mezcla de etnias; se normaliza para que sume 1. */
-  etnia: { asiatica: number; caucasica: number; africana: number };
 }
 
 export const MACRO_INICIAL: ControlesMacro = {
@@ -33,7 +30,6 @@ export const MACRO_INICIAL: ControlesMacro = {
   altura: 0.5,
   proporciones: 0,
   copa: 0.5,
-  etnia: { ...ETNIA_POR_DEFECTO },
 };
 
 const NIVEL = ['min', 'prom', 'max'] as const;
@@ -73,13 +69,6 @@ export function pesosMacro(c: ControlesMacro, sexo: Sexo): PesosMorph {
     pesos.macro_copa_min = c.copa < 0.5 ? (0.5 - c.copa) / 0.5 : 0;
     pesos.macro_copa_max = c.copa > 0.5 ? (c.copa - 0.5) / 0.5 : 0;
   }
-  // Etnia: cada morph es "etnia pura menos la mezcla base", así que sus pesos
-  // tienen que sumar 1. Con la mezcla base exacta, los tres suman cero cambio.
-  const { asiatica, caucasica, africana } = c.etnia;
-  const total = asiatica + caucasica + africana || 1;
-  pesos.macro_etnia_asiatica = asiatica / total;
-  pesos.macro_etnia_caucasica = caucasica / total;
-  pesos.macro_etnia_africana = africana / total;
   return pesos;
 }
 

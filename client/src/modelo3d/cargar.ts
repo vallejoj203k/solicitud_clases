@@ -1,4 +1,4 @@
-import { BufferAttribute, type BufferGeometry, type Mesh } from 'three';
+import { BufferAttribute, type BufferGeometry, type Mesh, type Object3D } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { CuerpoBase, MetaCuerpo, MorphCPU, Sexo } from './tipos';
@@ -56,8 +56,13 @@ async function cargar(sexo: Sexo): Promise<CuerpoBase> {
     }),
   ]);
 
+  return desdeGltf(sexo, gltf.scene, meta);
+}
+
+/** Arma el CuerpoBase a partir de la escena del GLB (separado para poder probarlo en Node). */
+export function desdeGltf(sexo: Sexo, escena: Object3D, meta: MetaCuerpo): CuerpoBase {
   let malla: Mesh | undefined;
-  gltf.scene.traverse((o) => {
+  escena.traverse((o) => {
     if ((o as Mesh).isMesh) malla = o as Mesh;
   });
   if (!malla) throw new Error('El GLB no trae ninguna malla');

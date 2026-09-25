@@ -42,8 +42,8 @@ import numpy as np
 # dientes, pestañas, ropa ajustada, cubos de articulación). Se verifica al cargar.
 N_CUERPO = 13380
 
-# Mezcla de etnia de la malla base. Las tres etnias salen además como morphs,
-# así que la mezcla real se decide en el navegador (configuración), no aquí.
+# Mezcla de etnia de la malla base: la neutra de MakeHuman (⅓ cada una). El
+# gimnasio no usa etnia, así que no se exporta como morph.
 ETNIA_BASE = {"asian": 1 / 3, "caucasian": 1 / 3, "african": 1 / 3}
 
 # Macros de MakeHuman en el punto base (joven de 25 años, promedio en todo).
@@ -113,6 +113,8 @@ LANDMARKS = {
     "pecho": dict(target="measure-bust-circ-incr", lados=False),
     "bajo_busto": dict(target="measure-underbust-circ-incr", lados=False),
     "cuello": dict(target="measure-neck-circ-incr", lados=False),
+    # Altura del ombligo: donde se mide la cintura con cinta en el gimnasio.
+    "ombligo": dict(target="stomach-navel-in", lados=False),
     "brazo": dict(target="measure-upperarm-circ-incr", lados=True),
     "muslo": dict(target="measure-thigh-circ-incr", lados=True),
     "pantorrilla": dict(target="measure-calf-circ-incr", lados=True),
@@ -510,10 +512,6 @@ def exportar_sexo(fab, sexo, salida, deltas_locales, segmentos, landmarks, alisa
         ("macro_altura_max", dict(height=1.0), "Altura máxima de MakeHuman"),
         ("macro_proporciones_ideales", dict(proportions=1.0), "Proporciones ideales"),
     ]
-    for etnia, clave in (("asian", "asiatica"), ("caucasian", "caucasica"), ("african", "africana")):
-        pura = {e: (1.0 if e == etnia else 0.0) for e in ETNIA_BASE}
-        otros.append((f"macro_etnia_{clave}", dict(race=pura),
-                      "Etnia pura menos la mezcla base (los tres pesos deben sumar 1)"))
     if sexo == "F":
         otros += [("macro_copa_min", dict(cupsize=0.0), "Copa mínima"),
                   ("macro_copa_max", dict(cupsize=1.0), "Copa máxima")]
