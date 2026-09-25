@@ -155,10 +155,16 @@ function controlesMagros(macro: ControlesMacro, locales: Record<string, number>,
 }
 
 /**
- * Vista "grasa sobre músculo", la versión 3D de la silueta negra con borde
- * amarillo: el cuerpo sin grasa marca el stencil; la capa de grasa se pinta
- * casi opaca donde NO hay cuerpo sin grasa detrás (el borde que sobresale del
- * contorno, desde cualquier ángulo) y muy tenue por encima de él.
+ * Vista "grasa sobre músculo": el cuerpo sin grasa (gris) queda dentro y la
+ * grasa lo cubre como una capa amarilla translúcida, iluminada como un objeto
+ * más, para que se lea que está por encima.
+ *
+ * - Donde la capa tapa al cuerpo sin grasa, su opacidad crece con el grosor de
+ *   grasa de ese punto: la barriga se ve amarilla y maciza, las canillas casi
+ *   transparentes.
+ * - Donde sobresale del contorno del cuerpo sin grasa (el stencil lo marca) se
+ *   pinta casi opaca: es la silueta amarilla del dibujo de referencia, vista
+ *   desde cualquier ángulo.
  */
 function crearMaterialesGrasa() {
   const magro = new MeshStandardMaterial({ color: COLOR_MAGRO, roughness: 0.6, metalness: 0 });
@@ -166,29 +172,55 @@ function crearMaterialesGrasa() {
   magro.stencilRef = 1;
   magro.stencilFunc = AlwaysStencilFunc;
   magro.stencilZPass = ReplaceStencilOp;
+  // Donde casi no hay grasa las dos superficies se tocan: el cuerpo sin grasa se
+  // corre un poco hacia atrás en profundidad para que no asome por la capa.
+  magro.polygonOffset = true;
+  magro.polygonOffsetFactor = 2;
+  magro.polygonOffsetUnits = 8;
 
-  const capa = (opacidad: number, borde: number, dentro: boolean) => {
+  const capa = (encima: boolean) => {
     const m = new ShaderMaterial({
-      uniforms: { color: { value: new Color(COLOR_GRASA) }, opacidad: { value: opacidad }, borde: { value: borde } },
+      uniforms: {
+        color: { value: new Color(COLOR_GRASA) },
+        // Opacidad sobre el cuerpo: de minima (grasa fina) a maxima (desde `lleno` metros de grasa).
+        minima: { value: encima ? 0.28 : 0.88 },
+        maxima: { value: encima ? 0.8 : 0.88 },
+        lleno: { value: 0.035 },
+      },
       vertexShader: `
+        attribute float espesor;
         varying vec3 vN;
+        varying vec3 vNm;
         varying vec3 vV;
+        varying float vEsp;
         void main() {
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           vN = normalize(normalMatrix * normal);
+          vNm = normalize(mat3(modelMatrix) * normal);
           vV = normalize(-mv.xyz);
+          vEsp = espesor;
           gl_Position = projectionMatrix * mv;
         }`,
       fragmentShader: `
         uniform vec3 color;
-        uniform float opacidad;
-        uniform float borde;
+        uniform float minima;
+        uniform float maxima;
+        uniform float lleno;
         varying vec3 vN;
+        varying vec3 vNm;
         varying vec3 vV;
+        varying float vEsp;
         void main() {
+          vec3 n = normalize(vNm);
+          // Las mismas luces que la escena: principal arriba-adelante, relleno atrás.
+          float luz = 0.42 + 0.62 * max(dot(n, normalize(vec3(2.5, 4.0, 3.0))), 0.0)
+                           + 0.18 * max(dot(n, normalize(vec3(-3.0, 2.0, -2.0))), 0.0);
           float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
-          float luz = 0.72 + 0.28 * max(dot(normalize(vN), normalize(vec3(0.4, 0.8, 0.6))), 0.0);
-          gl_FragColor = vec4(color * luz, mix(opacidad, borde, pow(f, 2.0)));
+          float a = mix(minima, maxima, smoothstep(0.0, lleno, vEsp));
+          a = clamp(a + 0.3 * pow(f, 2.5), 0.0, 1.0);
+          // Un brillo suave en el contorno, como una capa húmeda por encima.
+          vec3 c = color * luz + vec3(1.0, 0.93, 0.75) * 0.22 * pow(f, 3.0);
+          gl_FragColor = vec4(c, a);
           #include <colorspace_fragment>
         }`,
       transparent: true,
@@ -196,11 +228,11 @@ function crearMaterialesGrasa() {
     });
     m.stencilWrite = true; // en three, activa la prueba de stencil
     m.stencilRef = 1;
-    m.stencilFunc = dentro ? EqualStencilFunc : NotEqualStencilFunc;
+    m.stencilFunc = encima ? EqualStencilFunc : NotEqualStencilFunc;
     return m;
   };
 
-  return { magro, fuera: capa(0.9, 1.0, false), encima: capa(0.07, 0.35, true) };
+  return { magro, fuera: capa(false), encima: capa(true) };
 }
 
 function Cuerpo({ cuerpo, resultado }: { cuerpo: CuerpoBase; resultado: ResultadoMotor | null }) {
@@ -229,6 +261,15 @@ function Cuerpo({ cuerpo, resultado }: { cuerpo: CuerpoBase; resultado: Resultad
     if (!resultado) return;
     volcar(geometria, resultado.cuerpo);
     if (resultado.magro) volcar(geometriaMagra, resultado.magro);
+    if (resultado.espesor) {
+      let attr = geometria.getAttribute('espesor') as BufferAttribute | undefined;
+      if (!attr) {
+        attr = new BufferAttribute(new Float32Array(resultado.espesor.length), 1);
+        geometria.setAttribute('espesor', attr);
+      }
+      (attr.array as Float32Array).set(resultado.espesor);
+      attr.needsUpdate = true;
+    }
   }, [resultado, geometria, geometriaMagra]);
 
   if (verGrasa && resultado?.magro) {
