@@ -1,24 +1,22 @@
 import { CIRCUNFERENCIAS, ENTREPIERNA_TOLERANCIA_X } from './config';
-import {
-  contornoCinta,
-  cortePlano,
-  prepararParticion,
-  volumenMalla,
-  volumenesSegmento,
-  type Particion,
-  type Vec3,
-} from './geometria';
+import { contornoCinta, cortePlano, prepararParticion, volumenesSegmento, type Particion, type Vec3 } from './geometria';
 import { estatura } from './motor';
 import type { CuerpoBase, PesosMorph } from './tipos';
 
 /**
  * Medidas del cuerpo deformado: estatura, volumen total y por segmento,
  * entrepierna y circunferencias de cinta métrica. Todo sale de la malla, no de
- * fórmulas: es lo que el solver (fase 3) va a comparar con los objetivos.
+ * fórmulas: es lo que el solver (fase 3) compara con los objetivos.
+ *
+ * Todas las medidas son independientes de la traslación (el solver no apoya el
+ * cuerpo en el suelo en cada prueba): la estatura es alto máximo menos mínimo y
+ * la entrepierna se mide desde el punto más bajo.
  */
 export interface Medidas {
   estaturaCm: number;
   entrepiernaCm: number;
+  /** Distancia recta entre las puntas de los hombros (acromion). */
+  hombrosCm: number;
   volumenL: number;
   /** Litros por segmento (tronco, cabeza, brazo_izq, brazo_der, pierna_izq, pierna_der). */
   volumenSegmentoL: Record<string, number>;
@@ -30,6 +28,16 @@ export interface Anillos {
   /** Puntos 3D de cada contorno (xyz xyz ...), para dibujar los anillos. */
   [nombre: string]: Float32Array;
 }
+
+/**
+ * Clave de cada medida suelta, para pedir solo las que hacen falta:
+ * 'estatura' | 'entrepierna' | 'hombros' (cm), 'volumen' | 'vol:<segmento>' (L),
+ * 'circ:<nombre>' (cm).
+ */
+export type ClaveMedida = string;
+
+/** Distancia máxima (m, medida sobre el eje del plano en la malla base) de un triángulo a la banda para entrar en el corte. */
+const FRANJA_CORTE = 0.1;
 
 interface PrepCircunferencia {
   nombre: string;
@@ -46,6 +54,8 @@ export interface PrepMedicion {
   nombresSegmento: string[];
   circunferencias: PrepCircunferencia[];
   vEntrepierna: number;
+  /** Vértices de la punta de cada hombro [izquierdo, derecho]; -1 si el JSON no trae el landmark. */
+  vHombros: [number, number];
   articulaciones: { nombres: string[]; base: Float32Array; deltas: Map<string, Float32Array> };
 }
 
@@ -59,17 +69,32 @@ export function prepararMedicion(cuerpo: CuerpoBase): PrepMedicion {
   for (const [nombre, def] of Object.entries(CIRCUNFERENCIAS)) {
     const lm = cuerpo.meta.landmarks[def.landmark];
     if (!lm) continue;
-    const permitidos = new Set(def.segmentos.map((s) => nombresSegmento.indexOf(s)));
-    const triangulos: number[] = [];
-    for (let t = 0; t < particion.triSegmento.length; t++) if (permitidos.has(particion.triSegmento[t])) triangulos.push(t);
     const eje = def.plano === 'eje' && def.eje ? (def.eje.map((n) => nombresArt.indexOf(n)) as [number, number]) : undefined;
     if (eje && (eje[0] < 0 || eje[1] < 0)) throw new Error(`Faltan articulaciones para ${nombre}`);
     const altura = def.alturaDe ? cuerpo.meta.landmarks[def.alturaDe] : undefined;
     if (def.alturaDe && !altura) throw new Error(`El JSON no trae el landmark ${def.alturaDe}; regenera los GLB`);
+
+    // Solo los triángulos de los segmentos permitidos y, en la malla base, a menos
+    // de FRANJA_CORTE del plano: el corte recorre unos cientos de triángulos en
+    // vez de miles. La franja sigue a la banda porque son los mismos vértices.
+    const base = cuerpo.posiciones;
+    const banda = Uint32Array.from(lm.vertices);
+    const bandaAltura = altura ? Uint32Array.from(altura.vertices) : undefined;
+    const c0 = centroide(base, banda);
+    if (bandaAltura) c0[1] = centroide(base, bandaAltura)[1];
+    const n0 = eje ? ejeArticulaciones(Float32Array.from(cuerpo.meta.articulaciones.base.flat()), eje) : ([0, 1, 0] as Vec3);
+    const dist = (v: number) => Math.abs((base[v * 3] - c0[0]) * n0[0] + (base[v * 3 + 1] - c0[1]) * n0[1] + (base[v * 3 + 2] - c0[2]) * n0[2]);
+    const permitidos = new Set(def.segmentos.map((s) => nombresSegmento.indexOf(s)));
+    const triangulos: number[] = [];
+    for (let t = 0; t < particion.triSegmento.length; t++) {
+      if (!permitidos.has(particion.triSegmento[t])) continue;
+      if (Math.min(dist(tris[t * 3]), dist(tris[t * 3 + 1]), dist(tris[t * 3 + 2])) > FRANJA_CORTE) continue;
+      triangulos.push(t);
+    }
     circunferencias.push({
       nombre,
-      banda: Uint32Array.from(lm.vertices),
-      bandaAltura: altura ? Uint32Array.from(altura.vertices) : undefined,
+      banda,
+      bandaAltura,
       triangulos: Uint32Array.from(triangulos),
       eje,
       holgura: def.holgura,
@@ -86,7 +111,22 @@ export function prepararMedicion(cuerpo: CuerpoBase): PrepMedicion {
     if (vEntrepierna < 0 || p[v * 3 + 1] < p[vEntrepierna * 3 + 1]) vEntrepierna = v;
   }
 
+  // Punta del hombro: de la zona que mueve el target de ancho de hombros, el
+  // vértice más alto que queda por fuera de la articulación del hombro.
   const art = cuerpo.meta.articulaciones;
+  const vHombros = (['izq', 'der'] as const).map((lado) => {
+    const lm = cuerpo.meta.landmarks[`hombro_${lado}`];
+    const j = art.nombres.indexOf(lado === 'izq' ? 'joint-l-shoulder' : 'joint-r-shoulder');
+    if (!lm || j < 0) return -1;
+    const xj = Math.abs(art.base[j][0]);
+    let mejor = -1;
+    for (const v of lm.vertices) {
+      if (Math.abs(p[v * 3]) < xj) continue;
+      if (mejor < 0 || p[v * 3 + 1] > p[mejor * 3 + 1]) mejor = v;
+    }
+    return mejor;
+  }) as [number, number];
+
   const deltas = new Map<string, Float32Array>();
   for (const [morph, lista] of Object.entries(art.deltas)) deltas.set(morph, Float32Array.from(lista.flat()));
 
@@ -95,6 +135,7 @@ export function prepararMedicion(cuerpo: CuerpoBase): PrepMedicion {
     nombresSegmento,
     circunferencias,
     vEntrepierna,
+    vHombros,
     articulaciones: { nombres: nombresArt, base: Float32Array.from(art.base.flat()), deltas },
   };
 }
@@ -135,6 +176,64 @@ function radioBanda(pos: Float32Array, vs: Uint32Array, c: Vec3, n: Vec3): numbe
   return r;
 }
 
+function ejeArticulaciones(art: Float32Array, [a, b]: [number, number]): Vec3 {
+  const d: Vec3 = [art[b * 3] - art[a * 3], art[b * 3 + 1] - art[a * 3 + 1], art[b * 3 + 2] - art[a * 3 + 2]];
+  const l = Math.hypot(...d);
+  return [d[0] / l, d[1] / l, d[2] / l];
+}
+
+function extremosY(pos: Float32Array): [number, number] {
+  let min = Infinity, max = -Infinity;
+  for (let v = 1; v < pos.length; v += 3) {
+    const y = pos[v];
+    if (y < min) min = y;
+    if (y > max) max = y;
+  }
+  return [min, max];
+}
+
+function circunferencia(tris: ArrayLike<number>, c: PrepCircunferencia, pos: Float32Array, art: Float32Array) {
+  const punto = centroide(pos, c.banda);
+  if (c.bandaAltura) punto[1] = centroide(pos, c.bandaAltura)[1];
+  const normal = c.eje ? ejeArticulaciones(art, c.eje) : ([0, 1, 0] as Vec3);
+  const radio = radioBanda(pos, c.banda, punto, normal) * c.holgura + 0.01;
+  return contornoCinta(cortePlano(pos, tris as Uint32Array, c.triangulos, punto, normal), punto, normal, radio);
+}
+
+/**
+ * Mide solo lo pedido (para el solver: cada columna del Jacobiano pide lo que
+ * ese parámetro puede cambiar). Devuelve cm y litros, por clave.
+ */
+export function medirSeleccion(
+  cuerpo: CuerpoBase,
+  prep: PrepMedicion,
+  pos: Float32Array,
+  art: Float32Array,
+  claves: Iterable<ClaveMedida>,
+): Record<ClaveMedida, number> {
+  const out: Record<ClaveMedida, number> = {};
+  const tris = cuerpo.indicesTriangulos;
+  let y: [number, number] | null = null;
+  let vol: Float64Array | null = null;
+  for (const k of claves) {
+    if (k === 'estatura' || k === 'entrepierna') {
+      y ??= extremosY(pos);
+      out[k] = k === 'estatura' ? (y[1] - y[0]) * 100 : prep.vEntrepierna >= 0 ? (pos[prep.vEntrepierna * 3 + 1] - y[0]) * 100 : NaN;
+    } else if (k === 'volumen' || k.startsWith('vol:')) {
+      vol ??= volumenesSegmento(pos, tris, prep.particion);
+      if (k === 'volumen') out[k] = vol.reduce((a, b) => a + b, 0) * 1000;
+      else out[k] = vol[prep.nombresSegmento.indexOf(k.slice(4))] * 1000;
+    } else if (k === 'hombros') {
+      const [a, b] = prep.vHombros;
+      out[k] = a < 0 || b < 0 ? NaN : Math.hypot(pos[a * 3] - pos[b * 3], pos[a * 3 + 1] - pos[b * 3 + 1], pos[a * 3 + 2] - pos[b * 3 + 2]) * 100;
+    } else if (k.startsWith('circ:')) {
+      const c = prep.circunferencias.find((x) => x.nombre === k.slice(5));
+      out[k] = c ? circunferencia(tris, c, pos, art).perimetro * 100 : NaN;
+    }
+  }
+  return out;
+}
+
 /**
  * Mide la malla ya deformada. `pos` son las posiciones del cuerpo apoyado en el
  * suelo; `articulaciones` las de posicionesArticulaciones() con los mismos pesos.
@@ -147,37 +246,25 @@ export function medir(
   conAnillos = false,
 ): { medidas: Medidas; anillos: Anillos } {
   const tris = cuerpo.indicesTriangulos;
-  const volSeg = volumenesSegmento(pos, tris, prep.particion);
+  const claves = ['estatura', 'entrepierna', 'hombros', 'volumen', ...prep.nombresSegmento.map((n) => `vol:${n}`)];
+  const m = medirSeleccion(cuerpo, prep, pos, articulaciones, claves);
   const volumenSegmentoL: Record<string, number> = {};
-  prep.nombresSegmento.forEach((n, i) => (volumenSegmentoL[n] = volSeg[i] * 1000));
+  for (const n of prep.nombresSegmento) volumenSegmentoL[n] = m[`vol:${n}`];
 
   const circunferenciasCm: Record<string, number> = {};
   const anillos: Anillos = {};
   for (const c of prep.circunferencias) {
-    const punto = centroide(pos, c.banda);
-    if (c.bandaAltura) punto[1] = centroide(pos, c.bandaAltura)[1];
-    let normal: Vec3 = [0, 1, 0];
-    if (c.eje) {
-      const [a, b] = c.eje;
-      const d: Vec3 = [
-        articulaciones[b * 3] - articulaciones[a * 3],
-        articulaciones[b * 3 + 1] - articulaciones[a * 3 + 1],
-        articulaciones[b * 3 + 2] - articulaciones[a * 3 + 2],
-      ];
-      const l = Math.hypot(...d);
-      normal = [d[0] / l, d[1] / l, d[2] / l];
-    }
-    const radio = radioBanda(pos, c.banda, punto, normal) * c.holgura + 0.01;
-    const contorno = contornoCinta(cortePlano(pos, tris, c.triangulos, punto, normal), punto, normal, radio);
+    const contorno = circunferencia(tris, c, pos, articulaciones);
     circunferenciasCm[c.nombre] = contorno.perimetro * 100;
     if (conAnillos) anillos[c.nombre] = contorno.anillo;
   }
 
   return {
     medidas: {
-      estaturaCm: estatura(pos) * 100,
-      entrepiernaCm: prep.vEntrepierna >= 0 ? pos[prep.vEntrepierna * 3 + 1] * 100 : NaN,
-      volumenL: volumenMalla(pos, tris) * 1000,
+      estaturaCm: m.estatura,
+      entrepiernaCm: m.entrepierna,
+      hombrosCm: m.hombros,
+      volumenL: m.volumen,
       volumenSegmentoL,
       circunferenciasCm,
     },

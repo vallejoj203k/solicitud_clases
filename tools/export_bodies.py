@@ -113,6 +113,8 @@ LANDMARKS = {
     "pecho": dict(target="measure-bust-circ-incr", lados=False),
     "bajo_busto": dict(target="measure-underbust-circ-incr", lados=False),
     "cuello": dict(target="measure-neck-circ-incr", lados=False),
+    # Punta de cada hombro (acromion): el ancho de hombros es la distancia entre las dos.
+    "hombro": dict(target="measure-shoulder-dist-incr", lados=True),
     # Altura del ombligo: donde se mide la cintura con cinta en el gimnasio.
     "ombligo": dict(target="stomach-navel-in", lados=False),
     "brazo": dict(target="measure-upperarm-circ-incr", lados=True),

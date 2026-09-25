@@ -16,9 +16,13 @@ import {
 import { IconoAtras } from '../components/Iconos.jsx';
 import { cargarCuerpo } from './cargar';
 import { controlesLocales, pesosLocales, pesosMacro, type ControlLocal, type ControlesMacro } from './controles';
-import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, PCT_GRASA_POR_DEFECTO } from './config';
 import { useVisor } from './estado';
 import { usarMotor } from './usarMotor';
+import { usarAjuste } from './usarAjuste';
+import { useCliente } from './estadoCliente';
+import { pctGrasaDe } from './objetivos';
+import { ResumenAjuste } from './ResumenAjuste';
 import { FormularioMedidas, FormularioScanner } from './FormularioScanner';
 import type { ResultadoMotor } from './motor.worker';
 import type { CuerpoBase, Sexo } from './tipos';
@@ -52,17 +56,18 @@ export default function PaginaModelo3D() {
     };
   }, [sexo]);
 
-  const controles = useMemo(() => (cuerpo ? controlesLocales(cuerpo.meta) : []), [cuerpo]);
+  // El cuerpo se ajusta solo a lo que se escribe en el formulario (fase 3).
+  usarAjuste(cuerpo);
+  // % de grasa para la vista "grasa sobre músculo": el del informe o uno típico.
+  const valores = useCliente((s) => s.valores);
+  const pctGrasa = useMemo(
+    () => pctGrasaDe({ nombre: '', sexo, valores, evaluacion: {} }) ?? PCT_GRASA_POR_DEFECTO[sexo],
+    [sexo, valores],
+  );
   const pedido = useMemo(() => {
     if (!cuerpo) return null;
-    const pesos = { ...pesosMacro(macro, cuerpo.sexo), ...pesosLocales(locales, controles) };
-    let pesosMagro = null;
-    if (verGrasa) {
-      const m = controlesMagros(macro, locales, controles);
-      pesosMagro = { ...pesosMacro(m.macro, cuerpo.sexo), ...pesosLocales(m.locales, controles) };
-    }
-    return { cuerpo, pesos, pesosMagro, conAnillos: verAnillos };
-  }, [cuerpo, macro, locales, controles, verGrasa, verAnillos]);
+    return { cuerpo, macro, locales, pctGrasa: verGrasa ? pctGrasa : null, conAnillos: verAnillos };
+  }, [cuerpo, macro, locales, verGrasa, pctGrasa, verAnillos]);
   const { resultado, error: errorMotor } = usarMotor(pedido);
   const vigente = resultado && cuerpo && resultado.sexo === cuerpo.sexo ? resultado : null;
 
@@ -139,35 +144,19 @@ function volcar(geometria: BufferGeometry, malla: { pos: Float32Array; normales:
 }
 
 /**
- * PROTOTIPO del cuerpo sin grasa: los mismos controles, con el peso de
- * MakeHuman al mínimo y los controles de grasa sin aumentar. En la fase 2 lo
- * reemplaza el solver, alimentado con la masa libre de grasa del scanner.
- */
-const MEDIDAS_DE_GRASA = new Set(['cintura', 'cadera', 'pecho', 'cuello', 'barriga']);
-function controlesMagros(macro: ControlesMacro, locales: Record<string, number>, controles: ControlLocal[]) {
-  const l: Record<string, number> = {};
-  for (const c of controles) {
-    const v = locales[c.clave] ?? 0;
-    const esGrasa = c.grupo === 'grasa' || c.clave.endsWith('_grasa') || MEDIDAS_DE_GRASA.has(c.clave);
-    l[c.clave] = esGrasa ? Math.min(v, 0) : v;
-  }
-  return { macro: { ...macro, peso: 0 }, locales: l };
-}
-
-/**
  * Vista "grasa sobre músculo": el cuerpo sin grasa (gris) queda dentro y la
  * grasa lo cubre como una capa amarilla translúcida, iluminada como un objeto
  * más, para que se lea que está por encima.
  *
  * - Donde la capa tapa al cuerpo sin grasa, su opacidad crece con el grosor de
  *   grasa de ese punto: la barriga se ve amarilla y maciza, las canillas casi
- *   transparentes.
+ *   transparentes, y donde no hay grasa desaparece (el músculo sigue rojo).
  * - Donde sobresale del contorno del cuerpo sin grasa (el stencil lo marca) se
  *   pinta casi opaca: es la silueta amarilla del dibujo de referencia, vista
  *   desde cualquier ángulo.
  */
 function crearMaterialesGrasa() {
-  const magro = new MeshStandardMaterial({ color: COLOR_MAGRO, roughness: 0.6, metalness: 0 });
+  const magro = new MeshStandardMaterial({ color: COLOR_MAGRO, roughness: 0.55, metalness: 0 });
   magro.stencilWrite = true;
   magro.stencilRef = 1;
   magro.stencilFunc = AlwaysStencilFunc;
@@ -182,10 +171,11 @@ function crearMaterialesGrasa() {
     const m = new ShaderMaterial({
       uniforms: {
         color: { value: new Color(COLOR_GRASA) },
-        // Opacidad sobre el cuerpo: de minima (grasa fina) a maxima (desde `lleno` metros de grasa).
-        minima: { value: encima ? 0.28 : 0.88 },
-        maxima: { value: encima ? 0.8 : 0.88 },
-        lleno: { value: 0.035 },
+        // Opacidad según el grosor de grasa: 0 sin grasa (se ve el músculo tal cual),
+        // `minima` apenas hay grasa y `maxima` desde `lleno` metros.
+        minima: { value: encima ? 0.15 : 0.85 },
+        maxima: { value: encima ? 0.6 : 0.92 },
+        lleno: { value: 0.05 },
       },
       vertexShader: `
         attribute float espesor;
@@ -216,8 +206,10 @@ function crearMaterialesGrasa() {
           float luz = 0.42 + 0.62 * max(dot(n, normalize(vec3(2.5, 4.0, 3.0))), 0.0)
                            + 0.18 * max(dot(n, normalize(vec3(-3.0, 2.0, -2.0))), 0.0);
           float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+          // Menos de ~1,5 mm de grasa: la capa desaparece y el músculo conserva su color.
+          float hay = smoothstep(0.0005, 0.0025, vEsp);
           float a = mix(minima, maxima, smoothstep(0.0, lleno, vEsp));
-          a = clamp(a + 0.3 * pow(f, 2.5), 0.0, 1.0);
+          a = hay * clamp(a + 0.3 * pow(f, 2.5), 0.0, 1.0);
           // Un brillo suave en el contorno, como una capa húmeda por encima.
           vec3 c = color * luz + vec3(1.0, 0.93, 0.75) * 0.22 * pow(f, 3.0);
           gl_FragColor = vec4(c, a);
@@ -272,7 +264,7 @@ function Cuerpo({ cuerpo, resultado }: { cuerpo: CuerpoBase; resultado: Resultad
     }
   }, [resultado, geometria, geometriaMagra]);
 
-  if (verGrasa && resultado?.magro) {
+  if (verGrasa && !verSegmentos && resultado?.magro) {
     return (
       <>
         <mesh geometry={geometriaMagra} material={materiales.magro} />
@@ -364,7 +356,7 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
           </Link>
           <div className="min-w-0">
             <h1 className="text-lg font-extrabold tracking-tightest">Resultado 3D</h1>
-            <p className="text-xs text-humo-500">Datos del scanner · visor de prueba (fase 2)</p>
+            <p className="text-xs text-humo-500">Cuerpo ajustado a los datos · fase 3</p>
           </div>
         </header>
 
@@ -383,6 +375,52 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
           ))}
         </div>
 
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Vista del modelo">
+            {(
+              [
+                ['Grasa sobre músculo', verGrasa, setVerGrasa],
+                ['Anillos de medida', verAnillos, setVerAnillos],
+                ['Segmentos', verSegmentos, setVerSegmentos],
+              ] as const
+            ).map(([titulo, activo, cambiar]) => (
+              <button
+                key={titulo}
+                type="button"
+                aria-pressed={activo}
+                onClick={() => cambiar(!activo)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                  activo ? 'border-[#8CC63F] bg-[#8CC63F]/15 text-[#B5E37A]' : 'border-carbon-600 text-humo-500 hover:text-humo-300'
+                }`}
+              >
+                {titulo}
+              </button>
+            ))}
+          </div>
+          {verGrasa && !verSegmentos && (
+            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-humo-300">
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_MAGRO }} />
+                Músculo, hueso y órganos
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_GRASA }} />
+                Grasa (más opaca donde es más gruesa)
+              </span>
+            </p>
+          )}
+          {verSegmentos && cuerpo && (
+            <ul className="grid grid-cols-3 gap-1 text-[11px] text-humo-300">
+              {cuerpo.meta.segmentos.nombres.map((n) => (
+                <li key={n} className="flex items-center gap-1.5">
+                  <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_SEGMENTO[n] }} />
+                  {n.replace('_', ' ')}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <div className="grid grid-cols-3 gap-1 rounded-xl bg-carbon-900 p-1" role="tablist" aria-label="Secciones del panel">
           {PESTANAS.map(([clave, titulo]) => (
             <button
@@ -399,53 +437,13 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
           ))}
         </div>
 
+        {pestana !== 'manual' && <ResumenAjuste />}
         {pestana === 'scanner' && <FormularioScanner />}
         {pestana === 'medidas' && <FormularioMedidas />}
 
         {pestana === 'manual' && (
           <>
             {cuerpo && resultado && <PanelMedidas cuerpo={cuerpo} resultado={resultado} />}
-
-            <label className="flex items-center gap-3 text-sm">
-              <input type="checkbox" checked={verAnillos} onChange={(e) => setVerAnillos(e.target.checked)} />
-              Anillos de medida
-            </label>
-
-            <label className="flex items-center gap-3 text-sm">
-              <input type="checkbox" checked={verSegmentos} onChange={(e) => setVerSegmentos(e.target.checked)} />
-              Ver segmentos
-            </label>
-            {verSegmentos && cuerpo && (
-              <ul className="grid grid-cols-2 gap-1.5 text-xs">
-                {cuerpo.meta.segmentos.nombres.map((n) => (
-                  <li key={n} className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_SEGMENTO[n] }} />
-                    {n.replace('_', ' ')} ({cuerpo.meta.segmentos.conteo[n]})
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <label className="flex items-center gap-3 text-sm">
-              <input type="checkbox" checked={verGrasa} onChange={(e) => setVerGrasa(e.target.checked)} />
-              Grasa sobre músculo (prototipo)
-            </label>
-            {verGrasa && (
-              <div className="space-y-1.5 text-xs text-humo-300">
-                <p className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-sm border border-carbon-600" style={{ background: COLOR_MAGRO }} />
-                  Cuerpo sin grasa (músculo, hueso, órganos)
-                </p>
-                <p className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_GRASA }} />
-                  Grasa
-                </p>
-                <p className="text-[11px] text-humo-500">
-                  Por ahora el cuerpo sin grasa se aproxima con el peso al mínimo. Con el ajuste (fases 3 y 4) saldrá de la masa
-                  libre de grasa del scanner.
-                </p>
-              </div>
-            )}
 
             <Seccion titulo="Macro (MakeHuman)">
               <Deslizador

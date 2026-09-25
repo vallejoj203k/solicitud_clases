@@ -69,6 +69,15 @@ for (const sexo of ['M', 'F'] as Sexo[]) {
       expect(Math.abs(v.pierna_izq / v.pierna_der - 1)).toBeLessThan(0.02);
     });
 
+    it('el ancho de hombros (acromion a acromion) está en rango humano y crece con el morph de hombros', () => {
+      const base = medirCon(cuerpo, prep, pesosDe());
+      const anchos = medirCon(cuerpo, prep, pesosDe(MACRO_INICIAL, { hombros: 1 }));
+      console.log(sexo, 'hombros', base.hombrosCm.toFixed(1), '->', anchos.hombrosCm.toFixed(1));
+      expect(base.hombrosCm).toBeGreaterThan(sexo === 'M' ? 34 : 30);
+      expect(base.hombrosCm).toBeLessThan(sexo === 'M' ? 46 : 42);
+      expect(anchos.hombrosCm).toBeGreaterThan(base.hombrosCm + 2);
+    });
+
     it('las circunferencias de la base están en rangos humanos', () => {
       const c = medirCon(cuerpo, prep, pesosDe()).circunferenciasCm;
       const rangos: Record<string, [number, number]> = {
@@ -118,7 +127,9 @@ for (const sexo of ['M', 'F'] as Sexo[]) {
       medirCon(cuerpo, prep, pesos); // calentar el JIT
       const t0 = performance.now();
       for (let i = 0; i < 10; i++) medirCon(cuerpo, prep, pesos);
-      expect((performance.now() - t0) / 10).toBeLessThan(40);
+      const ms = (performance.now() - t0) / 10;
+      console.log(sexo, 'ms por medición completa', ms.toFixed(2));
+      expect(ms).toBeLessThan(40);
     });
   });
 }
