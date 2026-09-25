@@ -14,7 +14,17 @@ import type { Sexo } from './tipos';
  */
 export type Vista = 'grasa' | 'realista' | 'calor' | 'comparar';
 
-type Ajustes = 'vista' | 'verAnillos' | 'verSegmentos' | 'calorDe' | 'comparar' | 'mezcla' | 'colorCuerpo' | 'modoMedidas' | 'giro';
+type Ajustes =
+  | 'vista'
+  | 'verAnillos'
+  | 'verSegmentos'
+  | 'calorDe'
+  | 'comparar'
+  | 'mezcla'
+  | 'colorCuerpo'
+  | 'modoMedidas'
+  | 'giro'
+  | 'musculoTocado';
 
 interface EstadoVisor {
   sexo: Sexo;
@@ -44,6 +54,8 @@ interface EstadoVisor {
   modoMedidas: 'autoequilibrio' | 'editar';
   /** Giro del cuerpo sobre su eje (radianes), para girarlo con el teclado. */
   giro: number;
+  /** Nombre del músculo que se tocó en el modelo (null: ninguno). */
+  musculoTocado: string | null;
   setSexo: (s: Sexo) => void;
   setMacro: <K extends keyof ControlesMacro>(k: K, v: ControlesMacro[K]) => void;
   setLocal: (clave: string, v: number) => void;
@@ -72,6 +84,7 @@ export const useVisor = create<EstadoVisor>((set) => ({
   colorCuerpo: COLORES_CUERPO[0],
   modoMedidas: 'autoequilibrio',
   giro: 0,
+  musculoTocado: null,
   setSexo: (sexo) => set({ sexo, ajuste: null, objetivo: null }),
   setMacro: (k, v) => set((s) => ({ macro: { ...s.macro, [k]: v }, origen: 'manual' })),
   setLocal: (clave, v) => set((s) => ({ locales: { ...s.locales, [clave]: v }, origen: 'manual' })),
