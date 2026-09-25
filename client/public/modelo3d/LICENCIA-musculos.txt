@@ -1,0 +1,17 @@
+Músculos anatómicos: musculos-hombre.glb, musculos-mujer.glb y sus .json
+
+Obra derivada de:
+  - "Z-Anatomy - The open source atlas of anatomy" - CC BY-SA 4.0
+    https://www.z-anatomy.com  ·  https://github.com/LluisV/Z-Anatomy
+  - "BodyParts3D - The Database Center for Life Science" - CC BY-SA 2.1 Japón
+    https://lifesciencedb.jp/bp3d/
+
+Cambios: se eligieron los músculos superficiales, se simplificaron las mallas y
+se adaptaron (pose y forma) al cuerpo de MakeHuman, que es CC0. Nombres en
+español de la tabla de traducciones de Z-Anatomy.
+
+Estos archivos se distribuyen con la licencia Creative Commons
+Atribución-CompartirIgual 4.0 Internacional (CC BY-SA 4.0):
+https://creativecommons.org/licenses/by-sa/4.0/deed.es
+
+Se pueden generar de nuevo con tools/export_musculos.py y tools/musculos_glb.mjs.

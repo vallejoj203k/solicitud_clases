@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Line, OrbitControls } from '@react-three/drei';
 import {
@@ -10,6 +10,8 @@ import {
   DataTexture,
   EqualStencilFunc,
   FloatType,
+  type Material,
+  type Object3D,
   MeshStandardMaterial,
   NearestFilter,
   NotEqualStencilFunc,
@@ -28,6 +30,7 @@ import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
 import type { SegmentoInforme } from './cliente';
 import { clasificarMusculos, etiquetaEn, nombreEtiqueta, type Musculos } from './musculos';
+import { atributosFijos, cargarMusculos, deformarMusculos, nombrePieza, type MusculosAnatomicos } from './musculosAnatomicos';
 import type { CuerpoBase } from './tipos';
 
 /**
@@ -283,8 +286,8 @@ function coloresCalor(cuerpo: CuerpoBase, estados: Record<SegmentoInforme, Estad
  * el centro. Las estrías se desvanecen cuando quedan más finas que un píxel.
  * La tabla (textura) se pone en `userData.tabla.value`.
  */
-function crearMaterialMusculo() {
-  const m = new MeshStandardMaterial({ color: '#ffffff', roughness: 0.5, metalness: 0, envMapIntensity: 0.35 });
+function crearMaterialMusculo({ hundir = 0, luz = 1 } = {}) {
+  const m = new MeshStandardMaterial({ color: new Color(luz, luz, luz), roughness: 0.5, metalness: 0, envMapIntensity: 0.35 });
   const tabla = { value: null as DataTexture | null };
   m.userData.tabla = tabla;
   m.onBeforeCompile = (sh) => {
@@ -294,7 +297,7 @@ function crearMaterialMusculo() {
         '#include <common>',
         '#include <common>\nattribute vec3 candidatas;\nattribute vec3 pesos;\nvarying vec3 vCand;\nvarying vec3 vPesos;\nvarying vec3 vPosObj;',
       )
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCand = candidatas;\nvPesos = pesos;\nvPosObj = position;');
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvCand = candidatas;\nvPesos = pesos;\nvPosObj = position;\ntransformed -= normal * ${hundir.toFixed(4)};`);
     sh.fragmentShader = sh.fragmentShader
       .replace(
         '#include <common>',
@@ -327,7 +330,7 @@ function crearMaterialMusculo() {
         diffuseColor.rgb *= 1.0 - 0.22 * linea * visible;`,
       );
   };
-  m.customProgramCacheKey = () => 'musculo-v2';
+  m.customProgramCacheKey = () => `musculo-v2-${hundir}`;
   return m;
 }
 
@@ -373,17 +376,84 @@ function texturaTabla(m: Musculos) {
   return t;
 }
 
+/**
+ * Lo que va dentro de la grasa marca el stencil (así la capa sabe dónde tapa y
+ * dónde sobresale). Donde casi no hay grasa las dos superficies se tocan: lo de
+ * adentro se corre un poco hacia atrás en profundidad para que no asome.
+ */
+function marcarDentro<T extends Material>(m: T) {
+  m.stencilWrite = true;
+  m.stencilRef = 1;
+  m.stencilFunc = AlwaysStencilFunc;
+  m.stencilZPass = ReplaceStencilOp;
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = 2;
+  m.polygonOffsetUnits = 8;
+  return m;
+}
+
+/**
+ * Músculos anatómicos: color por vértice (rojo por pieza, marfil en tendones),
+ * brillo húmedo y estrías finas en la dirección de las fibras, que se
+ * desvanecen cuando quedan más finas que un píxel.
+ */
+function crearMaterialAnatomico() {
+  const m = new MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.42, metalness: 0, envMapIntensity: 0.55 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec3 fibra;\nvarying vec3 vFibra;\nvarying vec3 vPosObj;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFibra = fibra;\nvPosObj = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFibra;\nvarying vec3 vPosObj;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float s = dot(vPosObj, vFibra) * 400.0;
+        float anchoS = fwidth(s);
+        float linea = smoothstep(0.55, 1.0, abs(fract(s) - 0.5) * 2.0);
+        float visible = (1.0 - smoothstep(0.25, 0.6, anchoS)) * step(0.5, length(vFibra));
+        diffuseColor.rgb *= 1.0 - 0.28 * linea * visible;`,
+      );
+  };
+  m.customProgramCacheKey = () => 'musculo-anatomico-v1';
+  return marcarDentro(m);
+}
+
+/** Descarga los músculos del sexo del cuerpo; mientras tanto (o si falla) null. */
+function usarMusculosAnatomicos(cuerpo: CuerpoBase) {
+  const [m, setM] = useState<MusculosAnatomicos | null>(null);
+  const redibujar = usarRedibujar();
+  useEffect(() => {
+    let vivo = true;
+    setM(null);
+    cargarMusculos(cuerpo.sexo)
+      .then((r) => {
+        if (vivo) {
+          setM(r);
+          redibujar();
+        }
+      })
+      // Sin los músculos anatómicos queda el cuerpo sin grasa con los músculos pintados.
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [cuerpo.sexo, redibujar]);
+  return m;
+}
+
+function crearGeometriaAnatomica(m: MusculosAnatomicos) {
+  const g = new BufferGeometry();
+  const n = m.tri.length;
+  g.setAttribute('position', new BufferAttribute(new Float32Array(n * 3), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(n * 3), 3));
+  g.setIndex(new BufferAttribute(m.indices, 1));
+  atributosFijos(m, g);
+  return g;
+}
+
 function crearMaterialesGrasa() {
-  const magro = crearMaterialMusculo();
-  magro.stencilWrite = true;
-  magro.stencilRef = 1;
-  magro.stencilFunc = AlwaysStencilFunc;
-  magro.stencilZPass = ReplaceStencilOp;
-  // Donde casi no hay grasa las dos superficies se tocan: el cuerpo sin grasa se
-  // corre un poco hacia atrás en profundidad para que no asome por la capa.
-  magro.polygonOffset = true;
-  magro.polygonOffsetFactor = 2;
-  magro.polygonOffsetUnits = 8;
+  const magro = marcarDentro(crearMaterialMusculo());
 
   const capa = (encima: boolean) => {
     const m = new ShaderMaterial({
@@ -458,6 +528,13 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
     [magro, tabla],
   );
   const set = useVisor((s) => s.set);
+  /** Nombre del músculo pintado en un punto del cuerpo sin grasa (malla sin indexar). */
+  const nombreEnSoporte = (objeto: Object3D, punto: Vector3, t: number) => {
+    const pos = magro.getAttribute('position');
+    const esquina = (c: number) => new Vector3().fromBufferAttribute(pos, t * 3 + c);
+    const bary = Triangle.getBarycoord(objeto.worldToLocal(punto.clone()), esquina(0), esquina(1), esquina(2), new Vector3());
+    return bary ? nombreEtiqueta(etiquetaEn(musculos, t, [bary.x, bary.y, bary.z])) : null;
+  };
   const materiales = useMemo(crearMaterialesGrasa, []);
   const redibujar = usarRedibujar();
   useEffect(
@@ -468,6 +545,32 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
     },
     [materiales],
   );
+
+  // Músculos anatómicos (cuando terminan de bajar) sobre el cuerpo pintado.
+  const anatomicos = usarMusculosAnatomicos(cuerpo);
+  const geoAnatomica = useMemo(() => anatomicos && anatomicos.sexo === cuerpo.sexo ? crearGeometriaAnatomica(anatomicos) : null, [anatomicos, cuerpo.sexo]);
+  // Debajo, el cuerpo sin grasa con los músculos pintados, hundido unos
+  // milímetros y algo más oscuro: donde entre músculo y músculo queda un hueco
+  // se ve el mismo músculo, en sombra (y en manos, rodillas y tibia, tendón).
+  const matsAnatomicos = useMemo(() => ({ musculo: crearMaterialAnatomico(), soporte: marcarDentro(crearMaterialMusculo({ hundir: 0.006, luz: 0.8 })) }), []);
+  useEffect(() => () => geoAnatomica?.dispose(), [geoAnatomica]);
+  useEffect(
+    () => () => {
+      matsAnatomicos.musculo.dispose();
+      matsAnatomicos.soporte.dispose();
+    },
+    [matsAnatomicos],
+  );
+  useEffect(() => {
+    if (!anatomicos || !geoAnatomica || !datos.magro) return;
+    const pos = geoAnatomica.getAttribute('position') as BufferAttribute;
+    deformarMusculos(anatomicos, cuerpo.indicesTriangulos, datos.magro.pos, datos.magro.normales, pos.array as Float32Array);
+    pos.needsUpdate = true;
+    geoAnatomica.computeVertexNormals();
+    geoAnatomica.computeBoundingSphere();
+    matsAnatomicos.soporte.userData.tabla.value = tabla;
+    redibujar();
+  }, [anatomicos, geoAnatomica, matsAnatomicos, tabla, cuerpo, datos, redibujar]);
   useEffect(() => {
     redibujar();
     volcar(exterior, datos.cuerpo);
@@ -491,6 +594,39 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
       </mesh>
     );
   }
+  const grasa = (
+    <>
+      {/* La grasa no se puede tocar: el clic pasa al músculo de abajo. */}
+      <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} raycast={() => null} />
+      <mesh geometry={exterior} material={materiales.encima} renderOrder={2} raycast={() => null} />
+    </>
+  );
+  if (anatomicos && geoAnatomica) {
+    return (
+      <>
+        <group
+          onClick={(e) => {
+            // Un clic (no un arrastre para girar) dice qué músculo es. Se ve lo
+            // más cercano: el músculo o, donde queda hundido, el soporte pintado
+            // (que se dibuja 6 mm más adentro de donde lo toca el rayo).
+            if (e.delta > 6) return;
+            e.stopPropagation();
+            const musculo = e.intersections.find((i) => i.object.userData.tipo === 'musculo');
+            const soporte = e.intersections.find((i) => i.object.userData.tipo === 'soporte');
+            if (musculo?.face && (!soporte || musculo.distance < soporte.distance + 0.008)) {
+              set({ musculoTocado: nombrePieza(anatomicos, musculo.face.a) });
+            } else if (soporte?.faceIndex != null) {
+              set({ musculoTocado: nombreEnSoporte(soporte.object, soporte.point, soporte.faceIndex) });
+            }
+          }}
+        >
+          <mesh geometry={magro} material={matsAnatomicos.soporte} userData={{ tipo: 'soporte' }} />
+          <mesh geometry={geoAnatomica} material={matsAnatomicos.musculo} userData={{ tipo: 'musculo' }} />
+        </group>
+        {grasa}
+      </>
+    );
+  }
   return (
     <>
       <mesh
@@ -500,17 +636,10 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
           // Un clic (no un arrastre para girar) dice qué músculo es.
           if (e.delta > 6 || e.faceIndex == null) return;
           e.stopPropagation();
-          const t = e.faceIndex;
-          const pos = magro.getAttribute('position');
-          const esquina = (c: number) => new Vector3().fromBufferAttribute(pos, t * 3 + c);
-          const bary = Triangle.getBarycoord(e.object.worldToLocal(e.point.clone()), esquina(0), esquina(1), esquina(2), new Vector3());
-          if (!bary) return;
-          set({ musculoTocado: nombreEtiqueta(etiquetaEn(musculos, t, [bary.x, bary.y, bary.z])) });
+          set({ musculoTocado: nombreEnSoporte(e.object, e.point, e.faceIndex) });
         }}
       />
-      {/* La grasa no se puede tocar: el clic pasa al músculo de abajo. */}
-      <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} raycast={() => null} />
-      <mesh geometry={exterior} material={materiales.encima} renderOrder={2} raycast={() => null} />
+      {grasa}
     </>
   );
 }
