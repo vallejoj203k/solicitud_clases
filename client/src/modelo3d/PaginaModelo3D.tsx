@@ -2,12 +2,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { BufferAttribute, BufferGeometry, Color } from 'three';
+import {
+  AlwaysStencilFunc,
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  EqualStencilFunc,
+  MeshStandardMaterial,
+  NotEqualStencilFunc,
+  ReplaceStencilOp,
+  ShaderMaterial,
+} from 'three';
 import { IconoAtras } from '../components/Iconos.jsx';
 import { cargarCuerpo } from './cargar';
-import { aplicarMorphs, estatura } from './motor';
-import { controlesLocales, pesosLocales, pesosMacro, type ControlLocal } from './controles';
-import { COLOR_SEGMENTO } from './config';
+import { aplicarMorphs, contenerDentro, estatura } from './motor';
+import { controlesLocales, pesosLocales, pesosMacro, type ControlLocal, type ControlesMacro } from './controles';
+import { COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO } from './config';
 import { useVisor } from './estado';
 import type { CuerpoBase, Sexo } from './tipos';
 
@@ -39,7 +49,7 @@ export default function PaginaModelo3D() {
     <div className="h-dvh flex flex-col md:landscape:flex-row overflow-hidden bg-carbon-900">
       <div className="relative h-[55%] md:landscape:h-full md:landscape:flex-1 min-h-0">
         {cuerpo ? (
-          <Canvas camera={{ position: [0, 1.0, 3.4], fov: 35 }} dpr={[1, 2]}>
+          <Canvas camera={{ position: [0, 1.0, 3.4], fov: 35 }} dpr={[1, 2]} gl={{ stencil: true }}>
             <color attach="background" args={['#0F1115']} />
             <hemisphereLight args={['#ffffff', '#3a3f4a', 0.9]} />
             <directionalLight position={[2.5, 4, 3]} intensity={1.6} />
@@ -71,41 +81,146 @@ export default function PaginaModelo3D() {
 
 /* ------------------------------------------------------------- Cuerpo 3D */
 
+/** Geometría con el orden de vértices de MakeHuman; `color` = segmento. */
+function crearGeometria(cuerpo: CuerpoBase) {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(cuerpo.posiciones), 3));
+  g.setIndex(new BufferAttribute(cuerpo.indicesTriangulos, 1));
+  const colores = new Float32Array(cuerpo.segmentos.length * 3);
+  const c = new Color();
+  cuerpo.segmentos.forEach((s, i) => {
+    c.set(COLOR_SEGMENTO[cuerpo.meta.segmentos.nombres[s]] ?? '#ffffff');
+    colores.set([c.r, c.g, c.b], i * 3);
+  });
+  g.setAttribute('color', new BufferAttribute(colores, 3));
+  return g;
+}
+
+function volcar(geometria: BufferGeometry, pos: Float32Array) {
+  const attr = geometria.getAttribute('position') as BufferAttribute;
+  (attr.array as Float32Array).set(pos);
+  attr.needsUpdate = true;
+  geometria.computeVertexNormals();
+  geometria.computeBoundingSphere();
+}
+
+/**
+ * PROTOTIPO del cuerpo sin grasa: los mismos controles, con el peso de
+ * MakeHuman al mínimo y los controles de grasa sin aumentar. En la fase 2 lo
+ * reemplaza el solver, alimentado con la masa libre de grasa del scanner.
+ */
+const MEDIDAS_DE_GRASA = new Set(['cintura', 'cadera', 'pecho', 'cuello', 'barriga']);
+function controlesMagros(macro: ControlesMacro, locales: Record<string, number>, controles: ControlLocal[]) {
+  const l: Record<string, number> = {};
+  for (const c of controles) {
+    const v = locales[c.clave] ?? 0;
+    const esGrasa = c.grupo === 'grasa' || c.clave.endsWith('_grasa') || MEDIDAS_DE_GRASA.has(c.clave);
+    l[c.clave] = esGrasa ? Math.min(v, 0) : v;
+  }
+  return { macro: { ...macro, peso: 0 }, locales: l };
+}
+
+/**
+ * Vista "grasa sobre músculo", la versión 3D de la silueta negra con borde
+ * amarillo: el cuerpo sin grasa marca el stencil; la capa de grasa se pinta
+ * casi opaca donde NO hay cuerpo sin grasa detrás (el borde que sobresale del
+ * contorno, desde cualquier ángulo) y muy tenue por encima de él.
+ */
+function crearMaterialesGrasa() {
+  const magro = new MeshStandardMaterial({ color: COLOR_MAGRO, roughness: 0.6, metalness: 0 });
+  magro.stencilWrite = true;
+  magro.stencilRef = 1;
+  magro.stencilFunc = AlwaysStencilFunc;
+  magro.stencilZPass = ReplaceStencilOp;
+
+  const capa = (opacidad: number, borde: number, dentro: boolean) => {
+    const m = new ShaderMaterial({
+      uniforms: { color: { value: new Color(COLOR_GRASA) }, opacidad: { value: opacidad }, borde: { value: borde } },
+      vertexShader: `
+        varying vec3 vN;
+        varying vec3 vV;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vN = normalize(normalMatrix * normal);
+          vV = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        uniform vec3 color;
+        uniform float opacidad;
+        uniform float borde;
+        varying vec3 vN;
+        varying vec3 vV;
+        void main() {
+          float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+          float luz = 0.72 + 0.28 * max(dot(normalize(vN), normalize(vec3(0.4, 0.8, 0.6))), 0.0);
+          gl_FragColor = vec4(color * luz, mix(opacidad, borde, pow(f, 2.0)));
+          #include <colorspace_fragment>
+        }`,
+      transparent: true,
+      depthWrite: false,
+    });
+    m.stencilWrite = true; // en three, activa la prueba de stencil
+    m.stencilRef = 1;
+    m.stencilFunc = dentro ? EqualStencilFunc : NotEqualStencilFunc;
+    return m;
+  };
+
+  return { magro, fuera: capa(0.9, 1.0, false), encima: capa(0.07, 0.35, true) };
+}
+
 function Cuerpo({ cuerpo, onMedida }: { cuerpo: CuerpoBase; onMedida: (m: { ms: number; estaturaCm: number }) => void }) {
   const macro = useVisor((s) => s.macro);
   const locales = useVisor((s) => s.locales);
   const verSegmentos = useVisor((s) => s.verSegmentos);
+  const verGrasa = useVisor((s) => s.verGrasa);
   const controles = useMemo(() => controlesLocales(cuerpo.meta), [cuerpo]);
   const destino = useRef<Float32Array>(new Float32Array(cuerpo.posiciones.length));
+  const destinoMagro = useRef<Float32Array>(new Float32Array(cuerpo.posiciones.length));
 
-  const geometria = useMemo(() => {
-    const g = new BufferGeometry();
-    g.setAttribute('position', new BufferAttribute(new Float32Array(cuerpo.posiciones), 3));
-    g.setIndex(new BufferAttribute(cuerpo.indicesTriangulos, 1));
-    const colores = new Float32Array(cuerpo.segmentos.length * 3);
-    const c = new Color();
-    cuerpo.segmentos.forEach((s, i) => {
-      c.set(COLOR_SEGMENTO[cuerpo.meta.segmentos.nombres[s]] ?? '#ffffff');
-      colores.set([c.r, c.g, c.b], i * 3);
-    });
-    g.setAttribute('color', new BufferAttribute(colores, 3));
-    destino.current = new Float32Array(cuerpo.posiciones.length);
-    return g;
-  }, [cuerpo]);
-
+  const geometria = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
+  const geometriaMagra = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
+  const materiales = useMemo(crearMaterialesGrasa, []);
   useEffect(() => () => geometria.dispose(), [geometria]);
+  useEffect(() => () => geometriaMagra.dispose(), [geometriaMagra]);
+  useEffect(
+    () => () => {
+      materiales.magro.dispose();
+      materiales.fuera.dispose();
+      materiales.encima.dispose();
+    },
+    [materiales],
+  );
 
   useEffect(() => {
     const t0 = performance.now();
     const pesos = { ...pesosMacro(macro, cuerpo.sexo), ...pesosLocales(locales, controles) };
     const pos = aplicarMorphs(cuerpo, pesos, destino.current);
-    const attr = geometria.getAttribute('position') as BufferAttribute;
-    (attr.array as Float32Array).set(pos);
-    attr.needsUpdate = true;
-    geometria.computeVertexNormals();
-    geometria.computeBoundingSphere();
+    volcar(geometria, pos);
     onMedida({ ms: performance.now() - t0, estaturaCm: estatura(pos) * 100 });
   }, [cuerpo, geometria, macro, locales, controles, onMedida]);
+
+  useEffect(() => {
+    if (!verGrasa) return;
+    const m = controlesMagros(macro, locales, controles);
+    const pesos = { ...pesosMacro(m.macro, cuerpo.sexo), ...pesosLocales(m.locales, controles) };
+    const magro = aplicarMorphs(cuerpo, pesos, destinoMagro.current);
+    // El efecto del cuerpo completo corre antes (mismo render, declarado antes):
+    // sus normales ya están al día.
+    const exterior = geometria.getAttribute('position').array as Float32Array;
+    const normales = geometria.getAttribute('normal').array as Float32Array;
+    volcar(geometriaMagra, contenerDentro(magro, exterior, normales));
+  }, [cuerpo, geometria, geometriaMagra, macro, locales, controles, verGrasa]);
+
+  if (verGrasa) {
+    return (
+      <>
+        <mesh geometry={geometriaMagra} material={materiales.magro} />
+        <mesh geometry={geometria} material={materiales.fuera} renderOrder={1} />
+        <mesh geometry={geometria} material={materiales.encima} renderOrder={2} />
+      </>
+    );
+  }
 
   return (
     <mesh geometry={geometria}>
@@ -131,7 +246,8 @@ const TITULO_GRUPO: Record<string, string> = {
 };
 
 function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: number; estaturaCm: number } }) {
-  const { sexo, macro, locales, verSegmentos, setSexo, setMacro, setLocal, setVerSegmentos, reiniciar } = useVisor();
+  const { sexo, macro, locales, verSegmentos, verGrasa, setSexo, setMacro, setLocal, setVerSegmentos, setVerGrasa, reiniciar } =
+    useVisor();
   const controles = useMemo(() => (cuerpo ? controlesLocales(cuerpo.meta) : []), [cuerpo]);
   const grupos = useMemo(() => {
     const g: Record<string, ControlLocal[]> = {};
@@ -192,6 +308,27 @@ function Panel({ cuerpo, medida }: { cuerpo: CuerpoBase | null; medida: { ms: nu
               </li>
             ))}
           </ul>
+        )}
+
+        <label className="flex items-center gap-3 text-sm">
+          <input type="checkbox" checked={verGrasa} onChange={(e) => setVerGrasa(e.target.checked)} />
+          Grasa sobre músculo (prototipo)
+        </label>
+        {verGrasa && (
+          <div className="space-y-1.5 text-xs text-humo-300">
+            <p className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-sm border border-carbon-600" style={{ background: COLOR_MAGRO }} />
+              Cuerpo sin grasa (músculo, hueso, órganos)
+            </p>
+            <p className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_GRASA }} />
+              Grasa
+            </p>
+            <p className="text-[11px] text-humo-500">
+              Por ahora el cuerpo sin grasa se aproxima con el peso al mínimo. En la fase 2 saldrá de la masa libre de
+              grasa del scanner.
+            </p>
+          </div>
         )}
 
         <Seccion titulo="Macro (MakeHuman)">
