@@ -175,6 +175,7 @@ export function Panel(props: DatosPanel) {
         </div>
 
         <p className="text-[11px] text-humo-500">Datos de referencia deportiva, no para fines médicos.</p>
+        <p className="text-[11px] text-humo-500">Modelo del cuerpo esculpido: Floriane Legros-Collard (Sketchfab), adaptado a cada cliente.</p>
       </div>
     </aside>
   );

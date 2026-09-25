@@ -83,6 +83,31 @@ normalizado (`KHR_mesh_quantization`, error < 0,03 mm) y cada bufferView con
 `EXT_meshopt_compression`. El navegador los lee con el `MeshoptDecoder` que trae
 three.js, sin descargar nada de otro sitio.
 
+## Cuerpo esculpido
+
+La figura que se ve es la escultura "Muscle Male" / "Muscle Female" de
+Floriane Legros-Collard (`images/2284-legroscollardfloriane-*/source/*.fbx`),
+atada al cuerpo de MakeHuman para que siga las medidas de cada cliente:
+
+```bash
+.blenv/bin/python tools/export_escultura.py --salida tools/build \
+  --pesos ruta/a/mpfb2/src/mpfb/data/rigs/standard/weights.default.json
+npm run modelo3d:escultura     # simplifica (~150 000 triángulos), comprime y copia
+```
+
+1. Escala la escultura a la estatura del cuerpo base y centra el tronco.
+2. Registro no rígido: el cuerpo base se deforma hasta calzar sobre la
+   escultura (puntos más cercanos en las dos direcciones + Laplaciano, rigidez
+   decreciente). Dedos, ojos y boca de MakeHuman quedan libres (siguen a sus
+   vecinos): la escultura no los tiene igual.
+3. Ata cada vértice de la escultura a ese cuerpo calzado (solo a triángulos
+   fuera de dedos, ojos y boca): triángulo, baricéntricas, altura y residuo.
+4. Cabeza, manos y pies llevan además su pieza y un peso (del esqueleto): en el
+   navegador se mueven enteros con la semejanza que mejor lleva su zona del
+   cuerpo calzado a la del cliente.
+
+Requiere haber corrido antes `export_bodies.py` (usa `tools/build/cuerpo-*.glb`).
+
 ## Licencias
 
 - **Assets de MakeHuman / MPFB2** (basemesh, targets, pesos): **CC0 1.0**.
@@ -94,6 +119,11 @@ three.js, sin descargar nada de otro sitio.
 - **Iluminación** (`client/public/modelo3d/estudio.hdr`): HDRI "Studio Small 03" de
   Poly Haven (Sergej Majboroda), **CC0**, versión 1k. Se descargó de la copia de
   `pmndrs/drei-assets` y se sirve desde la app, sin depender de ningún servicio.
+- **Cuerpo esculpido** (`images/2284-*`, `client/public/modelo3d/escultura-*`):
+  modelos de Floriane Legros-Collard publicados en Sketchfab (colección "Base
+  Mesh - Full Body - CC"). El crédito se muestra en la página. Conviene
+  confirmar la licencia exacta en su página de Sketchfab (CC BY pide crédito;
+  si fuera CC BY-NC no se puede usar con fines comerciales).
 - No se usa SMPL, SMPL-X ni STAR (licencias no comerciales), ni el código del
   "Ruler" de MakeHuman 1.x (AGPL): los landmarks salen de los targets CC0.
 

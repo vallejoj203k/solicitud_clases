@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Line, OrbitControls } from '@react-three/drei';
 import {
@@ -24,7 +24,8 @@ import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
 import type { SegmentoInforme } from './cliente';
 import { normalesVertice } from './geometria';
-import { ojos, prepararPulido, pulirAtributo, pulirPosiciones, type Pulido } from './pulido';
+import { atributoEscultura, cargarEscultura, posicionesEscultura, type Escultura } from './escultura';
+import { ojos, prepararPulido, pulirAtributo, pulirPosiciones } from './pulido';
 import type { CuerpoBase } from './tipos';
 
 /**
@@ -204,40 +205,71 @@ function Camara({ lado }: { lado: boolean }) {
 /* ------------------------------------------------------------ Geometrías */
 
 /**
- * Geometría de un cuerpo en la malla que se muestra (subdividida y con cara de
- * maniquí, ver pulido.ts); el pulido va en userData para volcar los datos.
+ * Malla con la que se muestra un cuerpo: la escultura atada al cuerpo (cuando
+ * ya bajó, ver escultura.ts) o, mientras tanto, el cuerpo de MakeHuman pulido
+ * (pulido.ts). Las dos se rearman desde las posiciones del cuerpo que se mide.
  */
-function crearGeometria(cuerpo: CuerpoBase) {
+interface Forma {
+  nTotal: number;
+  indices: Uint32Array;
+  esEscultura: boolean;
+  posiciones: (pos: ArrayLike<number>, dst: Float32Array<ArrayBuffer>) => void;
+  atributo: (valores: ArrayLike<number>, k: number, dst: Float32Array<ArrayBuffer>) => void;
+}
+
+function formaPulida(cuerpo: CuerpoBase): Forma {
   const p = prepararPulido(cuerpo);
+  return {
+    nTotal: p.nTotal,
+    indices: p.indices,
+    esEscultura: false,
+    posiciones: (pos, dst) => pulirPosiciones(p, pos, dst),
+    atributo: (valores, k, dst) => pulirAtributo(p, valores, k, dst),
+  };
+}
+
+function formaEscultura(cuerpo: CuerpoBase, e: Escultura): Forma {
+  return {
+    nTotal: e.nTotal,
+    indices: e.indices,
+    esEscultura: true,
+    posiciones: (pos, dst) => posicionesEscultura(e, cuerpo.indicesTriangulos, pos, dst),
+    atributo: (valores, k, dst) => atributoEscultura(e, cuerpo.indicesTriangulos, valores, k, dst),
+  };
+}
+
+function crearGeometria(cuerpo: CuerpoBase, forma: Forma) {
   const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(pulirPosiciones(p, cuerpo.posiciones), 3));
-  g.setAttribute('normal', new BufferAttribute(new Float32Array(p.nTotal * 3), 3));
-  g.setIndex(new BufferAttribute(p.indices, 1));
+  const pos = new Float32Array(forma.nTotal * 3);
+  forma.posiciones(cuerpo.posiciones, pos);
+  g.setAttribute('position', new BufferAttribute(pos, 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(forma.nTotal * 3), 3));
+  g.setIndex(new BufferAttribute(forma.indices, 1));
   g.computeVertexNormals();
-  g.userData.pulido = p;
+  g.userData.forma = forma;
   return g;
 }
 
 function volcar(geometria: BufferGeometry, malla: Malla) {
-  const p = geometria.userData.pulido as Pulido;
+  const forma = geometria.userData.forma as Forma;
   const pos = geometria.getAttribute('position') as BufferAttribute;
-  pulirPosiciones(p, malla.pos, pos.array as Float32Array<ArrayBuffer>);
+  forma.posiciones(malla.pos, pos.array as Float32Array<ArrayBuffer>);
   pos.needsUpdate = true;
   const nor = geometria.getAttribute('normal') as BufferAttribute;
-  normalesVertice(pos.array as Float32Array, p.indices, nor.array as Float32Array);
+  normalesVertice(pos.array as Float32Array, forma.indices, nor.array as Float32Array);
   nor.needsUpdate = true;
   geometria.computeBoundingSphere();
 }
 
 /** Atributo por vértice del cuerpo (colores, espesor) llevado a la geometría que se muestra. */
 function ponerAtributo(geometria: BufferGeometry, nombre: string, valores: Float32Array, k: number) {
-  const p = geometria.userData.pulido as Pulido;
+  const forma = geometria.userData.forma as Forma;
   let attr = geometria.getAttribute(nombre) as BufferAttribute | undefined;
   if (!attr || attr.itemSize !== k) {
-    attr = new BufferAttribute(new Float32Array(p.nTotal * k), k);
+    attr = new BufferAttribute(new Float32Array(forma.nTotal * k), k);
     geometria.setAttribute(nombre, attr);
   }
-  pulirAtributo(p, valores, k, attr.array as Float32Array<ArrayBuffer>);
+  forma.atributo(valores, k, attr.array as Float32Array<ArrayBuffer>);
   attr.needsUpdate = true;
 }
 
@@ -249,8 +281,30 @@ function usarRedibujar() {
   return useThree((s) => s.invalidate);
 }
 
+/** La escultura del sexo del cuerpo cuando termina de bajar (null mientras tanto o si falla). */
+function usarEscultura(cuerpo: CuerpoBase) {
+  const [e, setE] = useState<Escultura | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    setE(null);
+    cargarEscultura(cuerpo.sexo)
+      .then((r) => vivo && setE(r))
+      // Sin escultura se sigue mostrando el cuerpo pulido.
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [cuerpo.sexo]);
+  return e && e.sexo === cuerpo.sexo ? e : null;
+}
+
+/**
+ * Geometría de un cuerpo: la escultura cuando ya bajó (todas las capas, así la
+ * grasa y el fantasma calzan con sus manos y su cabeza) o el cuerpo pulido.
+ */
 function usarGeometria(cuerpo: CuerpoBase) {
-  const g = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
+  const esc = usarEscultura(cuerpo);
+  const g = useMemo(() => crearGeometria(cuerpo, esc ? formaEscultura(cuerpo, esc) : formaPulida(cuerpo)), [cuerpo, esc]);
   useEffect(() => () => g.dispose(), [g]);
   return g;
 }
@@ -324,7 +378,7 @@ function CuerpoSolido({ cuerpo, malla, color, colores, colorOjos }: { cuerpo: Cu
   return (
     <>
       <mesh geometry={g} material={material} />
-      <Ojos malla={malla} material={materialOjos} />
+      {!(g.userData.forma as Forma).esEscultura && <Ojos malla={malla} material={materialOjos} />}
     </>
   );
 }
@@ -495,7 +549,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
   return (
     <>
       <mesh geometry={magro} material={materiales.magro} />
-      <Ojos malla={datos.magro} material={materiales.magro} />
+      {!(magro.userData.forma as Forma).esEscultura && <Ojos malla={datos.magro} material={materiales.magro} />}
       <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} />
       <mesh geometry={exterior} material={materiales.encima} renderOrder={2} />
     </>
