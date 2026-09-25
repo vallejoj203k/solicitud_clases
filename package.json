@@ -25,7 +25,6 @@
     "admin:listar": "node server/scripts/admin.mjs listar",
     "admin:crear": "node server/scripts/admin.mjs crear",
     "modelo3d:comprimir": "node tools/comprimir_glb.mjs tools/build client/public/modelo3d",
-    "modelo3d:musculos": "node tools/musculos_glb.mjs tools/build client/public/modelo3d",
     "postinstall": "npm run prisma:generate -w server"
   },
   "devDependencies": {
