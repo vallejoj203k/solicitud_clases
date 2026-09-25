@@ -77,6 +77,12 @@ if (fs.existsSync(env.clientDist)) {
     '/images',
     express.static(path.join(env.clientDist, 'images'), { maxAge: '7d', immutable: false })
   );
+  // Los archivos de Vite llevan un hash en el nombre: si cambian, cambia el
+  // nombre. Se cachean un año (el visor 3D pesa ~300 KB y no se vuelve a bajar).
+  app.use(
+    '/assets',
+    express.static(path.join(env.clientDist, 'assets'), { maxAge: '1y', immutable: true })
+  );
   app.use(express.static(env.clientDist, { maxAge: '1h', index: false }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();

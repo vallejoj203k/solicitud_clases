@@ -54,6 +54,7 @@ export function Escena(props: {
   const colorCuerpo = useVisor((s) => s.colorCuerpo);
   const calorDe = useVisor((s) => s.calorDe);
   const mezcla = useVisor((s) => s.mezcla);
+  const giro = useVisor((s) => s.giro);
   const lado = vista === 'comparar' && comparar === 'lado' && !!objetivo;
 
   // Mezcla actual -> objetivo para la transición de la vista fantasma (lineal:
@@ -102,8 +103,10 @@ export function Escena(props: {
       <Environment files="/modelo3d/estudio.hdr" environmentIntensity={0.3} />
       <directionalLight position={[2.5, 4, 3]} intensity={1.1} />
       <directionalLight position={[-3, 2, -2]} intensity={0.35} />
-      {contenido}
-      {verAnillos && actual && !lado && <AnillosMedida anillos={actual.anillos} medidas={actual.medidas.circunferenciasCm} />}
+      <group rotation-y={giro}>
+        {contenido}
+        {verAnillos && actual && !lado && <AnillosMedida anillos={actual.anillos} medidas={actual.medidas.circunferenciasCm} />}
+      </group>
       <ContactShadows position={[0, 0.001, 0]} scale={lado ? 4 : 2.4} blur={2.4} opacity={0.55} far={1.2} resolution={512} color="#000000" />
       <mesh rotation-x={-Math.PI / 2} position-y={-0.002}>
         <circleGeometry args={[lado ? 1.6 : 0.95, 64]} />
@@ -159,6 +162,14 @@ function volcar(geometria: BufferGeometry, malla: Malla) {
   geometria.computeBoundingSphere();
 }
 
+/**
+ * El canvas renderiza a demanda (solo cuando algo cambia): tras copiar datos a
+ * una geometría hay que pedir un cuadro nuevo.
+ */
+function usarRedibujar() {
+  return useThree((s) => s.invalidate);
+}
+
 function usarGeometria(cuerpo: CuerpoBase) {
   const g = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
   useEffect(() => () => g.dispose(), [g]);
@@ -196,11 +207,16 @@ function mezclar(a: ResultadoMotor, b: ResultadoMotor, t: number): DatosCuerpo {
 /** Material de piel mate: roughness alta y un sheen suave en el contorno. */
 function CuerpoSolido({ cuerpo, malla, color, colores }: { cuerpo: CuerpoBase; malla: Malla; color?: string; colores?: Float32Array }) {
   const g = usarGeometria(cuerpo);
-  useEffect(() => volcar(g, malla), [g, malla]);
+  const redibujar = usarRedibujar();
+  useEffect(() => {
+    volcar(g, malla);
+    redibujar();
+  }, [g, malla, redibujar]);
   useEffect(() => {
     if (!colores) return;
     g.setAttribute('color', new BufferAttribute(colores, 3));
-  }, [g, colores]);
+    redibujar();
+  }, [g, colores, redibujar]);
   return (
     <mesh geometry={g}>
       <meshPhysicalMaterial
@@ -329,6 +345,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
   const exterior = usarGeometria(cuerpo);
   const magro = usarGeometria(cuerpo);
   const materiales = useMemo(crearMaterialesGrasa, []);
+  const redibujar = usarRedibujar();
   useEffect(
     () => () => {
       materiales.magro.dispose();
@@ -338,6 +355,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
     [materiales],
   );
   useEffect(() => {
+    redibujar();
     volcar(exterior, datos.cuerpo);
     if (datos.magro) volcar(magro, datos.magro);
     if (datos.espesor) {
@@ -349,7 +367,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
       (attr.array as Float32Array).set(datos.espesor);
       attr.needsUpdate = true;
     }
-  }, [datos, exterior, magro]);
+  }, [datos, exterior, magro, redibujar]);
 
   if (!datos.magro) {
     return (
@@ -370,7 +388,11 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
 /** El cuerpo actual como un fantasma translúcido (vista comparar). */
 function Fantasma({ cuerpo, malla }: { cuerpo: CuerpoBase; malla: Malla }) {
   const g = usarGeometria(cuerpo);
-  useEffect(() => volcar(g, malla), [g, malla]);
+  const redibujar = usarRedibujar();
+  useEffect(() => {
+    volcar(g, malla);
+    redibujar();
+  }, [g, malla, redibujar]);
   const material = useMemo(
     () =>
       new ShaderMaterial({

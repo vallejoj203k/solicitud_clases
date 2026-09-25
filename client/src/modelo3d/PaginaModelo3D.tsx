@@ -23,6 +23,9 @@ import type { CuerpoBase } from './tipos';
  * Todo se calcula en el navegador y no se guarda nada.
  */
 
+/** Número con coma decimal (y sin decimales de más). */
+const coma = (x: number, d?: number) => (d === undefined ? String(x) : x.toFixed(d)).replace('.', ',');
+
 const NOMBRE_VISTA = { grasa: 'Grasa y músculo', realista: 'Realista', calor: 'Mapa de calor', comparar: 'Actual y objetivo' };
 
 export default function PaginaModelo3D() {
@@ -115,11 +118,42 @@ export default function PaginaModelo3D() {
     setTimeout(() => setCapturando(null), 2500);
   };
 
+  useEffect(() => {
+    const antes = document.title;
+    document.title = 'Resultado 3D · Gimnasio Mega Vital';
+    return () => {
+      document.title = antes;
+    };
+  }, []);
+
+  // Teclado: flechas para girar el cuerpo, Inicio para volver al frente.
+  const giro = useVisor((s) => s.giro);
+  const setVisor = useVisor((s) => s.set);
+  const alTeclado = (e: React.KeyboardEvent) => {
+    const paso = Math.PI / 12;
+    if (e.key === 'ArrowLeft') setVisor({ giro: giro - paso });
+    else if (e.key === 'ArrowRight') setVisor({ giro: giro + paso });
+    else if (e.key === 'Home') setVisor({ giro: 0 });
+    else return;
+    e.preventDefault();
+  };
+  const descripcion = cliente
+    ? `${cliente.sexo === 'M' ? 'Hombre' : 'Mujer'} de ${coma(cliente.estatura)} cm y ${coma(cliente.peso)} kg, ${coma(cliente.pctGrasa, 1)} % de grasa. Vista: ${NOMBRE_VISTA[vista]}.`
+    : `Modelo 3D de ${sexo === 'M' ? 'hombre' : 'mujer'}. Vista: ${NOMBRE_VISTA[vista]}.`;
+
   return (
-    <div className="h-dvh flex flex-col md:landscape:flex-row overflow-hidden bg-carbon-900">
-      <div className="relative h-[55%] md:landscape:h-full md:landscape:flex-1 min-h-0">
+    <div data-modelo3d className="h-dvh flex flex-col md:landscape:flex-row overflow-hidden bg-carbon-900">
+      <div
+        className="relative h-[55%] md:landscape:h-full md:landscape:flex-1 min-h-0"
+        tabIndex={0}
+        role="group"
+        aria-roledescription="visor 3D"
+        aria-label={`${descripcion} Flechas izquierda y derecha para girar, Inicio para volver al frente.`}
+        onKeyDown={alTeclado}
+      >
         {cuerpo ? (
           <Canvas
+            frameloop="demand"
             camera={{ position: [0, 1.0, 3.4], fov: 35 }}
             dpr={[1, 2]}
             gl={{ stencil: true, preserveDrawingBuffer: true }}

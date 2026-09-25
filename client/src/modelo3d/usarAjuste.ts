@@ -55,8 +55,15 @@ export function usarAjuste(cuerpo: CuerpoBase | null, medidasModelo: MutableRefO
       setAjustando(true);
       try {
         await iniciar(cuerpo);
-        const r = await obtenerMotor().ajustarCliente({ nombre: '', sexo, valores, evaluacion: {} }, mantener);
-        if (mio === turno.current) aplicarAjuste(r);
+        // En dos pasos: el cuerpo completo se muestra apenas está (en un teléfono
+        // lento se nota) y el cuerpo sin grasa llega después a refinar la vista.
+        const borrador = { nombre: '', sexo, valores, evaluacion: {} };
+        const exterior = await obtenerMotor().ajustarExterior(borrador, mantener);
+        if (mio !== turno.current) return;
+        if (!exterior) return aplicarAjuste(null);
+        aplicarAjuste(exterior);
+        const completo = await obtenerMotor().ajustarSinGrasa(borrador, exterior);
+        if (mio === turno.current) aplicarAjuste(completo);
       } finally {
         if (mio === turno.current) setAjustando(false);
       }

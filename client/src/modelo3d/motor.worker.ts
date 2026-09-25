@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { expose, transfer } from 'comlink';
 import { ajustar, controlesSinGrasa, fraccionVolumenGrasa, type ResultadoAjuste } from './ajuste';
-import type { Borrador } from './cliente';
+import type { Borrador } from './campos';
 import { entradaAjusteDe, entradaSinGrasaDe } from './objetivos';
 import { controlesLocales, pesosLocales, pesosMacro, type ControlesMacro } from './controles';
 import { normalesVertice } from './geometria';
@@ -57,15 +57,30 @@ const api = {
    * el cuerpo sin grasa. null si todavía no hay estatura y peso.
    */
   ajustarCliente(borrador: Borrador, mantener?: Record<string, number>): ResultadoCliente | null {
+    const r = api.ajustarExterior(borrador, mantener);
+    return r ? api.ajustarSinGrasa(borrador, r) : null;
+  },
+
+  /** Solo el cuerpo completo (lo que se ve primero). */
+  ajustarExterior(borrador: Borrador, mantener?: Record<string, number>): ResultadoCliente | null {
     const c = cuerpos.get(borrador.sexo);
     if (!c) throw new Error(`El cuerpo ${borrador.sexo} no está iniciado en el Worker`);
     const t0 = performance.now();
     const entrada = entradaAjusteDe(borrador, mantener);
     if (!entrada) return null;
     const exterior = ajustar(c.cuerpo, c.prep, entrada);
-    const entradaMagro = entradaSinGrasaDe(borrador, exterior, entrada);
+    return { exterior, magro: null, ms: performance.now() - t0 };
+  },
+
+  /** Completa un resultado con el cuerpo sin grasa (vista "grasa sobre músculo"). */
+  ajustarSinGrasa(borrador: Borrador, r: ResultadoCliente): ResultadoCliente {
+    const c = cuerpos.get(borrador.sexo);
+    if (!c) throw new Error(`El cuerpo ${borrador.sexo} no está iniciado en el Worker`);
+    const t0 = performance.now();
+    const entrada = entradaAjusteDe(borrador);
+    const entradaMagro = entrada ? entradaSinGrasaDe(borrador, r.exterior, entrada) : null;
     const magro = entradaMagro ? ajustar(c.cuerpo, c.prep, entradaMagro) : null;
-    return { exterior, magro, ms: performance.now() - t0 };
+    return { ...r, magro, ms: r.ms + performance.now() - t0 };
   },
 
   /**

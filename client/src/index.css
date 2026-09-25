@@ -65,3 +65,9 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Visor 3D: foco visible (teclado) en todos los controles. */
+[data-modelo3d] :focus-visible {
+  outline: 2px solid #8CC63F;
+  outline-offset: 2px;
+}

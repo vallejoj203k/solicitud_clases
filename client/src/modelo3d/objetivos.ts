@@ -1,5 +1,5 @@
 import type { EntradaAjuste, Objetivo, ResultadoAjuste } from './ajuste';
-import { leerNumero, TODOS_LOS_CAMPOS, type Borrador } from './cliente';
+import { leerNumero, TODOS_LOS_CAMPOS, type Borrador } from './campos';
 import {
   CONTROLES_DE_ESQUELETO,
   CONTROLES_DE_GRASA,
@@ -193,15 +193,6 @@ function segmentoDe(b: Borrador, s: string): { magra: number; grasa: number } | 
   const magra = numero(b, `musculo_${s}`);
   const grasa = numero(b, `grasa_${s}`);
   return magra !== undefined && grasa !== undefined ? { magra, grasa } : undefined;
-}
-
-/** Grasa corporal (kg): la escrita o peso × % de grasa. */
-function grasaDe(b: Borrador): number | undefined {
-  const grasa = numero(b, 'grasa');
-  if (grasa !== undefined) return grasa;
-  const peso = numero(b, 'peso');
-  const pct = pctGrasaDe(b);
-  return peso !== undefined && pct !== undefined ? (peso * pct) / 100 : undefined;
 }
 
 /** Peso libre de grasa (kg): el escrito o peso × (1 − % de grasa). */

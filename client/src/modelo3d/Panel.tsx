@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoAtras } from '../components/Iconos.jsx';
 import type { ClienteInput, SegmentoInforme } from './cliente';
@@ -55,14 +55,6 @@ export function Panel(props: DatosPanel) {
   const { cuerpo, resultado, cliente, tarjetas } = props;
   const { sexo, setSexo, vista, verAnillos, set } = useVisor();
   const [pestana, setPestana] = useState<Pestana>('scanner');
-  // Cuando el formulario queda completo por primera vez, se muestra el resultado.
-  const yaMostrado = useRef(false);
-  useEffect(() => {
-    if (cliente && !yaMostrado.current) {
-      yaMostrado.current = true;
-      setPestana('resultado');
-    }
-  }, [cliente]);
 
   return (
     <aside className="flex-1 md:landscape:flex-none md:landscape:w-[27rem] min-h-0 overflow-y-auto border-t md:landscape:border-t-0 md:landscape:border-l border-carbon-700 bg-carbon-800">
@@ -105,7 +97,9 @@ export function Panel(props: DatosPanel) {
                 aria-pressed={vista === clave}
                 onClick={() => set({ vista: clave })}
                 className={`rounded-lg border px-2 py-2 text-xs font-semibold ${
-                  vista === clave ? 'border-[#8CC63F] bg-[#8CC63F]/15 text-[#B5E37A]' : 'border-carbon-600 text-humo-300 hover:text-humo-100'
+                  vista === clave
+                    ? 'border-[#8CC63F] bg-[#8CC63F]/15 text-[#B5E37A]'
+                    : 'border-carbon-600 text-humo-300 hover:text-humo-100'
                 }`}
               >
                 {titulo}
@@ -120,12 +114,33 @@ export function Panel(props: DatosPanel) {
         </section>
 
         <div className="grid grid-cols-4 gap-1 rounded-xl bg-carbon-900 p-1" role="tablist" aria-label="Secciones del panel">
-          {PESTANAS.map(([clave, titulo]) => (
+          {PESTANAS.map(([clave, titulo], i) => (
             <button
               key={clave}
+              id={`pestana-${clave}`}
               role="tab"
               aria-selected={pestana === clave}
+              aria-controls="panel-pestana"
+              tabIndex={pestana === clave ? 0 : -1}
               onClick={() => setPestana(clave)}
+              onKeyDown={(e) => {
+                // Flechas / Inicio / Fin recorren las pestañas (patrón de pestañas de WAI-ARIA).
+                const n = PESTANAS.length;
+                const destino =
+                  e.key === 'ArrowRight'
+                    ? (i + 1) % n
+                    : e.key === 'ArrowLeft'
+                      ? (i + n - 1) % n
+                      : e.key === 'Home'
+                        ? 0
+                        : e.key === 'End'
+                          ? n - 1
+                          : -1;
+                if (destino < 0) return;
+                e.preventDefault();
+                setPestana(PESTANAS[destino][0]);
+                document.getElementById(`pestana-${PESTANAS[destino][0]}`)?.focus();
+              }}
               className={`rounded-lg px-1 py-2 text-[11px] font-semibold leading-tight ${
                 pestana === clave ? 'bg-carbon-600 text-humo-100' : 'text-humo-500 hover:text-humo-300'
               }`}
@@ -135,27 +150,29 @@ export function Panel(props: DatosPanel) {
           ))}
         </div>
 
-        {pestana !== 'manual' && <ResumenAjuste />}
-        {pestana === 'resultado' &&
-          (cliente ? (
-            <TarjetasResultado tarjetas={tarjetas} />
-          ) : (
-            <p className="rounded-xl border border-carbon-600 px-3 py-2.5 text-xs text-humo-300">
-              Las tarjetas de resultado aparecen cuando están los datos obligatorios del scanner (estatura, peso, grasa y el músculo
-              y la grasa de brazos y piernas).{' '}
-              <button type="button" className="font-semibold text-[#B5E37A] underline" onClick={() => setPestana('scanner')}>
-                Ir a los datos
-              </button>
-            </p>
-          ))}
-        {pestana === 'scanner' && <FormularioScanner />}
-        {pestana === 'medidas' && (
-          <>
-            <ModoMedidas />
-            <FormularioMedidas />
-          </>
-        )}
-        {pestana === 'manual' && <AjusteManual cuerpo={cuerpo} resultado={resultado} />}
+        <div id="panel-pestana" role="tabpanel" aria-labelledby={`pestana-${pestana}`} className="space-y-5">
+          {pestana !== 'manual' && <ResumenAjuste />}
+          {pestana === 'resultado' &&
+            (cliente ? (
+              <TarjetasResultado tarjetas={tarjetas} />
+            ) : (
+              <p className="rounded-xl border border-carbon-600 px-3 py-2.5 text-xs text-humo-300">
+                Las tarjetas de resultado aparecen cuando están los datos obligatorios del scanner (estatura, peso, grasa y el
+                músculo y la grasa de brazos y piernas).{' '}
+                <button type="button" className="font-semibold text-[#B5E37A] underline" onClick={() => setPestana('scanner')}>
+                  Ir a los datos
+                </button>
+              </p>
+            ))}
+          {pestana === 'scanner' && <FormularioScanner onVerResultado={() => setPestana('resultado')} />}
+          {pestana === 'medidas' && (
+            <>
+              <ModoMedidas />
+              <FormularioMedidas />
+            </>
+          )}
+          {pestana === 'manual' && <AjusteManual cuerpo={cuerpo} resultado={resultado} />}
+        </div>
 
         <p className="text-[11px] text-humo-500">Datos de referencia deportiva, no para fines médicos.</p>
       </div>
@@ -288,6 +305,11 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
 function BotonTransicion() {
   const set = useVisor((s) => s.set);
   const animar = () => {
+    // Con "reducir movimiento" en el sistema, se salta directo al objetivo.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      set({ mezcla: 1 });
+      return;
+    }
     const t0 = performance.now();
     const paso = (t: number) => {
       const x = Math.min(1, (t - t0) / 1600);
@@ -299,13 +321,27 @@ function BotonTransicion() {
     requestAnimationFrame(paso);
   };
   return (
-    <button type="button" onClick={animar} className="w-full rounded-lg border border-carbon-600 py-2 text-xs font-semibold text-humo-100 hover:border-[#8CC63F]">
+    <button
+      type="button"
+      onClick={animar}
+      className="w-full rounded-lg border border-carbon-600 py-2 text-xs font-semibold text-humo-100 hover:border-[#8CC63F]"
+    >
       ▶ Ver la transición al objetivo
     </button>
   );
 }
 
-function Alternar({ opciones, valor, onChange, etiqueta }: { opciones: [string, string][]; valor: string; onChange: (v: string) => void; etiqueta: string }) {
+function Alternar({
+  opciones,
+  valor,
+  onChange,
+  etiqueta,
+}: {
+  opciones: [string, string][];
+  valor: string;
+  onChange: (v: string) => void;
+  etiqueta: string;
+}) {
   return (
     <div className="flex items-center gap-2" role="group" aria-label={etiqueta}>
       <span className="text-xs text-humo-300">{etiqueta}</span>
@@ -381,7 +417,14 @@ function AjusteManual({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; result
         </ul>
       )}
       <Seccion titulo="Macro (MakeHuman)">
-        <Deslizador etiqueta="Músculo" min={0} max={1} paso={0.01} valor={macro.musculo} onChange={(v) => setMacro('musculo', v)} />
+        <Deslizador
+          etiqueta="Músculo"
+          min={0}
+          max={1}
+          paso={0.01}
+          valor={macro.musculo}
+          onChange={(v) => setMacro('musculo', v)}
+        />
         <Deslizador etiqueta="Peso" min={0} max={1} paso={0.01} valor={macro.peso} onChange={(v) => setMacro('peso', v)} />
         <Deslizador etiqueta="Edad (años)" min={25} max={90} paso={1} valor={macro.edad} onChange={(v) => setMacro('edad', v)} />
         <Deslizador etiqueta="Altura" min={0} max={1} paso={0.01} valor={macro.altura} onChange={(v) => setMacro('altura', v)} />
