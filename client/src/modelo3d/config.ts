@@ -14,11 +14,10 @@ export const COLOR_SEGMENTO: Record<string, string> = {
 };
 
 /**
- * Vista "grasa sobre músculo": el cuerpo sin grasa (músculo, hueso, órganos) en
- * rojo músculo y la grasa en amarillo, la convención de los diagramas de
- * composición corporal.
+ * Vista "grasa sobre músculo": la grasa en amarillo, la convención de los
+ * diagramas de composición corporal (los colores del músculo están en
+ * musculosAnatomicos.ts y musculos.ts).
  */
-export const COLOR_MAGRO = '#B04A42';
 export const COLOR_GRASA = '#F5B323';
 
 /**

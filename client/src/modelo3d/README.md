@@ -29,14 +29,16 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
   cuerpo es musculoso o gordo. La grasa visceral decide la barriga.
 - **Vista "grasa y músculo":** el cuerpo sin grasa (rojo) va dentro del
   completo; la grasa (amarillo) es la diferencia, más opaca donde es más gruesa.
-- **Músculos:** sobre el cuerpo sin grasa se dibujan 22 grupos musculares como
-  en una lámina de anatomía (`musculos.ts`). Cada vértice se asigna a un
-  músculo con reglas geométricas (segmento, altura, posición a lo largo del
-  brazo o la pierna y hacia dónde mira la superficie alisada). Luego cada
-  etiqueta se difunde por la malla y el shader elige por píxel la de más peso:
-  los bordes quedan como curvas (no en escalera por las aristas), con un surco
-  fino, relieve hacia el centro y estrías según las fibras. Tocar un músculo
-  muestra su nombre. No son modelos anatómicos: es una aproximación visual.
+- **Músculos:** los de [Z-Anatomy](https://www.z-anatomy.com) (CC BY-SA 4.0,
+  derivados de BodyParts3D), atados al cuerpo sin grasa del cliente
+  (`musculosAnatomicos.ts`): cada vértice guarda un triángulo del cuerpo, un
+  punto en él, una altura sobre la normal y un residuo tangente, así que el
+  músculo sigue la estatura, el tamaño y la forma de ese cuerpo, con la capa
+  exterior justo bajo la piel. Debajo va el mismo cuerpo sin grasa, hundido
+  6 mm, con los músculos pintados (`musculos.ts`): cubre manos, pies y cabeza y
+  los huecos entre músculos, y es lo que se ve mientras bajan los GLB (~2,4 MB).
+  Tocar un músculo muestra su nombre en español y su lado. Cómo se generan:
+  [`tools/README.md`](../../../tools/README.md#músculos-anatómicos-z-anatomy).
 - **Comparar:** el cuerpo objetivo aplica los controles de grasa y músculo del
   informe repartidos en proporción a cada segmento (`resultados.ts`).
 
@@ -46,7 +48,8 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 | --- | --- |
 | `PaginaModelo3D.tsx` | Página: carga el cuerpo, lanza ajustes y cálculos, captura PNG, teclado. |
 | `Escena.tsx` | Escena 3D: modos de vista, materiales, anillos con etiquetas, cámara, HDRI. |
-| `musculos.ts` | Grupos musculares sobre el cuerpo sin grasa (reglas, difusión, tabla para el shader). |
+| `musculosAnatomicos.ts` | Músculos de Z-Anatomy: carga, colores, estrías y deformación con el cuerpo. |
+| `musculos.ts` | Músculos pintados sobre el cuerpo sin grasa (reglas, difusión, tabla para el shader). |
 | `Panel.tsx`, `FormularioScanner.tsx`, `TarjetasResultado.tsx`, `ResumenAjuste.tsx` | Interfaz. |
 | `campos.ts` / `cliente.ts` | Campos del informe; validación (zod) y avisos de coherencia. |
 | `objetivos.ts` | Datos del formulario → objetivos y puntos de partida del solver. |
@@ -67,13 +70,13 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 - `CURVA_VISCERAL`: grasa visceral → barriga.
 - Densidades por segmento (1,06 / 0,90) y total (1,1).
 - `ESCALA_*`, `MAPA_CALOR`: tarjetas y mapa de calor.
-- `COLOR_MAGRO`, `COLOR_GRASA`, `COLORES_CUERPO`: colores.
-- Los colores y reglas de cada músculo están en `musculos.ts` (`GRUPOS`).
+- `COLOR_GRASA`, `COLORES_CUERPO`: colores. Los del músculo están en
+  `musculosAnatomicos.ts` y los de los músculos pintados en `musculos.ts` (`GRUPOS`).
 
 ## Pruebas
 
 ```bash
-npm test -w client        # 72 tests: geometría, medición, solver, músculos, formulario, resultados
+npm test -w client        # 78 tests: geometría, medición, solver, músculos, formulario, resultados
 npm run typecheck -w client
 ```
 
@@ -85,7 +88,8 @@ musculoso, y que los dos ajustes tarden menos de 300 ms.
 ## Rendimiento y accesibilidad
 
 - El visor se descarga aparte (~310 KB comprimidos), solo al entrar a la
-  página; los archivos con hash se cachean un año.
+  página; los archivos con hash se cachean un año. Los músculos (~2,4 MB) bajan
+  después del cuerpo; moverlos con el cuerpo cuesta ~30 ms por cambio.
 - El canvas dibuja solo cuando algo cambia (en reposo no gasta batería).
 - Modelos de ~0,9 MB (meshopt) y HDRI de 0,5 MB.
 - Teclado: flechas para girar el modelo, flechas entre pestañas, foco visible;

@@ -28,7 +28,10 @@ function cubrir(ctx: CanvasRenderingContext2D, img: CanvasImageSource & { width:
   ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, w, h);
 }
 
-export async function componerCaptura(lienzo3d: HTMLCanvasElement, datos: { nombre?: string; vista: string; tarjetas: Tarjeta[] }): Promise<Blob> {
+export async function componerCaptura(
+  lienzo3d: HTMLCanvasElement,
+  datos: { nombre?: string; vista: string; tarjetas: Tarjeta[]; credito?: string },
+): Promise<Blob> {
   const c = document.createElement('canvas');
   c.width = ANCHO;
   c.height = ALTO;
@@ -97,6 +100,13 @@ export async function componerCaptura(lienzo3d: HTMLCanvasElement, datos: { nomb
   ctx.fillStyle = '#8A93A3';
   ctx.font = '500 22px Inter, system-ui, sans-serif';
   ctx.fillText('Datos de referencia deportiva, no para fines médicos.', 48, ALTO - 30);
+  if (datos.credito) {
+    // Atribución que pide la licencia de los modelos (CC BY-SA).
+    ctx.font = '500 18px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(datos.credito, ANCHO - 48, ALTO - 30);
+    ctx.textAlign = 'left';
+  }
 
   return new Promise((ok, mal) => c.toBlob((b) => (b ? ok(b) : mal(new Error('No se pudo crear la imagen'))), 'image/png'));
 }

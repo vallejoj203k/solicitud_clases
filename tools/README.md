@@ -9,6 +9,8 @@ la lista de morphs, los landmarks o la versión de MPFB.
 | --- | --- |
 | `cuerpo-hombre.glb`, `cuerpo-mujer.glb` | malla del cuerpo (13 380 vértices, orden de MakeHuman intacto) + morph targets + atributo `_SEGMENTO` (0 tronco, 1 cabeza, 2 brazo izq, 3 brazo der, 4 pierna izq, 5 pierna der). Comprimidos con meshopt, ~1 MB cada uno. |
 | `cuerpo-hombre.json`, `cuerpo-mujer.json` | significado de cada morph, landmarks de medida (índices de vértice), articulaciones (base + delta por morph), estatura/volumen de la base y con qué versión se generó. |
+| `musculos-hombre.glb`, `musculos-mujer.glb` | músculos de Z-Anatomy atados al cuerpo (~140 000 triángulos, ~2,4 MB). Ver [Músculos](#músculos-anatómicos-z-anatomy). |
+| `musculos-hombre.json`, `musculos-mujer.json` | nombre en español, en inglés y lado de cada pieza, y la licencia. |
 
 ## Requisitos
 
@@ -83,6 +85,40 @@ normalizado (`KHR_mesh_quantization`, error < 0,03 mm) y cada bufferView con
 `EXT_meshopt_compression`. El navegador los lee con el `MeshoptDecoder` que trae
 three.js, sin descargar nada de otro sitio.
 
+## Músculos anatómicos (Z-Anatomy)
+
+Los músculos de la vista "Grasa y músculo" son los modelos de
+[Z-Anatomy](https://www.z-anatomy.com) (derivados de BodyParts3D) adaptados a
+cada cuerpo. Se regeneran con:
+
+```bash
+# Z-Anatomy (solo hacen falta los FBX y la tabla de traducciones):
+git clone --depth 1 --filter=blob:none --no-checkout https://github.com/LluisV/Z-Anatomy
+git -C Z-Anatomy checkout HEAD -- Resources/Models Resources/Translations0.txt
+
+# Con bpy + numpy + scipy (el mismo entorno de export_bodies.py, más scipy):
+.blenv/bin/python tools/export_musculos.py --z-anatomy Z-Anatomy --salida tools/build
+npm run modelo3d:musculos      # simplifica, comprime y copia a client/public/modelo3d
+```
+
+Qué hace `export_musculos.py` (detalle en el propio archivo):
+
+1. Lee los músculos (sin bolsas, vainas, fascias que los tapan ni órganos) y el
+   esqueleto de Z-Anatomy, y el cuerpo base de MakeHuman con su esqueleto.
+2. Pone el cuerpo de MakeHuman en la postura de Z-Anatomy (brazos abajo, palmas
+   adelante) con los pesos de su esqueleto, llevando cada articulación a la de Z-A.
+3. Ata cada vértice de músculo a la piel de ese cuerpo: triángulo, baricéntricas,
+   altura sobre la normal y residuo tangente. El navegador rearma el músculo con
+   el mismo atado sobre el cuerpo sin grasa del cliente, en su pose.
+4. Corrige la altura para que la primera capa de músculo quede justo bajo la piel
+   (rayos desde la piel, campo suave) y descarta las piezas que no se ven.
+5. Quita lo que no encaja entre las dos mallas: manos, pies y cabeza (los cubre el
+   cuerpo pintado de `musculos.ts`), telas estiradas entre brazo y tronco o entre
+   los muslos, y el final de la línea alba, del recto y de los aductores en el pubis.
+
+Los triángulos del cuerpo se usan en forma canónica (empezando por el vértice
+menor): la compresión meshopt de los índices puede rotar sus vértices.
+
 ## Licencias
 
 - **Assets de MakeHuman / MPFB2** (basemesh, targets, pesos): **CC0 1.0**.
@@ -94,6 +130,12 @@ three.js, sin descargar nada de otro sitio.
 - **Iluminación** (`client/public/modelo3d/estudio.hdr`): HDRI "Studio Small 03" de
   Poly Haven (Sergej Majboroda), **CC0**, versión 1k. Se descargó de la copia de
   `pmndrs/drei-assets` y se sirve desde la app, sin depender de ningún servicio.
+- **Músculos** (`client/public/modelo3d/musculos-*`): obra derivada de
+  **Z-Anatomy** (CC BY-SA 4.0), a su vez derivada de **BodyParts3D** (The Database
+  Center for Life Science, CC BY-SA 2.1 Japón). Se distribuyen con la misma
+  licencia (ver `client/public/modelo3d/LICENCIA-musculos.txt`); la atribución se
+  muestra en la página y en la imagen PNG. `tools/export_musculos.py` usa
+  `export_bodies.py`, así que también es GPLv3.
 - No se usa SMPL, SMPL-X ni STAR (licencias no comerciales), ni el código del
   "Ruler" de MakeHuman 1.x (AGPL): los landmarks salen de los targets CC0.
 

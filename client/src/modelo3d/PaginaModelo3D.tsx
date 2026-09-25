@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { componerCaptura, compartirODescargar } from './captura';
 import { cargarCuerpo } from './cargar';
+import { CREDITO_MUSCULOS } from './musculosAnatomicos';
 import { validar } from './cliente';
 import { PCT_GRASA_POR_DEFECTO } from './config';
 import { Escena } from './Escena';
@@ -108,7 +109,12 @@ export default function PaginaModelo3D() {
     if (!lienzo.current) return;
     setCapturando('Preparando imagen…');
     try {
-      const blob = await componerCaptura(lienzo.current, { nombre: cliente?.nombre, vista: NOMBRE_VISTA[vista], tarjetas });
+      const blob = await componerCaptura(lienzo.current, {
+        nombre: cliente?.nombre,
+        vista: NOMBRE_VISTA[vista],
+        tarjetas,
+        credito: vista === 'grasa' || vista === 'comparar' ? CREDITO_MUSCULOS : undefined,
+      });
       const archivo = `resultado-3d${cliente?.nombre ? `-${cliente.nombre.toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, '-')}` : ''}.png`;
       const como = await compartirODescargar(blob, archivo);
       setCapturando(como === 'descargada' ? 'Imagen descargada' : null);

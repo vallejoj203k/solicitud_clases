@@ -178,7 +178,8 @@ if (!entrada || !salida) {
 if (fs.statSync(entrada).isDirectory()) {
   // Carpeta: comprime cada GLB y copia tal cual su JSON de metadatos.
   fs.mkdirSync(salida, { recursive: true });
-  for (const archivo of fs.readdirSync(entrada).sort()) {
+  // Solo los cuerpos: los datos crudos de los músculos los arma tools/musculos_glb.mjs.
+  for (const archivo of fs.readdirSync(entrada).sort().filter((a) => a.startsWith('cuerpo-'))) {
     if (archivo.endsWith('.glb')) await comprimir(`${entrada}/${archivo}`, `${salida}/${archivo}`);
     if (archivo.endsWith('.json')) fs.copyFileSync(`${entrada}/${archivo}`, `${salida}/${archivo}`);
   }

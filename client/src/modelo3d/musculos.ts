@@ -3,8 +3,10 @@ import { normalesVertice, type Indices, type Vec3 } from './geometria';
 import type { CuerpoBase } from './tipos';
 
 /**
- * Grupos musculares dibujados sobre el cuerpo sin grasa (vista "grasa y
- * músculo"), como en una lámina de anatomía: cada vértice de la malla base se
+ * Músculos pintados sobre el cuerpo sin grasa (vista "grasa y músculo"). Van
+ * debajo de los músculos anatómicos (musculosAnatomicos.ts): cubren manos, pies,
+ * cabeza y los huecos entre músculos, y son lo que se ve mientras aquellos
+ * bajan. Como en una lámina de anatomía: cada vértice de la malla base se
  * asigna a un músculo con reglas geométricas (segmento, altura respecto de las
  * bandas de medida, posición a lo largo de brazo o pierna y hacia dónde mira la
  * superficie). La asignación se hace una vez sobre la malla base y sigue a los
@@ -28,6 +30,7 @@ export interface Grupo {
 export const GRUPOS: Grupo[] = [
   { nombre: 'Tendón y hueso', musculo: false, color: '#D8B7A0' },
   { nombre: 'Cabeza', musculo: false, color: '#C99A86' },
+  { nombre: 'Pubis', musculo: false, color: '#A9826F' },
   // Dos tonos que se alternan entre músculos vecinos, para que se distingan.
   { nombre: 'Esternocleidomastoideo', musculo: true, color: '#B9483E' },
   { nombre: 'Trapecio', musculo: true, color: '#9C3730' },
@@ -279,7 +282,7 @@ export function clasificarMusculos(cuerpo: CuerpoBase): Musculos {
         if (y > yBusto - 0.01) {
           g = G['Pectoral mayor'];
           dir = norm(sub(hombro, p));
-        } else if (y < yHorca + 0.05) g = G['Tendón y hueso'];
+        } else if (y < yHorca + 0.05) g = G.Pubis;
         else if (Math.abs(x) < 0.075) {
           g = G['Recto abdominal'];
           dir = [0, 1, 0];

@@ -2,10 +2,9 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoAtras } from '../components/Iconos.jsx';
 import type { ClienteInput, SegmentoInforme } from './cliente';
-import { CIRCUNFERENCIAS, COLORES_CUERPO, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
-import { GRUPOS } from './musculos';
+import { CIRCUNFERENCIAS, COLORES_CUERPO, COLOR_GRASA, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { COLOR_MUSCULO, COLOR_TENDON } from './musculosAnatomicos';
 
-const COLOR_TENDON = GRUPOS[0].color;
 import { controlesLocales, type ControlLocal } from './controles';
 import { useVisor, type Vista } from './estado';
 import { FormularioMedidas, FormularioScanner } from './FormularioScanner';
@@ -192,7 +191,7 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
     return (
       <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-humo-300">
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_MAGRO }} />
+          <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_MUSCULO }} />
           Músculo
         </span>
         <span className="flex items-center gap-1.5">
@@ -204,6 +203,21 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
           Grasa (más opaca donde es más gruesa)
         </span>
         <span className="w-full text-humo-500">Toca un músculo para ver su nombre.</span>
+        <span className="w-full text-humo-500">
+          Músculos:{' '}
+          <a className="underline hover:text-humo-300" href="https://www.z-anatomy.com" target="_blank" rel="noreferrer">
+            Z-Anatomy
+          </a>{' '}
+          /{' '}
+          <a className="underline hover:text-humo-300" href="https://lifesciencedb.jp/bp3d/" target="_blank" rel="noreferrer">
+            BodyParts3D
+          </a>
+          ,{' '}
+          <a className="underline hover:text-humo-300" href="https://creativecommons.org/licenses/by-sa/4.0/deed.es" target="_blank" rel="noreferrer">
+            CC BY-SA 4.0
+          </a>
+          , adaptados a este cuerpo.
+        </span>
       </p>
     );
   }
