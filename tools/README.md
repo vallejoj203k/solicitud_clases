@@ -46,14 +46,15 @@ instale ahí y no en la configuración de Blender del usuario.
 ## Qué hace el exportador
 
 1. **Cuerpo base**: joven de 25 años, promedio en músculo, peso, altura y
-   proporciones, mezcla de etnias ⅓ cada una. Solo el grupo `body` de la malla
+   proporciones, mezcla de etnias neutra de MakeHuman (⅓ cada una; la etnia no
+   es un control). Solo el grupo `body` de la malla
    hm08 (sin ojos, dientes, pestañas ni helpers), sin genitales, cejas ni pelo.
 2. **Macros de MakeHuman**: los targets macro de MakeHuman son combinaciones
    (sexo × edad × músculo × peso × …) con pesos que no son lineales. En vez de
    copiarlos, se muestrea el cuerpo real de MPFB en una rejilla 3 × 3 de
    músculo × peso (0, 0,5, 1) y se guardan las 8 esquinas como deltas; el
    navegador interpola bilineal por cuadrante, que es lo mismo que hace MakeHuman
-   entre esos puntos. Edad (25→90), altura mín./máx., proporciones, etnias y copa
+   entre esos puntos. Edad (25→90), altura mín./máx., proporciones y copa
    (mujer) van como un delta cada uno (se ignoran sus términos cruzados).
 3. **Morphs locales**: grasa/músculo por brazo y pierna, barriga, cintura,
    cadera, pecho, cuello, hombros, largo de piernas, pectoral, espalda en V,
@@ -92,3 +93,15 @@ three.js, sin descargar nada de otro sitio.
   corre en el navegador.
 - No se usa SMPL, SMPL-X ni STAR (licencias no comerciales), ni el código del
   "Ruler" de MakeHuman 1.x (AGPL): los landmarks salen de los targets CC0.
+
+## Después de regenerar: pruebas
+
+```bash
+npm test -w client
+```
+
+Carga los GLB de `client/public/modelo3d` en Node y comprueba el motor de
+medición (fase 2): estatura y volumen iguales a los del exportador, volúmenes por
+segmento que suman el total, simetría izquierda/derecha, circunferencias en
+rangos humanos y que los morphs de peso, barriga y altura muevan las medidas
+en la dirección correcta. También prueba la geometría con cilindros y esferas.
