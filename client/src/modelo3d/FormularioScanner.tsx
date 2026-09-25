@@ -414,8 +414,9 @@ export function FormularioScanner() {
           </button>
         )}
         <p className="text-[11px] text-humo-500">
-          El cuerpo 3D se arma solo con la estatura, el peso, el % de grasa y la grasa visceral, más las medidas con cinta de la
-          pestaña “Medidas”. Los valores por segmento se suman en la fase 4.
+          El cuerpo 3D se arma solo con estos datos: estatura, peso y % de grasa dan el tamaño; el músculo y la grasa de cada brazo y
+          pierna, el grosor de cada parte; la masa muscular, cuán musculoso es; la grasa visceral, la barriga. Las medidas con cinta
+          de la pestaña “Medidas” lo acercan más.
         </p>
       </div>
     </div>

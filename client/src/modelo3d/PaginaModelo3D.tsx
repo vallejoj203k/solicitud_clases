@@ -64,10 +64,16 @@ export default function PaginaModelo3D() {
     () => pctGrasaDe({ nombre: '', sexo, valores, evaluacion: {} }) ?? PCT_GRASA_POR_DEFECTO[sexo],
     [sexo, valores],
   );
+  // Cuerpo sin grasa: el que ajustó el solver con los datos del scanner; si los
+  // controles se movieron a mano, uno aproximado con el % de grasa.
+  const ajuste = useVisor((s) => s.ajuste);
+  const origen = useVisor((s) => s.origen);
   const pedido = useMemo(() => {
     if (!cuerpo) return null;
-    return { cuerpo, macro, locales, pctGrasa: verGrasa ? pctGrasa : null, conAnillos: verAnillos };
-  }, [cuerpo, macro, locales, verGrasa, pctGrasa, verAnillos]);
+    const magro = origen === 'ajuste' ? ajuste?.magro : null;
+    const grasa = !verGrasa ? null : magro ? { controles: { macro: magro.macro, locales: magro.locales } } : { pctGrasa };
+    return { cuerpo, macro, locales, grasa, conAnillos: verAnillos };
+  }, [cuerpo, macro, locales, verGrasa, pctGrasa, verAnillos, ajuste, origen]);
   const { resultado, error: errorMotor } = usarMotor(pedido);
   const vigente = resultado && cuerpo && resultado.sexo === cuerpo.sexo ? resultado : null;
 
@@ -356,7 +362,7 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
           </Link>
           <div className="min-w-0">
             <h1 className="text-lg font-extrabold tracking-tightest">Resultado 3D</h1>
-            <p className="text-xs text-humo-500">Cuerpo ajustado a los datos · fase 3</p>
+            <p className="text-xs text-humo-500">Cuerpo ajustado a los datos · fase 4</p>
           </div>
         </header>
 

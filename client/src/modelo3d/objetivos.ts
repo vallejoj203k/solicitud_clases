@@ -1,13 +1,33 @@
-import type { EntradaAjuste, Objetivo } from './ajuste';
+import type { EntradaAjuste, Objetivo, ResultadoAjuste } from './ajuste';
 import { leerNumero, TODOS_LOS_CAMPOS, type Borrador } from './cliente';
-import { LAMBDA_BARRIGA_CON_VISCERAL, PCT_GRASA_POR_DEFECTO, TOLERANCIAS, barrigaPorVisceral } from './config';
+import {
+  CONTROLES_DE_ESQUELETO,
+  CONTROLES_DE_GRASA,
+  DENSIDAD_GRASA_SEGMENTO,
+  DENSIDAD_MAGRA_SEGMENTO,
+  DENSIDAD_MAGRA_TOTAL,
+  LAMBDA_BARRIGA_CON_VISCERAL,
+  LAMBDA_MUSCULO_CON_DATO,
+  MUSCULO_REFERENCIA,
+  MUSCULO_SENSIBILIDAD,
+  PCT_GRASA_POR_DEFECTO,
+  TOLERANCIAS,
+  barrigaPorVisceral,
+} from './config';
 import { MACRO_INICIAL } from './controles';
 
 /**
  * Fase 3: objetivos geométricos directos a partir de lo escrito en el
  * formulario. No hace falta que el formulario esté completo: con estatura y
  * peso ya se puede ajustar, y cada medida con cinta que se agregue suma un
- * objetivo. (La fase 4 agrega los volúmenes por segmento del scanner.)
+ * objetivo.
+ *
+ * Fase 4: los datos de composición del scanner. Cada brazo y cada pierna debe
+ * tener el volumen de su masa magra más su grasa (magra/1,06 + grasa/0,90); el
+ * tronco queda como resto del volumen total. La masa muscular fija el punto de
+ * partida del músculo. Y se arma un segundo cuerpo, el sin grasa (lo rojo de la
+ * vista "grasa sobre músculo"), con la masa libre de grasa total y la masa
+ * magra de cada brazo y pierna.
  */
 
 /** Densidad corporal de Siri (kg/L) para un % de grasa. */
@@ -73,6 +93,22 @@ export function entradaAjusteDe(b: Borrador): EntradaAjuste | null {
       objetivos.push({ clave, etiqueta: etiqueta + lado, valor: v, unidad: 'cm', fuente: 'cinta', ...TOLERANCIAS.cinta });
     }
   }
+  // Fase 4: volumen de cada brazo y pierna (masa magra + grasa del segmento).
+  for (const s of EXTREMIDADES) {
+    const seg = segmentoDe(b, s);
+    if (!seg) continue;
+    const v = seg.magra / DENSIDAD_MAGRA_SEGMENTO + seg.grasa / DENSIDAD_GRASA_SEGMENTO;
+    objetivos.push({
+      clave: `vol:${s}`,
+      etiqueta: `Volumen ${NOMBRE_EXTREMIDAD[s]}`,
+      valor: v,
+      unidad: 'L',
+      fuente: 'scanner',
+      sigma: TOLERANCIAS.segmento.sigma * v,
+      tolerancia: TOLERANCIAS.segmento.tolerancia * v,
+    });
+  }
+
   const edad = numero(b, 'edad');
   // Grasa visceral: no es una medida de la malla sino el punto de partida de la barriga.
   const visceral = numero(b, 'visceral');
@@ -82,5 +118,105 @@ export function entradaAjusteDe(b: Borrador): EntradaAjuste | null {
     priors['local:barriga'] = barrigaPorVisceral(visceral);
     lambdas['local:barriga'] = LAMBDA_BARRIGA_CON_VISCERAL;
   }
+  // Masa muscular / peso libre de grasa: cuán musculoso es respecto de lo típico.
+  const masaMuscular = numero(b, 'masaMuscular');
+  const plg = pesoLibreDeGrasa(b);
+  if (masaMuscular !== undefined && plg !== undefined) {
+    const ratio = masaMuscular / plg;
+    priors['macro:musculo'] = Math.min(0.95, Math.max(0.05, 0.5 + (0.5 * (ratio - MUSCULO_REFERENCIA[b.sexo])) / MUSCULO_SENSIBILIDAD));
+    lambdas['macro:musculo'] = LAMBDA_MUSCULO_CON_DATO;
+  }
   return { objetivos, fijos: { edad: Math.max(MACRO_INICIAL.edad, edad ?? MACRO_INICIAL.edad) }, priors, lambdas };
+}
+
+/* ------------------------------------------------------------ Fase 4 */
+
+const EXTREMIDADES = ['brazo_izq', 'brazo_der', 'pierna_izq', 'pierna_der'] as const;
+const NOMBRE_EXTREMIDAD: Record<(typeof EXTREMIDADES)[number], string> = {
+  brazo_izq: 'brazo izq.',
+  brazo_der: 'brazo der.',
+  pierna_izq: 'pierna izq.',
+  pierna_der: 'pierna der.',
+};
+
+/** Masa magra y grasa (kg) de un segmento, si están las dos. */
+function segmentoDe(b: Borrador, s: string): { magra: number; grasa: number } | undefined {
+  const magra = numero(b, `musculo_${s}`);
+  const grasa = numero(b, `grasa_${s}`);
+  return magra !== undefined && grasa !== undefined ? { magra, grasa } : undefined;
+}
+
+/** Peso libre de grasa (kg): el escrito o peso × (1 − % de grasa). */
+export function pesoLibreDeGrasa(b: Borrador): number | undefined {
+  const plg = numero(b, 'plg');
+  if (plg !== undefined) return plg;
+  const peso = numero(b, 'peso');
+  if (peso === undefined) return undefined;
+  return peso * (1 - (pctGrasaDe(b) ?? PCT_GRASA_POR_DEFECTO[b.sexo]) / 100);
+}
+
+/**
+ * Cuerpo sin grasa: misma estatura y mismo esqueleto que el cuerpo completo,
+ * con el volumen de la masa libre de grasa y la masa magra de cada brazo y
+ * pierna. Parte del cuerpo completo; los controles de grasa tienden a no sumar
+ * (prior = mínimo entre su valor y 0) y los de músculo, a quedar como estaban.
+ * En la mujer se usa la copa mínima: el busto es sobre todo grasa.
+ */
+export function entradaSinGrasaDe(b: Borrador, exterior: ResultadoAjuste, entradaExterior: EntradaAjuste): EntradaAjuste | null {
+  const estatura = numero(b, 'estatura');
+  const plg = pesoLibreDeGrasa(b);
+  if (estatura === undefined || plg === undefined) return null;
+  const volumen = plg / DENSIDAD_MAGRA_TOTAL;
+
+  const objetivos: Objetivo[] = [
+    { clave: 'estatura', etiqueta: 'Estatura', valor: estatura, unidad: 'cm', fuente: 'scanner', ...TOLERANCIAS.estatura },
+    {
+      clave: 'volumen',
+      etiqueta: 'Volumen sin grasa (PLG / 1,1)',
+      valor: volumen,
+      unidad: 'L',
+      fuente: numero(b, 'plg') !== undefined || pctGrasaDe(b) !== undefined ? 'scanner' : 'estimado',
+      sigma: TOLERANCIAS.volumen.sigma * volumen,
+      tolerancia: TOLERANCIAS.volumen.tolerancia * volumen,
+    },
+  ];
+  for (const s of EXTREMIDADES) {
+    const seg = segmentoDe(b, s);
+    if (!seg) continue;
+    const v = seg.magra / DENSIDAD_MAGRA_SEGMENTO;
+    objetivos.push({
+      clave: `vol:${s}`,
+      etiqueta: `Músculo ${NOMBRE_EXTREMIDAD[s]}`,
+      valor: v,
+      unidad: 'L',
+      fuente: 'scanner',
+      sigma: TOLERANCIAS.segmento.sigma * v,
+      tolerancia: TOLERANCIAS.segmento.tolerancia * v,
+    });
+  }
+
+  const valorDe = (clave: string) => {
+    const [tipo, k] = clave.split(':');
+    return tipo === 'macro' ? (exterior.macro as unknown as Record<string, number>)[k] : exterior.locales[k] ?? 0;
+  };
+  const fijar: Record<string, number> = {};
+  for (const k of CONTROLES_DE_ESQUELETO) fijar[k] = valorDe(k);
+  const priors: Record<string, number> = {};
+  const inicial: Record<string, number> = { 'macro:musculo': exterior.macro.musculo, 'macro:peso': exterior.macro.peso };
+  for (const [k, v] of Object.entries(exterior.locales)) {
+    const clave = `local:${k}`;
+    inicial[clave] = v;
+    priors[clave] = CONTROLES_DE_GRASA.includes(k) ? Math.min(v, 0) : v;
+  }
+  priors['macro:musculo'] = exterior.macro.musculo;
+  priors['macro:peso'] = exterior.macro.peso;
+  return {
+    objetivos,
+    fijos: { edad: entradaExterior.fijos.edad, copa: b.sexo === 'F' ? 0 : exterior.macro.copa },
+    fijar,
+    priors,
+    // El peso de MakeHuman es lo que más baja al sacar la grasa: casi libre.
+    lambdas: { 'macro:peso': 0.05 },
+    inicial,
+  };
 }

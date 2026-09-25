@@ -1,5 +1,6 @@
 import { PARAMETROS_AJUSTE, SEMILLAS_AJUSTE, type DefParametro } from './config';
 import { MACRO_INICIAL, controlesLocales, pesosLocales, pesosMacro, type ControlLocal, type ControlesMacro } from './controles';
+import { volumenTapas, volumenTriangulosPorSegmento } from './geometria';
 import { medirSeleccion, posicionesArticulaciones, type ClaveMedida, type PrepMedicion } from './medicion';
 import { aplicarMorphs } from './motor';
 import type { CuerpoBase, PesosMorph } from './tipos';
@@ -44,6 +45,10 @@ export interface EntradaAjuste {
   priors?: Record<string, number>;
   /** Cuánto cuesta alejarse del prior, si difiere del de config (p. ej. barriga con dato de grasa visceral). */
   lambdas?: Record<string, number>;
+  /** Parámetros que no se ajustan: quedan en este valor (p. ej. el esqueleto del cuerpo completo en el ajuste del cuerpo sin grasa). */
+  fijar?: Record<string, number>;
+  /** Punto de partida por clave de parámetro; si se da, no se prueban semillas. */
+  inicial?: Record<string, number>;
   /** Tope de iteraciones. */
   maxIteraciones?: number;
 }
@@ -101,14 +106,16 @@ function parametrosDe(cuerpo: CuerpoBase, controles: ControlLocal[]): Parametro[
 }
 
 /** Vector de parámetros -> controles del visor. */
-function aControles(params: Parametro[], x: Float64Array, fijos: EntradaAjuste['fijos']) {
+function aControles(params: Parametro[], x: Float64Array, fijos: EntradaAjuste['fijos'], fijar: Record<string, number> = {}) {
   const macro: ControlesMacro = { ...MACRO_INICIAL, edad: fijos.edad, copa: fijos.copa ?? MACRO_INICIAL.copa };
   const locales: Record<string, number> = {};
-  params.forEach((p, i) => {
-    const [tipo, clave] = p.clave.split(':');
-    if (tipo === 'macro') (macro as unknown as Record<string, number>)[clave] = x[i];
-    else locales[clave] = x[i];
-  });
+  const poner = (claveParam: string, v: number) => {
+    const [tipo, clave] = claveParam.split(':');
+    if (tipo === 'macro') (macro as unknown as Record<string, number>)[clave] = v;
+    else locales[clave] = v;
+  };
+  for (const [k, v] of Object.entries(fijar)) poner(k, v);
+  params.forEach((p, i) => poner(p.clave, x[i]));
   return { macro, locales };
 }
 
@@ -163,7 +170,8 @@ function verticesDeMedida(cuerpo: CuerpoBase, prep: PrepMedicion, clave: ClaveMe
 export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: EntradaAjuste): ResultadoAjuste {
   const t0 = performance.now();
   const controles = controlesLocales(cuerpo.meta);
-  const params = parametrosDe(cuerpo, controles);
+  const fijar = entrada.fijar ?? {};
+  const params = parametrosDe(cuerpo, controles).filter((p) => !(p.clave in fijar));
   const objetivos = entrada.objetivos.filter((o) => Number.isFinite(o.valor));
   const n = params.length;
   const claves = objetivos.map((o) => o.clave);
@@ -222,7 +230,7 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
   const prior = (p: Parametro) => entrada.priors?.[p.clave] ?? p.prior;
   const lambda = (p: Parametro) => entrada.lambdas?.[p.clave] ?? p.lambda;
   const pesosDe = (x: Float64Array): PesosMorph => {
-    const c = aControles(params, x, entrada.fijos);
+    const c = aControles(params, x, entrada.fijos, fijar);
     return { ...pesosMacro(c.macro, cuerpo.sexo), ...pesosLocales(c.locales, controles) };
   };
 
@@ -250,10 +258,11 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
 
   // Punto de partida: el mejor de unas pocas semillas de músculo x peso (el
   // paisaje de MakeHuman tiene varios valles en esos dos macros).
-  const inicial = new Float64Array(params.map((p) => prior(p)));
+  const dado = entrada.inicial;
+  const inicial = new Float64Array(params.map((p) => Math.min(p.max, Math.max(p.min, dado?.[p.clave] ?? prior(p)))));
   let x = inicial;
   let actual = evaluar(x);
-  for (const [m, w] of SEMILLAS_AJUSTE) {
+  for (const [m, w] of dado ? [] : SEMILLAS_AJUSTE) {
     const s = Float64Array.from(inicial);
     params.forEach((p, j) => {
       if (p.clave === 'macro:musculo') s[j] = m;
@@ -293,9 +302,24 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
       if (!depende[j].length) return;
       evaluaciones++;
       const ts = triangulosDe[j];
-      const pedir = ts ? depende[j].filter((k) => k !== 'volumen') : depende[j];
-      const med = medirSeleccion(cuerpo, prep, posJ, posicionesArticulaciones(prep, pesos, 0), pedir);
-      if (ts && depende[j].includes('volumen')) med.volumen = ev.medidas.volumen + volumenTriangulos(posJ, ts) - volumenTriangulos(pos, ts);
+      // Con pocos vértices movidos, los volúmenes se actualizan sumando solo los
+      // triángulos tocados (y las tapas de las juntas, que son pocas).
+      const incremental = (k: ClaveMedida) => ts !== null && (k === 'volumen' || k.startsWith('vol:'));
+      const med = medirSeleccion(cuerpo, prep, posJ, posicionesArticulaciones(prep, pesos, 0), depende[j].filter((k) => !incremental(k)));
+      if (ts) {
+        if (depende[j].includes('volumen')) med.volumen = ev.medidas.volumen + volumenTriangulos(posJ, ts) - volumenTriangulos(pos, ts);
+        const segs = depende[j].filter((k) => k.startsWith('vol:'));
+        if (segs.length) {
+          const antes = volumenTriangulosPorSegmento(pos, tris, prep.particion, ts);
+          const despues = volumenTriangulosPorSegmento(posJ, tris, prep.particion, ts);
+          const tapasAntes = volumenTapas(pos, prep.particion);
+          const tapasDespues = volumenTapas(posJ, prep.particion);
+          for (const k of segs) {
+            const i = prep.nombresSegmento.indexOf(k.slice(4));
+            med[k] = ev.medidas[k] + (despues[i] - antes[i] + tapasDespues[i] - tapasAntes[i]) * 1000;
+          }
+        }
+      }
       objetivos.forEach((o, k) => {
         if (o.clave in med) J[k][j] = (med[o.clave] - ev.medidas[o.clave]) / o.sigma / paso;
       });
@@ -309,6 +333,13 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
   let convergio = false;
   let seguidasEnObjetivo = 0;
   let J = jacobiano(x, actual);
+  // Entre Jacobianos completos se usa la actualización de Broyden (corrige J con
+  // el paso que se acaba de dar, sin volver a medir): cada 3 iteraciones, o si
+  // un paso falla con el J aproximado, se vuelve a calcular completo.
+  let jExacto = true;
+  let desdeCompleto = 0;
+  let ultimoPaso: Float64Array | null = null;
+  let ultimoCambio: Float64Array | null = null;
   const maxIt = entrada.maxIteraciones ?? 30;
   while (iteraciones < maxIt) {
     iteraciones++;
@@ -347,6 +378,8 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
       if (costo(nuevo.r) < costo(r)) {
         const mejora = costo(r) - costo(nuevo.r);
         const dx = Math.max(...xn.map((v, i) => Math.abs(v - x[i])));
+        ultimoPaso = Float64Array.from(xn, (v, i) => v - x[i]);
+        ultimoCambio = Float64Array.from({ length: objetivos.length }, (_, k) => nuevo.r[k] - r[k]);
         x = xn;
         actual = nuevo;
         mu = Math.max(1e-7, mu / 3);
@@ -362,16 +395,45 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
         for (let k = 0; k < objetivos.length; k++) {
           if (Math.abs(nuevo.r[k] * objetivos[k].sigma) > objetivos[k].tolerancia * 0.8) cumpleTodo = false;
         }
-        convergio = rel < 1e-4 || dx < 1e-4 || (enObjetivo && rel < 0.02) || seguidasEnObjetivo >= 3 || (cumpleTodo && rel < 0.005);
+        // Datos que no cuadran entre sí: tras varias vueltas la mejora es mínima y
+        // lo que queda son residuos reales, que se informan.
+        const estancado = iteraciones >= 8 && rel < 0.01;
+        convergio = rel < 1e-4 || dx < 1e-4 || (enObjetivo && rel < 0.02) || seguidasEnObjetivo >= 3 || (cumpleTodo && rel < 0.005) || estancado;
         break;
       }
       mu *= 4;
     }
-    if (!aceptado || convergio) break;
-    J = jacobiano(x, actual);
+    if (convergio) break;
+    if (!aceptado) {
+      if (jExacto) break;
+      // El J aproximado ya no sirve: uno exacto y otra vuelta.
+      J = jacobiano(x, actual);
+      jExacto = true;
+      desdeCompleto = 0;
+      mu = 1e-2;
+      continue;
+    }
+    if (desdeCompleto < 2 && ultimoPaso && ultimoCambio) {
+      const d = ultimoPaso;
+      const dd = d.reduce((a, v) => a + v * v, 0);
+      if (dd > 0) {
+        for (let k = 0; k < objetivos.length; k++) {
+          let jd = 0;
+          for (let i = 0; i < n; i++) jd += J[k][i] * d[i];
+          const f = (ultimoCambio[k] - jd) / dd;
+          for (let i = 0; i < n; i++) J[k][i] += f * d[i];
+        }
+      }
+      desdeCompleto++;
+      jExacto = false;
+    } else {
+      J = jacobiano(x, actual);
+      desdeCompleto = 0;
+      jExacto = true;
+    }
   }
 
-  const { macro, locales } = aControles(params, x, entrada.fijos);
+  const { macro, locales } = aControles(params, x, entrada.fijos, fijar);
   const lista: Residuo[] = objetivos.map((o) => {
     const medido = actual.medidas[o.clave];
     const diferencia = medido - o.valor;
