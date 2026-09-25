@@ -91,6 +91,9 @@ three.js, sin descargar nada de otro sitio.
 - **Código de MPFB2**: GPLv3. `tools/export_bodies.py` usa su API, así que ese
   script es GPLv3. Es una herramienta de desarrollo: no se publica con la app ni
   corre en el navegador.
+- **Iluminación** (`client/public/modelo3d/estudio.hdr`): HDRI "Studio Small 03" de
+  Poly Haven (Sergej Majboroda), **CC0**, versión 1k. Se descargó de la copia de
+  `pmndrs/drei-assets` y se sirve desde la app, sin depender de ningún servicio.
 - No se usa SMPL, SMPL-X ni STAR (licencias no comerciales), ni el código del
   "Ruler" de MakeHuman 1.x (AGPL): los landmarks salen de los targets CC0.
 

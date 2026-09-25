@@ -30,8 +30,9 @@ export function ResumenAjuste() {
     );
   }
 
-  const grupos: [string, Residuo[]][] = [['Cuerpo completo', ajuste.exterior.residuos]];
-  if (ajuste.magro) grupos.push(['Cuerpo sin grasa (músculo, hueso, órganos)', ajuste.magro.residuos]);
+  const visibles = (rs: Residuo[]) => rs.filter((r) => r.fuente !== 'anterior');
+  const grupos: [string, Residuo[]][] = [['Cuerpo completo', visibles(ajuste.exterior.residuos)]];
+  if (ajuste.magro) grupos.push(['Cuerpo sin grasa (músculo, hueso, órganos)', visibles(ajuste.magro.residuos)]);
   const todos = grupos.flatMap(([, rs]) => rs);
   const fallan = todos.filter((r) => !r.cumple);
   return (

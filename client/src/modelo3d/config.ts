@@ -203,3 +203,84 @@ export const CONTROLES_DE_GRASA = [
 
 /** Controles del esqueleto: el cuerpo sin grasa los copia del cuerpo completo. */
 export const CONTROLES_DE_ESQUELETO = ['macro:altura', 'local:hombros', 'local:entrepierna'];
+
+/* ------------------------------------------------- Resultados (fase 5) */
+
+/** Tramo de una escala: desde `min` (incluido) hasta el siguiente tramo. */
+export interface Tramo {
+  min: number;
+  etiqueta: string;
+  color: string;
+}
+
+/** IMC, clasificación de la OMS. */
+export const ESCALA_IMC: Tramo[] = [
+  { min: 0, etiqueta: 'Bajo peso', color: '#4CE0E0' },
+  { min: 18.5, etiqueta: 'Normal', color: '#8CC63F' },
+  { min: 25, etiqueta: 'Sobrepeso', color: '#F5C542' },
+  { min: 30, etiqueta: 'Obesidad I', color: '#F5A524' },
+  { min: 35, etiqueta: 'Obesidad II', color: '#FF7F45' },
+  { min: 40, etiqueta: 'Obesidad III', color: '#FF5A4C' },
+];
+
+/** % de grasa por sexo (rangos de referencia del American Council on Exercise). */
+export const ESCALA_GRASA: Record<'M' | 'F', Tramo[]> = {
+  M: [
+    { min: 0, etiqueta: 'Esencial', color: '#4CE0E0' },
+    { min: 6, etiqueta: 'Atleta', color: '#6FD0A0' },
+    { min: 14, etiqueta: 'Fitness', color: '#8CC63F' },
+    { min: 18, etiqueta: 'Promedio', color: '#F5C542' },
+    { min: 25, etiqueta: 'Alto', color: '#FF5A4C' },
+  ],
+  F: [
+    { min: 0, etiqueta: 'Esencial', color: '#4CE0E0' },
+    { min: 14, etiqueta: 'Atleta', color: '#6FD0A0' },
+    { min: 21, etiqueta: 'Fitness', color: '#8CC63F' },
+    { min: 25, etiqueta: 'Promedio', color: '#F5C542' },
+    { min: 32, etiqueta: 'Alto', color: '#FF5A4C' },
+  ],
+};
+
+/** Índice de grasa visceral (escala del bodyscanner: normal 1 a 9). */
+export const ESCALA_VISCERAL: Tramo[] = [
+  { min: 0, etiqueta: 'Normal', color: '#8CC63F' },
+  { min: 10, etiqueta: 'Alto', color: '#F5A524' },
+  { min: 15, etiqueta: 'Muy alto', color: '#FF5A4C' },
+];
+
+/** Índice cintura-cadera: riesgo según la OMS (sustancialmente aumentado desde 0,90 en hombres y 0,85 en mujeres). */
+export const ESCALA_CINTURA_CADERA: Record<'M' | 'F', Tramo[]> = {
+  M: [
+    { min: 0, etiqueta: 'Normal', color: '#8CC63F' },
+    { min: 0.9, etiqueta: 'Riesgo alto', color: '#FF5A4C' },
+  ],
+  F: [
+    { min: 0, etiqueta: 'Normal', color: '#8CC63F' },
+    { min: 0.85, etiqueta: 'Riesgo alto', color: '#FF5A4C' },
+  ],
+};
+
+/**
+ * Mapa de calor por segmento.
+ * Grasa: % de grasa del segmento (grasa / (grasa + magra)) con el rango "normal"
+ * de % de grasa del sexo.
+ * Músculo: masa magra del segmento frente a la de una persona de la misma
+ * estatura y sexo con IMC 22 y % de grasa típico, repartida con las fracciones
+ * típicas de los informes de bioimpedancia. Normal entre 90 % y 110 %, como los
+ * informes del bodyscanner.
+ */
+export const MAPA_CALOR = {
+  grasaNormal: { M: [10, 20], F: [18, 28] } as Record<'M' | 'F', [number, number]>,
+  imcIdeal: 22,
+  grasaIdeal: { M: 15, F: 23 } as Record<'M' | 'F', number>,
+  /** Fracción de la masa libre de grasa en cada segmento. */
+  fraccionMagra: {
+    M: { brazo_izq: 0.053, brazo_der: 0.053, tronco: 0.46, pierna_izq: 0.155, pierna_der: 0.155 },
+    F: { brazo_izq: 0.045, brazo_der: 0.045, tronco: 0.47, pierna_izq: 0.16, pierna_der: 0.16 },
+  } as Record<'M' | 'F', Record<string, number>>,
+  musculoNormal: [0.9, 1.1] as [number, number],
+  colores: { bajo: '#4CE0E0', normal: '#8CC63F', alto: '#F5A524', sinDato: '#8A93A3' },
+};
+
+/** Tonos del cuerpo en la vista realista (el primero es el maniquí gris). */
+export const COLORES_CUERPO = ['#B9B9B9', '#F1D3C0', '#D9A77F', '#B07A52', '#7A4B2E', '#4A2E1E'];
