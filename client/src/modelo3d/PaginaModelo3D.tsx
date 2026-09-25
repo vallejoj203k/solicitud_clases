@@ -19,6 +19,7 @@ import { controlesLocales, pesosLocales, pesosMacro, type ControlLocal, type Con
 import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO } from './config';
 import { useVisor } from './estado';
 import { usarMotor } from './usarMotor';
+import { FormularioMedidas, FormularioScanner } from './FormularioScanner';
 import type { ResultadoMotor } from './motor.worker';
 import type { CuerpoBase, Sexo } from './tipos';
 
@@ -94,7 +95,9 @@ export default function PaginaModelo3D() {
           </div>
         )}
         {errorMotor && (
-          <p className="absolute bottom-3 left-3 right-3 rounded-xl bg-red-900/80 px-3 py-2 text-xs">Error del motor: {errorMotor}</p>
+          <p className="absolute bottom-3 left-3 right-3 rounded-xl bg-red-900/80 px-3 py-2 text-xs">
+            Error del motor: {errorMotor}
+          </p>
         )}
       </div>
 
@@ -276,6 +279,13 @@ const TITULO_GRUPO: Record<string, string> = {
   grasa: 'Grasa',
 };
 
+type Pestana = 'scanner' | 'medidas' | 'manual';
+const PESTANAS: [Pestana, string][] = [
+  ['scanner', 'Datos del scanner'],
+  ['medidas', 'Medidas'],
+  ['manual', 'Ajuste manual'],
+];
+
 function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: ResultadoMotor | null }) {
   const {
     sexo,
@@ -292,6 +302,7 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
     setVerAnillos,
     reiniciar,
   } = useVisor();
+  const [pestana, setPestana] = useState<Pestana>('scanner');
   const controles = useMemo(() => (cuerpo ? controlesLocales(cuerpo.meta) : []), [cuerpo]);
   const grupos = useMemo(() => {
     const g: Record<string, ControlLocal[]> = {};
@@ -300,7 +311,7 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
   }, [controles]);
 
   return (
-    <aside className="flex-1 md:landscape:flex-none md:landscape:w-96 min-h-0 overflow-y-auto border-t md:landscape:border-t-0 md:landscape:border-l border-carbon-700 bg-carbon-800">
+    <aside className="flex-1 md:landscape:flex-none md:landscape:w-[26rem] min-h-0 overflow-y-auto border-t md:landscape:border-t-0 md:landscape:border-l border-carbon-700 bg-carbon-800">
       <div className="p-5 space-y-6">
         <header className="flex items-center gap-3">
           <Link
@@ -312,7 +323,7 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
           </Link>
           <div className="min-w-0">
             <h1 className="text-lg font-extrabold tracking-tightest">Resultado 3D</h1>
-            <p className="text-xs text-humo-500">Visor de prueba · fase 2 (medición)</p>
+            <p className="text-xs text-humo-500">Datos del scanner · visor de prueba (fase 2)</p>
           </div>
         </header>
 
@@ -331,83 +342,140 @@ function Panel({ cuerpo, resultado }: { cuerpo: CuerpoBase | null; resultado: Re
           ))}
         </div>
 
-        {cuerpo && resultado && <PanelMedidas cuerpo={cuerpo} resultado={resultado} />}
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-carbon-900 p-1" role="tablist" aria-label="Secciones del panel">
+          {PESTANAS.map(([clave, titulo]) => (
+            <button
+              key={clave}
+              role="tab"
+              aria-selected={pestana === clave}
+              onClick={() => setPestana(clave)}
+              className={`rounded-lg px-1 py-2 text-xs font-semibold ${
+                pestana === clave ? 'bg-carbon-600 text-humo-100' : 'text-humo-500 hover:text-humo-300'
+              }`}
+            >
+              {titulo}
+            </button>
+          ))}
+        </div>
 
-        <label className="flex items-center gap-3 text-sm">
-          <input type="checkbox" checked={verAnillos} onChange={(e) => setVerAnillos(e.target.checked)} />
-          Anillos de medida
-        </label>
+        {pestana === 'scanner' && <FormularioScanner />}
+        {pestana === 'medidas' && <FormularioMedidas />}
 
-        <label className="flex items-center gap-3 text-sm">
-          <input type="checkbox" checked={verSegmentos} onChange={(e) => setVerSegmentos(e.target.checked)} />
-          Ver segmentos
-        </label>
-        {verSegmentos && cuerpo && (
-          <ul className="grid grid-cols-2 gap-1.5 text-xs">
-            {cuerpo.meta.segmentos.nombres.map((n) => (
-              <li key={n} className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_SEGMENTO[n] }} />
-                {n.replace('_', ' ')} ({cuerpo.meta.segmentos.conteo[n]})
-              </li>
-            ))}
-          </ul>
-        )}
+        {pestana === 'manual' && (
+          <>
+            {cuerpo && resultado && <PanelMedidas cuerpo={cuerpo} resultado={resultado} />}
 
-        <label className="flex items-center gap-3 text-sm">
-          <input type="checkbox" checked={verGrasa} onChange={(e) => setVerGrasa(e.target.checked)} />
-          Grasa sobre músculo (prototipo)
-        </label>
-        {verGrasa && (
-          <div className="space-y-1.5 text-xs text-humo-300">
-            <p className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm border border-carbon-600" style={{ background: COLOR_MAGRO }} />
-              Cuerpo sin grasa (músculo, hueso, órganos)
-            </p>
-            <p className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_GRASA }} />
-              Grasa
-            </p>
-            <p className="text-[11px] text-humo-500">
-              Por ahora el cuerpo sin grasa se aproxima con el peso al mínimo. En la fase 2 saldrá de la masa libre de
-              grasa del scanner.
-            </p>
-          </div>
-        )}
+            <label className="flex items-center gap-3 text-sm">
+              <input type="checkbox" checked={verAnillos} onChange={(e) => setVerAnillos(e.target.checked)} />
+              Anillos de medida
+            </label>
 
-        <Seccion titulo="Macro (MakeHuman)">
-          <Deslizador etiqueta="Músculo" min={0} max={1} paso={0.01} valor={macro.musculo} onChange={(v) => setMacro('musculo', v)} />
-          <Deslizador etiqueta="Peso" min={0} max={1} paso={0.01} valor={macro.peso} onChange={(v) => setMacro('peso', v)} />
-          <Deslizador etiqueta="Edad (años)" min={25} max={90} paso={1} valor={macro.edad} onChange={(v) => setMacro('edad', v)} />
-          <Deslizador etiqueta="Altura" min={0} max={1} paso={0.01} valor={macro.altura} onChange={(v) => setMacro('altura', v)} />
-          <Deslizador etiqueta="Proporciones ideales" min={0} max={1} paso={0.01} valor={macro.proporciones} onChange={(v) => setMacro('proporciones', v)} />
-          {sexo === 'F' && (
-            <Deslizador etiqueta="Copa" min={0} max={1} paso={0.01} valor={macro.copa} onChange={(v) => setMacro('copa', v)} />
-          )}
-        </Seccion>
+            <label className="flex items-center gap-3 text-sm">
+              <input type="checkbox" checked={verSegmentos} onChange={(e) => setVerSegmentos(e.target.checked)} />
+              Ver segmentos
+            </label>
+            {verSegmentos && cuerpo && (
+              <ul className="grid grid-cols-2 gap-1.5 text-xs">
+                {cuerpo.meta.segmentos.nombres.map((n) => (
+                  <li key={n} className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_SEGMENTO[n] }} />
+                    {n.replace('_', ' ')} ({cuerpo.meta.segmentos.conteo[n]})
+                  </li>
+                ))}
+              </ul>
+            )}
 
+            <label className="flex items-center gap-3 text-sm">
+              <input type="checkbox" checked={verGrasa} onChange={(e) => setVerGrasa(e.target.checked)} />
+              Grasa sobre músculo (prototipo)
+            </label>
+            {verGrasa && (
+              <div className="space-y-1.5 text-xs text-humo-300">
+                <p className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-sm border border-carbon-600" style={{ background: COLOR_MAGRO }} />
+                  Cuerpo sin grasa (músculo, hueso, órganos)
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-sm" style={{ background: COLOR_GRASA }} />
+                  Grasa
+                </p>
+                <p className="text-[11px] text-humo-500">
+                  Por ahora el cuerpo sin grasa se aproxima con el peso al mínimo. Con el ajuste (fases 3 y 4) saldrá de la masa
+                  libre de grasa del scanner.
+                </p>
+              </div>
+            )}
 
-        {Object.entries(grupos).map(([grupo, lista]) => (
-          <Seccion key={grupo} titulo={TITULO_GRUPO[grupo] ?? grupo}>
-            {lista.map((c) => (
+            <Seccion titulo="Macro (MakeHuman)">
               <Deslizador
-                key={c.clave}
-                etiqueta={c.etiqueta}
-                min={c.bipolar ? -1 : 0}
+                etiqueta="Músculo"
+                min={0}
                 max={1}
                 paso={0.01}
-                valor={locales[c.clave] ?? 0}
-                onChange={(v) => setLocal(c.clave, v)}
+                valor={macro.musculo}
+                onChange={(v) => setMacro('musculo', v)}
               />
-            ))}
-          </Seccion>
-        ))}
+              <Deslizador etiqueta="Peso" min={0} max={1} paso={0.01} valor={macro.peso} onChange={(v) => setMacro('peso', v)} />
+              <Deslizador
+                etiqueta="Edad (años)"
+                min={25}
+                max={90}
+                paso={1}
+                valor={macro.edad}
+                onChange={(v) => setMacro('edad', v)}
+              />
+              <Deslizador
+                etiqueta="Altura"
+                min={0}
+                max={1}
+                paso={0.01}
+                valor={macro.altura}
+                onChange={(v) => setMacro('altura', v)}
+              />
+              <Deslizador
+                etiqueta="Proporciones ideales"
+                min={0}
+                max={1}
+                paso={0.01}
+                valor={macro.proporciones}
+                onChange={(v) => setMacro('proporciones', v)}
+              />
+              {sexo === 'F' && (
+                <Deslizador
+                  etiqueta="Copa"
+                  min={0}
+                  max={1}
+                  paso={0.01}
+                  valor={macro.copa}
+                  onChange={(v) => setMacro('copa', v)}
+                />
+              )}
+            </Seccion>
 
-        <button
-          onClick={reiniciar}
-          className="w-full rounded-xl py-2.5 text-sm font-semibold border border-carbon-600 text-humo-300 hover:text-humo-100"
-        >
-          Reiniciar valores
-        </button>
+            {Object.entries(grupos).map(([grupo, lista]) => (
+              <Seccion key={grupo} titulo={TITULO_GRUPO[grupo] ?? grupo}>
+                {lista.map((c) => (
+                  <Deslizador
+                    key={c.clave}
+                    etiqueta={c.etiqueta}
+                    min={c.bipolar ? -1 : 0}
+                    max={1}
+                    paso={0.01}
+                    valor={locales[c.clave] ?? 0}
+                    onChange={(v) => setLocal(c.clave, v)}
+                  />
+                ))}
+              </Seccion>
+            ))}
+
+            <button
+              onClick={reiniciar}
+              className="w-full rounded-xl py-2.5 text-sm font-semibold border border-carbon-600 text-humo-300 hover:text-humo-100"
+            >
+              Reiniciar valores
+            </button>
+          </>
+        )}
 
         <p className="text-[11px] text-humo-500">Datos de referencia deportiva, no para fines médicos.</p>
       </div>
@@ -442,7 +510,12 @@ function PanelMedidas({ cuerpo, resultado }: { cuerpo: CuerpoBase; resultado: Re
         <summary className="cursor-pointer font-semibold text-humo-100">Volumen por segmento</summary>
         <dl className="mt-2" data-medidas="segmentos">
           {Object.entries(m.volumenSegmentoL).map(([n, l]) => fila(n.replace('_', ' '), `${l.toFixed(2)} L`))}
-          {fila('Suma', `${Object.values(m.volumenSegmentoL).reduce((a, b) => a + b, 0).toFixed(2)} L`)}
+          {fila(
+            'Suma',
+            `${Object.values(m.volumenSegmentoL)
+              .reduce((a, b) => a + b, 0)
+              .toFixed(2)} L`,
+          )}
         </dl>
       </details>
       <p className="text-[11px] text-humo-500">
@@ -480,11 +553,37 @@ function Deslizador(props: {
   onChange: (v: number) => void;
 }) {
   const { etiqueta, min, max, paso, valor, onChange } = props;
+  const decimales = Number.isInteger(paso) ? 0 : 2;
+  const mostrado = valor.toFixed(decimales).replace('.', ',');
+  const [texto, setTexto] = useState<string | null>(null);
+  // Se escribe con el teclado; se aplica al salir del campo o con Enter.
+  const aplicar = () => {
+    if (texto === null) return;
+    const n = Number(texto.replace(',', '.'));
+    if (texto.trim() !== '' && Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+    setTexto(null);
+  };
   return (
-    <label className="block">
-      <span className="flex justify-between text-xs text-humo-300">
+    <div data-deslizador className="block">
+      <span className="flex items-center justify-between gap-2 text-xs text-humo-300">
         <span className="truncate pr-2">{etiqueta}</span>
-        <span className="tabular-nums text-humo-500">{Number.isInteger(paso) ? valor : valor.toFixed(2)}</span>
+        <input
+          type="text"
+          inputMode={min < 0 ? 'text' : 'decimal'}
+          aria-label={`${etiqueta}: valor`}
+          value={texto ?? mostrado}
+          onFocus={(e) => {
+            setTexto(mostrado);
+            e.target.select();
+          }}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={aplicar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            if (e.key === 'Escape') setTexto(null);
+          }}
+          className="w-16 rounded-md border border-carbon-600 bg-carbon-900 px-1.5 py-0.5 text-right tabular-nums text-humo-100 outline-none focus:border-[#8CC63F]"
+        />
       </span>
       <input
         type="range"
@@ -492,9 +591,10 @@ function Deslizador(props: {
         max={max}
         step={paso}
         value={valor}
+        aria-label={etiqueta}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full accent-[#8CC63F]"
       />
-    </label>
+    </div>
   );
 }
