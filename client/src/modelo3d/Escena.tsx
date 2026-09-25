@@ -8,7 +8,8 @@ import {
   CanvasTexture,
   Color,
   EqualStencilFunc,
-  MeshStandardMaterial,
+  type Material,
+  MeshPhysicalMaterial,
   NotEqualStencilFunc,
   ReplaceStencilOp,
   ShaderMaterial,
@@ -22,6 +23,8 @@ import { useVisor } from './estado';
 import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
 import type { SegmentoInforme } from './cliente';
+import { normalesVertice } from './geometria';
+import { ojos, prepararPulido, pulirAtributo, pulirPosiciones, type Pulido } from './pulido';
 import type { CuerpoBase } from './tipos';
 
 /**
@@ -67,11 +70,13 @@ export function Escena(props: {
   let contenido: React.ReactNode = null;
   if (actual) {
     if (verSegmentos) {
-      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresSegmento(cuerpo)} />;
+      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresSegmento(cuerpo)} colorOjos={COLOR_SEGMENTO.cabeza} />;
     } else if (vista === 'realista') {
       contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} color={colorCuerpo} />;
     } else if (vista === 'calor') {
-      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresCalor(cuerpo, estados, calorDe)} />;
+      contenido = (
+        <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresCalor(cuerpo, estados, calorDe)} colorOjos={MAPA_CALOR.colores.sinDato} />
+      );
     } else if (lado && objetivo) {
       contenido = (
         <>
@@ -99,21 +104,76 @@ export function Escena(props: {
 
   return (
     <>
-      <color attach="background" args={['#0F1115']} />
-      <Environment files="/modelo3d/estudio.hdr" environmentIntensity={0.3} />
-      <directionalLight position={[2.5, 4, 3]} intensity={1.1} />
-      <directionalLight position={[-3, 2, -2]} intensity={0.35} />
+      <Fondo />
+      <Environment files="/modelo3d/estudio.hdr" environmentIntensity={0.35} />
+      {/* Luz de estudio: principal suave y casi de frente (sombras parejas en los
+          dos lados del cuerpo), relleno del otro lado y dos luces de borde
+          detrás que dibujan la silueta contra el fondo oscuro. */}
+      {LUCES.map((l, i) => (
+        <directionalLight key={i} position={l.posicion} intensity={l.intensidad} color={l.color} />
+      ))}
       <group rotation-y={giro}>
         {contenido}
         {verAnillos && actual && !lado && <AnillosMedida anillos={actual.anillos} medidas={actual.medidas.circunferenciasCm} />}
       </group>
-      <ContactShadows position={[0, 0.001, 0]} scale={lado ? 4 : 2.4} blur={2.4} opacity={0.55} far={1.2} resolution={512} color="#000000" />
-      <mesh rotation-x={-Math.PI / 2} position-y={-0.002}>
-        <circleGeometry args={[lado ? 1.6 : 0.95, 64]} />
-        <meshBasicMaterial color="#1D2129" />
-      </mesh>
+      <ContactShadows position={[0, 0.001, 0]} scale={lado ? 4 : 2.4} blur={2.6} opacity={0.6} far={1.2} resolution={512} color="#000000" />
+      <Piso radio={lado ? 1.8 : 1.1} />
       <Camara lado={lado} />
     </>
+  );
+}
+
+const LUCES: { posicion: [number, number, number]; intensidad: number; color: string }[] = [
+  { posicion: [2.4, 3.4, 3.2], intensidad: 1.3, color: '#FFFFFF' },
+  { posicion: [-3, 1.2, 2.5], intensidad: 0.35, color: '#FFFFFF' },
+  { posicion: [-2.2, 2.6, -3], intensidad: 1.1, color: '#D6E6FF' },
+  { posicion: [2.2, 2.6, -3], intensidad: 0.9, color: '#FFEBD6' },
+];
+
+/** Degradado radial de fondo (más claro detrás del cuerpo), en pantalla completa. */
+function Fondo() {
+  const textura = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 512;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createRadialGradient(256, 230, 20, 256, 256, 360);
+    g.addColorStop(0, '#2B303B');
+    g.addColorStop(0.55, '#171A21');
+    g.addColorStop(1, '#0B0D11');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 512, 512);
+    const t = new CanvasTexture(c);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => textura.dispose(), [textura]);
+  return <primitive attach="background" object={textura} />;
+}
+
+/** Piso: un disco que se desvanece hacia el borde (sin un corte duro). */
+function Piso({ radio }: { radio: number }) {
+  const textura = useMemo(() => {
+    const c = document.createElement('canvas');
+    c.width = 256;
+    c.height = 256;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, 'rgba(58, 64, 78, 0.9)');
+    g.addColorStop(0.6, 'rgba(40, 45, 56, 0.55)');
+    g.addColorStop(1, 'rgba(24, 27, 34, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 256);
+    const t = new CanvasTexture(c);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+  }, []);
+  useEffect(() => () => textura.dispose(), [textura]);
+  return (
+    <mesh rotation-x={-Math.PI / 2} position-y={-0.002}>
+      <circleGeometry args={[radio, 64]} />
+      <meshBasicMaterial map={textura} transparent depthWrite={false} />
+    </mesh>
   );
 }
 
@@ -143,23 +203,42 @@ function Camara({ lado }: { lado: boolean }) {
 
 /* ------------------------------------------------------------ Geometrías */
 
+/**
+ * Geometría de un cuerpo en la malla que se muestra (subdividida y con cara de
+ * maniquí, ver pulido.ts); el pulido va en userData para volcar los datos.
+ */
 function crearGeometria(cuerpo: CuerpoBase) {
+  const p = prepararPulido(cuerpo);
   const g = new BufferGeometry();
-  g.setAttribute('position', new BufferAttribute(new Float32Array(cuerpo.posiciones), 3));
-  g.setAttribute('normal', new BufferAttribute(new Float32Array(cuerpo.posiciones.length), 3));
-  g.setIndex(new BufferAttribute(cuerpo.indicesTriangulos, 1));
+  g.setAttribute('position', new BufferAttribute(pulirPosiciones(p, cuerpo.posiciones), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(p.nTotal * 3), 3));
+  g.setIndex(new BufferAttribute(p.indices, 1));
   g.computeVertexNormals();
+  g.userData.pulido = p;
   return g;
 }
 
 function volcar(geometria: BufferGeometry, malla: Malla) {
+  const p = geometria.userData.pulido as Pulido;
   const pos = geometria.getAttribute('position') as BufferAttribute;
-  (pos.array as Float32Array).set(malla.pos);
+  pulirPosiciones(p, malla.pos, pos.array as Float32Array<ArrayBuffer>);
   pos.needsUpdate = true;
   const nor = geometria.getAttribute('normal') as BufferAttribute;
-  (nor.array as Float32Array).set(malla.normales);
+  normalesVertice(pos.array as Float32Array, p.indices, nor.array as Float32Array);
   nor.needsUpdate = true;
   geometria.computeBoundingSphere();
+}
+
+/** Atributo por vértice del cuerpo (colores, espesor) llevado a la geometría que se muestra. */
+function ponerAtributo(geometria: BufferGeometry, nombre: string, valores: Float32Array, k: number) {
+  const p = geometria.userData.pulido as Pulido;
+  let attr = geometria.getAttribute(nombre) as BufferAttribute | undefined;
+  if (!attr || attr.itemSize !== k) {
+    attr = new BufferAttribute(new Float32Array(p.nTotal * k), k);
+    geometria.setAttribute(nombre, attr);
+  }
+  pulirAtributo(p, valores, k, attr.array as Float32Array<ArrayBuffer>);
+  attr.needsUpdate = true;
 }
 
 /**
@@ -204,8 +283,24 @@ function mezclar(a: ResultadoMotor, b: ResultadoMotor, t: number): DatosCuerpo {
 
 /* ------------------------------------------------------ Cuerpo realista */
 
-/** Material de piel mate: roughness alta y un sheen suave en el contorno. */
-function CuerpoSolido({ cuerpo, malla, color, colores }: { cuerpo: CuerpoBase; malla: Malla; color?: string; colores?: Float32Array }) {
+/**
+ * Ojos lisos, como en una escultura: la malla de MakeHuman no trae globos
+ * oculares y las cuencas vacías se veían inquietantes (ver pulido.ts).
+ */
+function Ojos({ malla, material }: { malla: Malla; material: Material }) {
+  const o = useMemo(() => ojos(malla.pos), [malla]);
+  return (
+    <>
+      {o.map((ojo, i) => (
+        <mesh key={i} position={ojo.centro} scale={ojo.radio} material={material}>
+          <sphereGeometry args={[1, 24, 16]} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+function CuerpoSolido({ cuerpo, malla, color, colores, colorOjos }: { cuerpo: CuerpoBase; malla: Malla; color?: string; colores?: Float32Array; colorOjos?: string }) {
   const g = usarGeometria(cuerpo);
   const redibujar = usarRedibujar();
   useEffect(() => {
@@ -214,23 +309,43 @@ function CuerpoSolido({ cuerpo, malla, color, colores }: { cuerpo: CuerpoBase; m
   }, [g, malla, redibujar]);
   useEffect(() => {
     if (!colores) return;
-    g.setAttribute('color', new BufferAttribute(colores, 3));
+    ponerAtributo(g, 'color', colores, 3);
     redibujar();
   }, [g, colores, redibujar]);
-  return (
-    <mesh geometry={g}>
-      <meshPhysicalMaterial
-        key={colores ? 'colores' : 'color'}
-        color={colores ? '#ffffff' : color}
-        vertexColors={!!colores}
-        roughness={0.72}
-        metalness={0}
-        sheen={0.35}
-        sheenRoughness={0.8}
-        sheenColor="#ffffff"
-      />
-    </mesh>
+  const material = useMemo(() => crearMaterialPiel(colores ? '#ffffff' : color ?? '#ffffff', !!colores), [color, colores]);
+  const materialOjos = useMemo(() => (colores ? crearMaterialPiel(colorOjos ?? '#ffffff', false) : material), [colores, colorOjos, material]);
+  useEffect(
+    () => () => {
+      material.dispose();
+      materialOjos.dispose();
+    },
+    [material, materialOjos],
   );
+  return (
+    <>
+      <mesh geometry={g} material={material} />
+      <Ojos malla={malla} material={materialOjos} />
+    </>
+  );
+}
+
+/**
+ * Porcelana satinada: base algo rugosa, una capa de barniz muy suave y un
+ * brillo aterciopelado en el contorno (sheen) que redondea la silueta.
+ */
+function crearMaterialPiel(color: string, vertexColors: boolean) {
+  return new MeshPhysicalMaterial({
+    color,
+    vertexColors,
+    roughness: 0.6,
+    metalness: 0,
+    clearcoat: 0.2,
+    clearcoatRoughness: 0.5,
+    sheen: 0.6,
+    sheenRoughness: 0.5,
+    sheenColor: '#ffffff',
+    envMapIntensity: 0.6,
+  });
 }
 
 function coloresPorSegmento(cuerpo: CuerpoBase, colorDe: (segmento: string) => string) {
@@ -270,7 +385,17 @@ function coloresCalor(cuerpo: CuerpoBase, estados: Record<SegmentoInforme, Estad
  *   desde cualquier ángulo.
  */
 function crearMaterialesGrasa() {
-  const magro = new MeshStandardMaterial({ color: COLOR_MAGRO, roughness: 0.55, metalness: 0, envMapIntensity: 0.35 });
+  const magro = new MeshPhysicalMaterial({
+    color: COLOR_MAGRO,
+    roughness: 0.55,
+    metalness: 0,
+    clearcoat: 0.15,
+    clearcoatRoughness: 0.5,
+    sheen: 0.4,
+    sheenRoughness: 0.5,
+    sheenColor: '#FFB0A0',
+    envMapIntensity: 0.7,
+  });
   magro.stencilWrite = true;
   magro.stencilRef = 1;
   magro.stencilFunc = AlwaysStencilFunc;
@@ -287,45 +412,44 @@ function crearMaterialesGrasa() {
         color: { value: new Color(COLOR_GRASA) },
         // Opacidad según el grosor de grasa: 0 sin grasa (se ve el músculo tal cual),
         // `minima` apenas hay grasa y `maxima` desde `lleno` metros.
-        minima: { value: encima ? 0.15 : 0.85 },
-        maxima: { value: encima ? 0.6 : 0.92 },
+        minima: { value: encima ? 0.08 : 0.72 },
+        maxima: { value: encima ? 0.42 : 0.88 },
         lleno: { value: 0.05 },
       },
       vertexShader: `
         attribute float espesor;
-        varying vec3 vN;
         varying vec3 vNm;
-        varying vec3 vV;
+        varying vec3 vVm;
         varying float vEsp;
         void main() {
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vN = normalize(normalMatrix * normal);
+          vec4 mundo = modelMatrix * vec4(position, 1.0);
           vNm = normalize(mat3(modelMatrix) * normal);
-          vV = normalize(-mv.xyz);
+          vVm = normalize(cameraPosition - mundo.xyz);
           vEsp = espesor;
-          gl_Position = projectionMatrix * mv;
+          gl_Position = projectionMatrix * viewMatrix * mundo;
         }`,
       fragmentShader: `
         uniform vec3 color;
         uniform float minima;
         uniform float maxima;
         uniform float lleno;
-        varying vec3 vN;
         varying vec3 vNm;
-        varying vec3 vV;
+        varying vec3 vVm;
         varying float vEsp;
         void main() {
           vec3 n = normalize(vNm);
-          // Las mismas luces que la escena: principal arriba-adelante, relleno atrás.
-          float luz = 0.42 + 0.62 * max(dot(n, normalize(vec3(2.5, 4.0, 3.0))), 0.0)
-                           + 0.18 * max(dot(n, normalize(vec3(-3.0, 2.0, -2.0))), 0.0);
-          float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+          vec3 v = normalize(vVm);
+          // Las luces de la escena: principal casi de frente y relleno del otro lado.
+          vec3 principal = normalize(vec3(2.4, 3.4, 3.2));
+          float luz = 0.5 + 0.55 * max(dot(n, principal), 0.0) + 0.18 * max(dot(n, normalize(vec3(-3.0, 1.2, 2.5))), 0.0);
+          float f = 1.0 - abs(dot(n, v));
+          // Brillo de la luz principal: la capa se lee como un gel encima del músculo.
+          float brillo = 0.28 * pow(max(dot(n, normalize(principal + v)), 0.0), 50.0);
           // Menos de ~1,5 mm de grasa: la capa desaparece y el músculo conserva su color.
           float hay = smoothstep(0.0005, 0.0025, vEsp);
           float a = mix(minima, maxima, smoothstep(0.0, lleno, vEsp));
-          a = hay * clamp(a + 0.3 * pow(f, 2.5), 0.0, 1.0);
-          // Un brillo suave en el contorno, como una capa húmeda por encima.
-          vec3 c = color * luz + vec3(1.0, 0.93, 0.75) * 0.22 * pow(f, 3.0);
+          a = hay * clamp(a + 0.35 * pow(f, 2.0) + brillo, 0.0, 1.0);
+          vec3 c = color * luz + vec3(1.0, 0.96, 0.85) * (brillo + 0.2 * pow(f, 3.0));
           gl_FragColor = vec4(c, a);
           #include <colorspace_fragment>
         }`,
@@ -358,15 +482,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
     redibujar();
     volcar(exterior, datos.cuerpo);
     if (datos.magro) volcar(magro, datos.magro);
-    if (datos.espesor) {
-      let attr = exterior.getAttribute('espesor') as BufferAttribute | undefined;
-      if (!attr || attr.count !== datos.espesor.length) {
-        attr = new BufferAttribute(new Float32Array(datos.espesor.length), 1);
-        exterior.setAttribute('espesor', attr);
-      }
-      (attr.array as Float32Array).set(datos.espesor);
-      attr.needsUpdate = true;
-    }
+    if (datos.espesor) ponerAtributo(exterior, 'espesor', datos.espesor, 1);
   }, [datos, exterior, magro, redibujar]);
 
   if (!datos.magro) {
@@ -379,6 +495,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
   return (
     <>
       <mesh geometry={magro} material={materiales.magro} />
+      <Ojos malla={datos.magro} material={materiales.magro} />
       <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} />
       <mesh geometry={exterior} material={materiales.encima} renderOrder={2} />
     </>

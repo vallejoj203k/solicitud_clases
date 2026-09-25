@@ -29,6 +29,12 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
   cuerpo es musculoso o gordo. La grasa visceral decide la barriga.
 - **Vista "grasa y músculo":** el cuerpo sin grasa (rojo) va dentro del
   completo; la grasa (amarillo) es la diferencia, más opaca donde es más gruesa.
+- **Cómo se ve:** el cuerpo que se mide (13 380 vértices de MakeHuman) se
+  muestra pulido (`pulido.ts`): una subdivisión de Loop (53 000 vértices, sin
+  facetas), la cabeza suavizada como una escultura con ojos lisos (la malla no
+  trae globos oculares) y sin pezones. Es solo para mostrar: medidas y ajuste
+  usan la malla original. Luz de estudio con luces de borde, fondo en degradado
+  y materiales satinados (porcelana en "Realista", músculo y grasa tipo gel).
 - **Comparar:** el cuerpo objetivo aplica los controles de grasa y músculo del
   informe repartidos en proporción a cada segmento (`resultados.ts`).
 
@@ -37,7 +43,8 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 | Archivo | Qué hace |
 | --- | --- |
 | `PaginaModelo3D.tsx` | Página: carga el cuerpo, lanza ajustes y cálculos, captura PNG, teclado. |
-| `Escena.tsx` | Escena 3D: modos de vista, materiales, anillos con etiquetas, cámara, HDRI. |
+| `Escena.tsx` | Escena 3D: modos de vista, materiales, luces, anillos con etiquetas, cámara, HDRI. |
+| `pulido.ts` | Malla que se muestra: subdivisión de Loop, cabeza y pecho alisados, ojos. |
 | `Panel.tsx`, `FormularioScanner.tsx`, `TarjetasResultado.tsx`, `ResumenAjuste.tsx` | Interfaz. |
 | `campos.ts` / `cliente.ts` | Campos del informe; validación (zod) y avisos de coherencia. |
 | `objetivos.ts` | Datos del formulario → objetivos y puntos de partida del solver. |
@@ -63,7 +70,7 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 ## Pruebas
 
 ```bash
-npm test -w client        # 66 tests: geometría, medición, solver, formulario, resultados
+npm test -w client        # 69 tests: geometría, medición, solver, pulido, formulario, resultados
 npm run typecheck -w client
 ```
 
@@ -77,6 +84,7 @@ musculoso, y que los dos ajustes tarden menos de 300 ms.
 - El visor se descarga aparte (~310 KB comprimidos), solo al entrar a la
   página; los archivos con hash se cachean un año.
 - El canvas dibuja solo cuando algo cambia (en reposo no gasta batería).
+- Pulir el cuerpo cuesta ~15 ms por cambio (matriz dispersa precalculada).
 - Modelos de ~0,9 MB (meshopt) y HDRI de 0,5 MB.
 - Teclado: flechas para girar el modelo, flechas entre pestañas, foco visible;
   descripción del cuerpo para lectores de pantalla; "reducir movimiento" salta
