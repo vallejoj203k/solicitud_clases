@@ -258,21 +258,35 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
   };
 
   // Punto de partida: el mejor de unas pocas semillas de músculo x peso (el
-  // paisaje de MakeHuman tiene varios valles en esos dos macros).
+  // paisaje de MakeHuman tiene varios valles en esos dos macros), además del
+  // propio punto de partida de los priors.
   const dado = entrada.inicial;
   const inicial = new Float64Array(params.map((p) => Math.min(p.max, Math.max(p.min, dado?.[p.clave] ?? prior(p)))));
   let x = inicial;
   let actual = evaluar(x);
-  for (const [m, w] of dado ? [] : SEMILLAS_AJUSTE) {
+  // Semillas: las fijas, más una fila en el músculo que pide la composición.
+  const pMusculo = params.find((p) => p.clave === 'macro:musculo');
+  const semillas: [number, number][] = [...SEMILLAS_AJUSTE];
+  if (pMusculo) for (const w of [0.55, 0.7, 0.85, 1]) semillas.push([prior(pMusculo), w]);
+  // Al elegir la semilla, los objetivos pesan 10 veces menos: una semilla un poco
+  // corta de volumen pero con la forma que pide la composición es mejor punto de
+  // partida (el ajuste afina el volumen después) que una exacta con la forma
+  // equivocada del otro lado de un valle.
+  const costoSemilla = (r: Float64Array) => {
+    let c = 0;
+    for (let k = 0; k < r.length; k++) c += k < objetivos.length ? (r[k] / 10) ** 2 : r[k] ** 2;
+    return c;
+  };
+  for (const [m, w] of dado ? [] : semillas) {
     const s = Float64Array.from(inicial);
     params.forEach((p, j) => {
       if (p.clave === 'macro:musculo') s[j] = m;
       if (p.clave === 'macro:peso') s[j] = w;
     });
     const e = evaluar(s);
-    // Sin la regularización de la semilla: se compara solo cuánto se acerca.
-    const c = costo(e.r.subarray(0, objetivos.length));
-    if (c < costo(actual.r.subarray(0, objetivos.length))) {
+    // Cuánto se acerca a los objetivos y cuánto se aleja de los puntos de
+    // partida (que con datos de composición dicen músculo frente a grasa).
+    if (costoSemilla(e.r) < costoSemilla(actual.r)) {
       x = s;
       actual = e;
     }
@@ -398,8 +412,10 @@ export function ajustar(cuerpo: CuerpoBase, prep: PrepMedicion, entrada: Entrada
         }
         // Datos que no cuadran entre sí: tras varias vueltas la mejora es mínima y
         // lo que queda son residuos reales, que se informan.
-        const estancado = iteraciones >= 8 && rel < 0.01;
-        convergio = rel < 1e-4 || dx < 1e-4 || (enObjetivo && rel < 0.02) || seguidasEnObjetivo >= 3 || (cumpleTodo && rel < 0.005) || estancado;
+        const estancado = iteraciones >= 12 && rel < 0.003;
+        // Con los objetivos cumplidos, lo que queda es la forma (músculo frente a
+        // grasa, dónde va el volumen): se sigue mientras el costo total baje algo.
+        convergio = rel < 1e-4 || dx < 1e-4 || (enObjetivo && rel < 0.002) || seguidasEnObjetivo >= 6 || (cumpleTodo && rel < 0.001) || estancado;
         break;
       }
       mu *= 4;

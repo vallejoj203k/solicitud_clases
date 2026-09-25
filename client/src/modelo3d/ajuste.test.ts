@@ -185,3 +185,30 @@ describe('fase 4: composición del scanner', () => {
     for (const t of tiempos) expect(t).toBeLessThan(300);
   });
 });
+
+describe('la composición decide la forma (músculo vs grasa)', () => {
+  const base = (valores: Record<string, string>): Borrador => ({ nombre: '', sexo: 'M', valores: { estatura: '175', edad: '30', ...valores }, evaluacion: {} });
+  const exterior = (b: Borrador) => {
+    const { cuerpo, prep } = cuerpos[b.sexo];
+    return ajustar(cuerpo, prep, entradaAjusteDe(b)!);
+  };
+
+  it('mismo peso: mucha masa libre de grasa se ve musculoso; mucha grasa, gordo', () => {
+    const atleta = exterior(base({ peso: '90', grasa: '10', plg: '80' }));
+    const graso = exterior(base({ peso: '90', grasa: '32', plg: '58' }));
+    console.log('atleta músculo', atleta.macro.musculo.toFixed(2), 'peso', atleta.macro.peso.toFixed(2), '| graso músculo', graso.macro.musculo.toFixed(2), 'peso', graso.macro.peso.toFixed(2));
+    // En MakeHuman el "peso" es el tamaño (los dos pesan 90 kg); la diferencia es el músculo.
+    expect(atleta.macro.musculo).toBeGreaterThan(graso.macro.musculo + 0.5);
+    expect(atleta.cumple && graso.cumple).toBe(true);
+    // Y el atleta no usa los controles de grasa para llegar al volumen.
+    const grasaLocal = (r: typeof atleta) => ['barriga', 'cintura', 'cadera', 'torso_ancho', 'gluteos'].reduce((a, k) => a + Math.max(0, r.locales[k] ?? 0), 0);
+    expect(grasaLocal(atleta)).toBeLessThan(grasaLocal(graso) + 0.2);
+  });
+
+  it('subir el peso libre de grasa sube el músculo, no la grasa', () => {
+    const antes = exterior(base({ peso: '80', grasa: '16', plg: '64' }));
+    const despues = exterior(base({ peso: '90', grasa: '16', plg: '74' }));
+    console.log('PLG 64 -> 74: músculo', antes.macro.musculo.toFixed(2), '->', despues.macro.musculo.toFixed(2), '| peso MH', antes.macro.peso.toFixed(2), '->', despues.macro.peso.toFixed(2));
+    expect(despues.macro.musculo).toBeGreaterThan(antes.macro.musculo + 0.15);
+  });
+});
