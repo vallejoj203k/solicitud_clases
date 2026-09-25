@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import { IconoAtras } from '../components/Iconos.jsx';
 import type { ClienteInput, SegmentoInforme } from './cliente';
 import { CIRCUNFERENCIAS, COLORES_CUERPO, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { GRUPOS } from './musculos';
+
+const COLOR_TENDON = GRUPOS[0].color;
 import { controlesLocales, type ControlLocal } from './controles';
 import { useVisor, type Vista } from './estado';
 import { FormularioMedidas, FormularioScanner } from './FormularioScanner';
@@ -190,12 +193,17 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
       <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-humo-300">
         <span className="flex items-center gap-1.5">
           <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_MAGRO }} />
-          Músculo, hueso y órganos
+          Músculo
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_TENDON }} />
+          Tendón y hueso
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_GRASA }} />
           Grasa (más opaca donde es más gruesa)
         </span>
+        <span className="w-full text-humo-500">Toca un músculo para ver su nombre.</span>
       </p>
     );
   }

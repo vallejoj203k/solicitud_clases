@@ -29,6 +29,14 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
   cuerpo es musculoso o gordo. La grasa visceral decide la barriga.
 - **Vista "grasa y músculo":** el cuerpo sin grasa (rojo) va dentro del
   completo; la grasa (amarillo) es la diferencia, más opaca donde es más gruesa.
+- **Músculos:** sobre el cuerpo sin grasa se dibujan 22 grupos musculares como
+  en una lámina de anatomía (`musculos.ts`). Cada vértice se asigna a un
+  músculo con reglas geométricas (segmento, altura, posición a lo largo del
+  brazo o la pierna y hacia dónde mira la superficie alisada). Luego cada
+  etiqueta se difunde por la malla y el shader elige por píxel la de más peso:
+  los bordes quedan como curvas (no en escalera por las aristas), con un surco
+  fino, relieve hacia el centro y estrías según las fibras. Tocar un músculo
+  muestra su nombre. No son modelos anatómicos: es una aproximación visual.
 - **Comparar:** el cuerpo objetivo aplica los controles de grasa y músculo del
   informe repartidos en proporción a cada segmento (`resultados.ts`).
 
@@ -38,6 +46,7 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 | --- | --- |
 | `PaginaModelo3D.tsx` | Página: carga el cuerpo, lanza ajustes y cálculos, captura PNG, teclado. |
 | `Escena.tsx` | Escena 3D: modos de vista, materiales, anillos con etiquetas, cámara, HDRI. |
+| `musculos.ts` | Grupos musculares sobre el cuerpo sin grasa (reglas, difusión, tabla para el shader). |
 | `Panel.tsx`, `FormularioScanner.tsx`, `TarjetasResultado.tsx`, `ResumenAjuste.tsx` | Interfaz. |
 | `campos.ts` / `cliente.ts` | Campos del informe; validación (zod) y avisos de coherencia. |
 | `objetivos.ts` | Datos del formulario → objetivos y puntos de partida del solver. |
@@ -59,11 +68,12 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 - Densidades por segmento (1,06 / 0,90) y total (1,1).
 - `ESCALA_*`, `MAPA_CALOR`: tarjetas y mapa de calor.
 - `COLOR_MAGRO`, `COLOR_GRASA`, `COLORES_CUERPO`: colores.
+- Los colores y reglas de cada músculo están en `musculos.ts` (`GRUPOS`).
 
 ## Pruebas
 
 ```bash
-npm test -w client        # 66 tests: geometría, medición, solver, formulario, resultados
+npm test -w client        # 72 tests: geometría, medición, solver, músculos, formulario, resultados
 npm run typecheck -w client
 ```
 

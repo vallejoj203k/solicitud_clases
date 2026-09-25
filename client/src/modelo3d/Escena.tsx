@@ -7,21 +7,27 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  DataTexture,
   EqualStencilFunc,
+  FloatType,
   MeshStandardMaterial,
+  NearestFilter,
   NotEqualStencilFunc,
   ReplaceStencilOp,
+  RGBAFormat,
   ShaderMaterial,
   SpriteMaterial,
   SRGBColorSpace,
+  Triangle,
   Vector3,
 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_SEGMENTO, MAPA_CALOR } from './config';
 import { useVisor } from './estado';
 import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
 import type { SegmentoInforme } from './cliente';
+import { clasificarMusculos, etiquetaEn, nombreEtiqueta, type Musculos } from './musculos';
 import type { CuerpoBase } from './tipos';
 
 /**
@@ -269,8 +275,106 @@ function coloresCalor(cuerpo: CuerpoBase, estados: Record<SegmentoInforme, Estad
  *   pinta casi opaca: es la silueta amarilla del dibujo de referencia, vista
  *   desde cualquier ángulo.
  */
+/**
+ * Material del cuerpo sin grasa con los músculos dibujados (ver musculos.ts):
+ * por píxel gana la etiqueta candidata de más peso; su color y sus estrías salen
+ * de la tabla. El surco va donde las dos primeras empatan, con un ancho fijo en
+ * metros (medido con las derivadas de pantalla), y el músculo se aclara hacia
+ * el centro. Las estrías se desvanecen cuando quedan más finas que un píxel.
+ * La tabla (textura) se pone en `userData.tabla.value`.
+ */
+function crearMaterialMusculo() {
+  const m = new MeshStandardMaterial({ color: '#ffffff', roughness: 0.5, metalness: 0, envMapIntensity: 0.35 });
+  const tabla = { value: null as DataTexture | null };
+  m.userData.tabla = tabla;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.tablaMusculos = tabla;
+    sh.vertexShader = sh.vertexShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nattribute vec3 candidatas;\nattribute vec3 pesos;\nvarying vec3 vCand;\nvarying vec3 vPesos;\nvarying vec3 vPosObj;',
+      )
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCand = candidatas;\nvPesos = pesos;\nvPosObj = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nuniform sampler2D tablaMusculos;\nvarying vec3 vCand;\nvarying vec3 vPesos;\nvarying vec3 vPosObj;',
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        vec3 w = vPesos;
+        int i1 = (w.x >= w.y && w.x >= w.z) ? 0 : (w.y >= w.z ? 1 : 2);
+        int i2 = i1 == 0 ? (w.y >= w.z ? 1 : 2) : (i1 == 1 ? (w.x >= w.z ? 0 : 2) : (w.x >= w.y ? 0 : 1));
+        float margen = w[i1] - w[i2];
+        vec4 c1 = texelFetch(tablaMusculos, ivec2(int(vCand[i1] + 0.5), 0), 0);
+        float musculo2 = texelFetch(tablaMusculos, ivec2(int(vCand[i2] + 0.5), 0), 0).a;
+        vec3 fib = texelFetch(tablaMusculos, ivec2(int(vCand[i1] + 0.5), 1), 0).xyz;
+        diffuseColor.rgb *= c1.rgb;
+        // Distancia al borde en metros: margen / |gradiente|, con el tamaño del píxel.
+        float px = 0.5 * (length(dFdx(vPosObj)) + length(dFdy(vPosObj)));
+        float gm = length(vec2(dFdx(margen), dFdy(margen)));
+        float dist = margen * px / max(gm, 1e-7);
+        float ancho = max(0.003, 1.5 * px);
+        float surco = (c1.a + musculo2 > 0.5) ? 1.0 - smoothstep(0.35 * ancho, ancho, dist) : 0.0;
+        float relieve = mix(1.0, 0.84 + 0.2 * smoothstep(0.0, 0.8, margen), c1.a);
+        diffuseColor.rgb *= relieve * (1.0 - 0.55 * surco);
+        // Estrías de las fibras (cada ~6 mm), solo donde se pueden ver.
+        float s = dot(vPosObj, fib) * 260.0;
+        float anchoS = fwidth(s);
+        float linea = smoothstep(0.7, 1.0, abs(fract(s) - 0.5) * 2.0);
+        float visible = (1.0 - smoothstep(0.2, 0.55, anchoS)) * step(0.5, length(fib));
+        diffuseColor.rgb *= 1.0 - 0.22 * linea * visible;`,
+      );
+  };
+  m.customProgramCacheKey = () => 'musculo-v2';
+  return m;
+}
+
+/**
+ * Geometría del cuerpo sin grasa para los músculos: sin indexar (cada triángulo
+ * con sus esquinas, ver Musculos) y con candidatas y pesos fijos. Posición y
+ * normales se copian por esquina en cada cálculo (`volcarEsquinas`).
+ */
+function crearGeometriaMusculos(cuerpo: CuerpoBase, m: Musculos) {
+  const c = cuerpo.indicesTriangulos.length * 3;
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(new Float32Array(c), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(c), 3));
+  g.setAttribute('candidatas', new BufferAttribute(m.candidatas, 3));
+  g.setAttribute('pesos', new BufferAttribute(m.pesos, 3));
+  return g;
+}
+
+function porEsquina(tris: ArrayLike<number>, origen: ArrayLike<number>, destino: Float32Array) {
+  for (let i = 0; i < tris.length; i++) {
+    const v = tris[i] * 3;
+    destino[i * 3] = origen[v];
+    destino[i * 3 + 1] = origen[v + 1];
+    destino[i * 3 + 2] = origen[v + 2];
+  }
+}
+
+function volcarEsquinas(geometria: BufferGeometry, tris: ArrayLike<number>, malla: Malla) {
+  const pos = geometria.getAttribute('position') as BufferAttribute;
+  porEsquina(tris, malla.pos, pos.array as Float32Array);
+  pos.needsUpdate = true;
+  const nor = geometria.getAttribute('normal') as BufferAttribute;
+  porEsquina(tris, malla.normales, nor.array as Float32Array);
+  nor.needsUpdate = true;
+  geometria.computeBoundingSphere();
+}
+
+function texturaTabla(m: Musculos) {
+  const t = new DataTexture(m.tabla, m.etiquetas.length, 2, RGBAFormat, FloatType);
+  t.magFilter = NearestFilter;
+  t.minFilter = NearestFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
 function crearMaterialesGrasa() {
-  const magro = new MeshStandardMaterial({ color: COLOR_MAGRO, roughness: 0.55, metalness: 0, envMapIntensity: 0.35 });
+  const magro = crearMaterialMusculo();
   magro.stencilWrite = true;
   magro.stencilRef = 1;
   magro.stencilFunc = AlwaysStencilFunc;
@@ -343,7 +447,17 @@ function crearMaterialesGrasa() {
 
 function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo }) {
   const exterior = usarGeometria(cuerpo);
-  const magro = usarGeometria(cuerpo);
+  const musculos = useMemo(() => clasificarMusculos(cuerpo), [cuerpo]);
+  const magro = useMemo(() => crearGeometriaMusculos(cuerpo, musculos), [cuerpo, musculos]);
+  const tabla = useMemo(() => texturaTabla(musculos), [musculos]);
+  useEffect(
+    () => () => {
+      magro.dispose();
+      tabla.dispose();
+    },
+    [magro, tabla],
+  );
+  const set = useVisor((s) => s.set);
   const materiales = useMemo(crearMaterialesGrasa, []);
   const redibujar = usarRedibujar();
   useEffect(
@@ -357,7 +471,8 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
   useEffect(() => {
     redibujar();
     volcar(exterior, datos.cuerpo);
-    if (datos.magro) volcar(magro, datos.magro);
+    materiales.magro.userData.tabla.value = tabla;
+    if (datos.magro) volcarEsquinas(magro, cuerpo.indicesTriangulos, datos.magro);
     if (datos.espesor) {
       let attr = exterior.getAttribute('espesor') as BufferAttribute | undefined;
       if (!attr || attr.count !== datos.espesor.length) {
@@ -367,7 +482,7 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
       (attr.array as Float32Array).set(datos.espesor);
       attr.needsUpdate = true;
     }
-  }, [datos, exterior, magro, redibujar]);
+  }, [cuerpo, datos, exterior, magro, materiales, tabla, redibujar]);
 
   if (!datos.magro) {
     return (
@@ -378,9 +493,24 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
   }
   return (
     <>
-      <mesh geometry={magro} material={materiales.magro} />
-      <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} />
-      <mesh geometry={exterior} material={materiales.encima} renderOrder={2} />
+      <mesh
+        geometry={magro}
+        material={materiales.magro}
+        onClick={(e) => {
+          // Un clic (no un arrastre para girar) dice qué músculo es.
+          if (e.delta > 6 || e.faceIndex == null) return;
+          e.stopPropagation();
+          const t = e.faceIndex;
+          const pos = magro.getAttribute('position');
+          const esquina = (c: number) => new Vector3().fromBufferAttribute(pos, t * 3 + c);
+          const bary = Triangle.getBarycoord(e.object.worldToLocal(e.point.clone()), esquina(0), esquina(1), esquina(2), new Vector3());
+          if (!bary) return;
+          set({ musculoTocado: nombreEtiqueta(etiquetaEn(musculos, t, [bary.x, bary.y, bary.z])) });
+        }}
+      />
+      {/* La grasa no se puede tocar: el clic pasa al músculo de abajo. */}
+      <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} raycast={() => null} />
+      <mesh geometry={exterior} material={materiales.encima} renderOrder={2} raycast={() => null} />
     </>
   );
 }
