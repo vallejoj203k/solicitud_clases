@@ -21,7 +21,8 @@ import type { CuerpoBase, PesosMorph } from './tipos';
  * cambia la cintura).
  */
 
-export type FuenteObjetivo = 'cinta' | 'scanner' | 'estimado';
+/** 'anterior': medida que tenía el modelo antes de editar un valor (modo "Editar un valor"); no se informa. */
+export type FuenteObjetivo = 'cinta' | 'scanner' | 'estimado' | 'anterior';
 
 export interface Objetivo {
   /** Qué medida de la malla se compara (ver ClaveMedida). */

@@ -56,11 +56,11 @@ const api = {
    * Fases 3 y 4: ajusta el cuerpo completo a los datos del formulario y, con él,
    * el cuerpo sin grasa. null si todavía no hay estatura y peso.
    */
-  ajustarCliente(borrador: Borrador): ResultadoCliente | null {
+  ajustarCliente(borrador: Borrador, mantener?: Record<string, number>): ResultadoCliente | null {
     const c = cuerpos.get(borrador.sexo);
     if (!c) throw new Error(`El cuerpo ${borrador.sexo} no está iniciado en el Worker`);
     const t0 = performance.now();
-    const entrada = entradaAjusteDe(borrador);
+    const entrada = entradaAjusteDe(borrador, mantener);
     if (!entrada) return null;
     const exterior = ajustar(c.cuerpo, c.prep, entrada);
     const entradaMagro = entradaSinGrasaDe(borrador, exterior, entrada);

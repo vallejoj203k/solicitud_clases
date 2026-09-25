@@ -30,6 +30,9 @@ import { MACRO_INICIAL } from './controles';
  * magra de cada brazo y pierna.
  */
 
+/** Qué tanto se sostienen las medidas previas en "Editar un valor" (cm): más que la regularización, menos que la cinta. */
+const SIGMA_MANTENER = 1;
+
 /** Densidad corporal de Siri (kg/L) para un % de grasa. */
 export const densidadSiri = (pctGrasa: number) => 495 / (pctGrasa + 450);
 
@@ -63,8 +66,12 @@ const CINTA: [string, string[], string][] = [
   ['m_hombros', ['hombros'], 'Ancho de hombros'],
 ];
 
-/** null si todavía no hay estatura y peso válidos. */
-export function entradaAjusteDe(b: Borrador): EntradaAjuste | null {
+/**
+ * null si todavía no hay estatura y peso válidos.
+ * `mantener`: medidas del modelo antes del cambio (modo "Editar un valor"); las
+ * que no se escribieron con cinta se piden suaves para que no se muevan.
+ */
+export function entradaAjusteDe(b: Borrador, mantener?: Record<string, number>): EntradaAjuste | null {
   const estatura = numero(b, 'estatura');
   const peso = numero(b, 'peso');
   if (estatura === undefined || peso === undefined) return null;
@@ -93,6 +100,14 @@ export function entradaAjusteDe(b: Borrador): EntradaAjuste | null {
       objetivos.push({ clave, etiqueta: etiqueta + lado, valor: v, unidad: 'cm', fuente: 'cinta', ...TOLERANCIAS.cinta });
     }
   }
+  if (mantener) {
+    const escritas = new Set(objetivos.map((o) => o.clave));
+    for (const [clave, valor] of Object.entries(mantener)) {
+      if (escritas.has(clave) || !Number.isFinite(valor)) continue;
+      objetivos.push({ clave, etiqueta: clave, valor, unidad: 'cm', fuente: 'anterior', sigma: SIGMA_MANTENER, tolerancia: Infinity });
+    }
+  }
+
   // Fase 4: volumen de cada brazo y pierna (masa magra + grasa del segmento).
   for (const s of EXTREMIDADES) {
     const seg = segmentoDe(b, s);
