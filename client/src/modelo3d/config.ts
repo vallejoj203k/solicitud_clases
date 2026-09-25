@@ -115,16 +115,12 @@ export const PARAMETROS_AJUSTE: DefParametro[] = [
   { ...local('pecho_graso', 1.2, 0, 1), solo: 'M' },
 ];
 
-/** Semillas de músculo x peso: se arranca desde la que mejor cumple los objetivos. */
-export const SEMILLAS_AJUSTE: [number, number][] = [
-  [0.5, 0.5],
-  [0.5, 0.8],
-  [0.3, 0.9],
-  [0.1, 0.9],
-  [0.8, 0.8],
-  [0.8, 0.4],
-  [0.3, 0.3],
-];
+/**
+ * Semillas de músculo x peso: se arranca desde la mejor. Rejilla que cubre los
+ * dos lados del valle de MakeHuman (con peso alto, músculo medio da menos
+ * volumen que músculo 0 o 1).
+ */
+export const SEMILLAS_AJUSTE: [number, number][] = [0, 0.5, 1].flatMap((m) => [0.3, 0.6, 0.85, 1].map((w) => [m, w] as [number, number]));
 
 /** Objetivos: desvío normal (sigma) y criterio de aceptación de cada tipo. */
 export const TOLERANCIAS = {
@@ -175,13 +171,60 @@ export const DENSIDAD_GRASA_SEGMENTO = 0.9;
 export const DENSIDAD_MAGRA_TOTAL = 1.1;
 
 /**
- * Prior del músculo de MakeHuman: masa muscular / peso libre de grasa comparado
- * con un valor típico por sexo. Cada `sensibilidad` por encima de la referencia
- * sube el prior 0,5 (de 0,5 a 1).
+ * La composición decide la forma. En MakeHuman el "peso" pone el tamaño y el
+ * "músculo" la composición: a igual peso, más músculo casi no agranda el cuerpo
+ * pero lo hace musculoso en vez de gordo (con peso alto: músculo 0 = obeso,
+ * músculo 1 = pesado y musculoso). El volumen ya fija el peso; el músculo
+ * arranca del % de grasa (curva [% grasa, músculo] por sexo), corregido por el
+ * índice de masa libre de grasa (PLG / estatura²) respecto del promedio.
+ */
+export const CURVA_MUSCULO_POR_GRASA: Record<'M' | 'F', [number, number][]> = {
+  M: [
+    [8, 1],
+    [14, 0.75],
+    [20, 0.5],
+    [27, 0.25],
+    [35, 0],
+  ],
+  F: [
+    [15, 1],
+    [21, 0.75],
+    [27, 0.5],
+    [34, 0.25],
+    [42, 0],
+  ],
+};
+/** Índice de masa libre de grasa promedio (kg/m²) y cuánto sube el músculo por cada punto de más (hasta ±0,15). */
+export const INDICE_MAGRO_PROMEDIO = { M: 18.5, F: 15.5 };
+export const MUSCULO_POR_PUNTO_DE_INDICE = 0.05;
+export const LAMBDA_MUSCULO_CON_DATO = 1.2;
+
+/**
+ * Los controles de grasa (barriga, flancos, cadera, grasa de brazos y piernas…)
+ * con un % de grasa por debajo de esta referencia son más caros de usar: el
+ * volumen lo ponen el peso y el músculo.
+ */
+export const GRASA_REFERENCIA = { M: 20, F: 28 };
+
+/**
+ * Masa muscular / peso libre de grasa comparado con un valor típico por sexo:
+ * corrige un poco el músculo (hasta ±0,15) según cuánto de la masa magra es músculo.
  */
 export const MUSCULO_REFERENCIA = { M: 0.555, F: 0.52 };
 export const MUSCULO_SENSIBILIDAD = 0.1;
-export const LAMBDA_MUSCULO_CON_DATO = 0.8;
+export const MUSCULO_CORRECCION_MAX = 0.15;
+export const MUSCULO_CORRECCION_INDICE_MAX = 0.15;
+
+/** Interpolación lineal por tramos en una curva [x, y] (plana fuera de los extremos). */
+export function interpolar(curva: [number, number][], x: number): number {
+  if (x <= curva[0][0]) return curva[0][1];
+  for (let i = 1; i < curva.length; i++) {
+    const [x0, y0] = curva[i - 1];
+    const [x1, y1] = curva[i];
+    if (x <= x1) return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+  }
+  return curva[curva.length - 1][1];
+}
 
 /** Controles que agregan grasa: el cuerpo sin grasa no los usa para crecer. */
 export const CONTROLES_DE_GRASA = [
@@ -203,6 +246,9 @@ export const CONTROLES_DE_GRASA = [
 
 /** Controles del esqueleto: el cuerpo sin grasa los copia del cuerpo completo. */
 export const CONTROLES_DE_ESQUELETO = ['macro:altura', 'local:hombros', 'local:entrepierna'];
+
+/** Controles que el ajuste del cuerpo sin grasa no mueve (ninguno de sus objetivos los mide). */
+export const FIJOS_SIN_GRASA = ['pectoral', 'espalda_v', 'cuello', 'cara_grasa', 'papada', 'pecho_graso'];
 
 /* ------------------------------------------------- Resultados (fase 5) */
 

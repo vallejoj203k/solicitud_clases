@@ -1,15 +1,24 @@
 import type { EntradaAjuste, Objetivo, ResultadoAjuste } from './ajuste';
-import { leerNumero, TODOS_LOS_CAMPOS, type Borrador } from './cliente';
+import { leerNumero, TODOS_LOS_CAMPOS, type Borrador } from './campos';
 import {
   CONTROLES_DE_ESQUELETO,
   CONTROLES_DE_GRASA,
+  FIJOS_SIN_GRASA,
   DENSIDAD_GRASA_SEGMENTO,
   DENSIDAD_MAGRA_SEGMENTO,
   DENSIDAD_MAGRA_TOTAL,
   LAMBDA_BARRIGA_CON_VISCERAL,
+  CURVA_MUSCULO_POR_GRASA,
+  GRASA_REFERENCIA,
+  INDICE_MAGRO_PROMEDIO,
   LAMBDA_MUSCULO_CON_DATO,
+  MUSCULO_CORRECCION_INDICE_MAX,
+  MUSCULO_CORRECCION_MAX,
+  MUSCULO_POR_PUNTO_DE_INDICE,
+  PARAMETROS_AJUSTE,
   MUSCULO_REFERENCIA,
   MUSCULO_SENSIBILIDAD,
+  interpolar,
   PCT_GRASA_POR_DEFECTO,
   TOLERANCIAS,
   barrigaPorVisceral,
@@ -29,6 +38,9 @@ import { MACRO_INICIAL } from './controles';
  * vista "grasa sobre músculo"), con la masa libre de grasa total y la masa
  * magra de cada brazo y pierna.
  */
+
+/** "Peso" de MakeHuman al que tiende el cuerpo sin grasa. */
+const PESO_SIN_GRASA = 0.2;
 
 /** Qué tanto se sostienen las medidas previas en "Editar un valor" (cm): más que la regularización, menos que la cinta. */
 const SIGMA_MANTENER = 1;
@@ -133,13 +145,35 @@ export function entradaAjusteDe(b: Borrador, mantener?: Record<string, number>):
     priors['local:barriga'] = barrigaPorVisceral(visceral);
     lambdas['local:barriga'] = LAMBDA_BARRIGA_CON_VISCERAL;
   }
-  // Masa muscular / peso libre de grasa: cuán musculoso es respecto de lo típico.
-  const masaMuscular = numero(b, 'masaMuscular');
-  const plg = pesoLibreDeGrasa(b);
-  if (masaMuscular !== undefined && plg !== undefined) {
-    const ratio = masaMuscular / plg;
-    priors['macro:musculo'] = Math.min(0.95, Math.max(0.05, 0.5 + (0.5 * (ratio - MUSCULO_REFERENCIA[b.sexo])) / MUSCULO_SENSIBILIDAD));
+  // La composición decide la forma (ver config): el volumen fija el tamaño y el
+  // % de grasa, si el cuerpo pesado es musculoso o gordo.
+  if (pctEscrito !== undefined) {
+    const ajustar = (x: number, max: number) => Math.max(-max, Math.min(max, x));
+    let musculo = interpolar(CURVA_MUSCULO_POR_GRASA[b.sexo], pctEscrito);
+    const plg = pesoLibreDeGrasa(b);
+    if (plg !== undefined) {
+      const indice = plg / (estatura / 100) ** 2;
+      musculo += ajustar((indice - INDICE_MAGRO_PROMEDIO[b.sexo]) * MUSCULO_POR_PUNTO_DE_INDICE, MUSCULO_CORRECCION_INDICE_MAX);
+      const masaMuscular = numero(b, 'masaMuscular');
+      if (masaMuscular !== undefined) {
+        const r = ((masaMuscular / plg - MUSCULO_REFERENCIA[b.sexo]) / MUSCULO_SENSIBILIDAD) * MUSCULO_CORRECCION_MAX;
+        musculo += ajustar(r, MUSCULO_CORRECCION_MAX);
+      }
+    }
+    priors['macro:musculo'] = Math.min(1, Math.max(0, musculo));
     lambdas['macro:musculo'] = LAMBDA_MUSCULO_CON_DATO;
+
+    // Con poca grasa, los controles de grasa son caros: el volumen lo ponen el
+    // peso y el músculo, no la barriga ni los flancos.
+    const falta = (GRASA_REFERENCIA[b.sexo] - pctEscrito) / 10;
+    if (falta > 0) {
+      for (const def of PARAMETROS_AJUSTE) {
+        const [tipo, clave] = def.clave.split(':');
+        if (tipo !== 'local' || !CONTROLES_DE_GRASA.includes(clave)) continue;
+        if (def.clave === 'local:barriga' && visceral !== undefined) continue; // la decide la grasa visceral
+        lambdas[def.clave] = def.lambda * (1 + falta * 1.5);
+      }
+    }
   }
   return { objetivos, fijos: { edad: Math.max(MACRO_INICIAL.edad, edad ?? MACRO_INICIAL.edad) }, priors, lambdas };
 }
@@ -216,6 +250,9 @@ export function entradaSinGrasaDe(b: Borrador, exterior: ResultadoAjuste, entrad
   };
   const fijar: Record<string, number> = {};
   for (const k of CONTROLES_DE_ESQUELETO) fijar[k] = valorDe(k);
+  // Lo que ningún objetivo del cuerpo sin grasa mide queda como en el completo
+  // (o en 0 si es grasa): menos columnas en el Jacobiano, ajuste más rápido.
+  for (const k of FIJOS_SIN_GRASA) fijar[`local:${k}`] = CONTROLES_DE_GRASA.includes(k) ? Math.min(0, exterior.locales[k] ?? 0) : exterior.locales[k] ?? 0;
   const priors: Record<string, number> = {};
   const inicial: Record<string, number> = { 'macro:musculo': exterior.macro.musculo, 'macro:peso': exterior.macro.peso };
   for (const [k, v] of Object.entries(exterior.locales)) {
@@ -223,15 +260,18 @@ export function entradaSinGrasaDe(b: Borrador, exterior: ResultadoAjuste, entrad
     inicial[clave] = v;
     priors[clave] = CONTROLES_DE_GRASA.includes(k) ? Math.min(v, 0) : v;
   }
+  // El cuerpo sin grasa crece con músculo, no con el "peso" de MakeHuman (que
+  // da forma de grasa): el peso parte bajo y el músculo se mueve casi libre.
   priors['macro:musculo'] = exterior.macro.musculo;
-  priors['macro:peso'] = exterior.macro.peso;
+  priors['macro:peso'] = Math.min(exterior.macro.peso, PESO_SIN_GRASA);
   return {
     objetivos,
     fijos: { edad: entradaExterior.fijos.edad, copa: b.sexo === 'F' ? 0 : exterior.macro.copa },
     fijar,
     priors,
-    // El peso de MakeHuman es lo que más baja al sacar la grasa: casi libre.
-    lambdas: { 'macro:peso': 0.05 },
+    lambdas: { 'macro:peso': 0.4, 'macro:musculo': 0.15 },
     inicial,
+    // Parte del cuerpo completo: converge en pocas vueltas.
+    maxIteraciones: 12,
   };
 }

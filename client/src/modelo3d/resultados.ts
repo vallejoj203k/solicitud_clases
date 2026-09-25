@@ -1,4 +1,4 @@
-import { leerNumero, SEGMENTOS_INFORME, type Borrador, type ClienteInput, type SegmentoInforme } from './cliente';
+import { leerNumero, SEGMENTOS_INFORME, type Borrador, type ClienteInput, type SegmentoInforme } from './campos';
 import {
   ESCALA_CINTURA_CADERA,
   ESCALA_GRASA,

@@ -221,7 +221,7 @@ function EvaluacionIntegral() {
 }
 
 /** Colores de la barra del informe: de verde muy claro a verde oscuro. */
-const COLOR_DIAGNOSTICO = ['#F4F7EE', '#E7F1DA', '#DCEBC8', '#D0E6B2', '#BFDD93', '#9ACD32', '#5E9A2C', '#4A7A22', '#34521A'];
+const COLOR_DIAGNOSTICO = ['#F4F7EE', '#E7F1DA', '#DCEBC8', '#D0E6B2', '#BFDD93', '#9ACD32', '#478020', '#3E6E1C', '#34521A'];
 
 function DiagnosticoObesidad() {
   const diagnostico = useCliente((s) => s.diagnostico);
@@ -240,7 +240,7 @@ function DiagnosticoObesidad() {
             style={{ background: COLOR_DIAGNOSTICO[i] }}
             className={`relative min-h-[3.25rem] rounded-md px-1.5 py-2 text-center text-[11px] font-semibold leading-tight ${
               i >= 6 ? 'text-white' : 'text-carbon-900'
-            } ${marcado ? 'outline outline-[3px] outline-offset-1 outline-white' : 'opacity-80 hover:opacity-100'}`}
+            } ${marcado ? 'outline outline-[3px] outline-offset-1 outline-white' : ''}`}
           >
             {d}
             {marcado && <span className="block text-sm font-black">✓</span>}
@@ -304,7 +304,8 @@ function usarTocados() {
   };
 }
 
-export function FormularioScanner() {
+/** `onVerResultado`: lleva a la pestaña de resultado (botón que aparece con los datos completos). */
+export function FormularioScanner({ onVerResultado }: { onVerResultado?: () => void }) {
   const val = usarValidacion();
   const t = usarTocados();
   const v = { ...val, tocados: t.tocados, tocar: t.tocar };
@@ -395,11 +396,21 @@ export function FormularioScanner() {
       <div className="space-y-3">
         <ListaAvisos avisos={val.avisos} />
         {val.ok ? (
-          <p className="rounded-xl bg-[#8CC63F]/15 px-3 py-2 text-xs font-semibold text-[#B5E37A]" role="status">
-            ✓ Datos completos. IMC {val.cliente.imc.toFixed(1).replace('.', ',')} · grasa{' '}
-            {val.cliente.pctGrasa.toFixed(1).replace('.', ',')} %
-            {val.cliente.segmental.troncoCalculado ? ' · tronco calculado como resto' : ''}
-          </p>
+          <div className="flex items-center gap-2 rounded-xl bg-[#8CC63F]/15 px-3 py-2" role="status">
+            <p className="flex-1 text-xs font-semibold text-[#B5E37A]">
+              ✓ Datos completos. IMC {val.cliente.imc.toFixed(1).replace('.', ',')} · grasa {val.cliente.pctGrasa.toFixed(1).replace('.', ',')} %
+              {val.cliente.segmental.troncoCalculado ? ' · tronco calculado como resto' : ''}
+            </p>
+            {onVerResultado && (
+              <button
+                type="button"
+                onClick={onVerResultado}
+                className="shrink-0 rounded-lg bg-[#8CC63F] px-3 py-1.5 text-xs font-bold text-carbon-900"
+              >
+                Ver resultado
+              </button>
+            )}
+          </div>
         ) : (
           <button
             type="button"
