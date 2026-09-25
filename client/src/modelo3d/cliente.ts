@@ -157,6 +157,7 @@ export const CAMPOS_MEDIDAS = [
   c('m_muslo', 'Muslo', 'cm', 25, 110),
   c('m_pantorrilla', 'Pantorrilla', 'cm', 20, 70),
   c('m_entrepierna', 'Entrepierna', 'cm', 50, 110),
+  c('m_hombros', 'Ancho de hombros', 'cm', 25, 60, { ayuda: 'En línea recta, de la punta de un hombro a la otra (acromion), por la espalda.' }),
 ];
 
 export const TODOS_LOS_CAMPOS: DefCampo[] = [
@@ -240,7 +241,7 @@ export interface ClienteInput {
   metabolismoBasal?: number;
   evaluacionSalud?: number;
   edadCorporal?: number;
-  medidas: Partial<Record<'pecho' | 'cintura' | 'cadera' | 'cuello' | 'brazo' | 'muslo' | 'pantorrilla' | 'entrepierna', number>>;
+  medidas: Partial<Record<'pecho' | 'cintura' | 'cadera' | 'cuello' | 'brazo' | 'muslo' | 'pantorrilla' | 'entrepierna' | 'hombros', number>>;
 }
 
 /** Lo que el formulario guarda tal cual lo escribió el entrenador. */
@@ -327,6 +328,7 @@ export function validar(b: Borrador): ResultadoValidacion {
       muslo: v.m_muslo,
       pantorrilla: v.m_pantorrilla,
       entrepierna: v.m_entrepierna,
+      hombros: v.m_hombros,
     },
   };
   return { ok: true, cliente, errores: {} };

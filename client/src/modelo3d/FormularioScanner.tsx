@@ -414,8 +414,8 @@ export function FormularioScanner() {
           </button>
         )}
         <p className="text-[11px] text-humo-500">
-          El modelo 3D todavía no se arma con estos datos: eso llega con el ajuste (fases 3 y 4). Mientras tanto se puede mover a
-          mano en “Ajuste manual”.
+          El cuerpo 3D se arma solo con la estatura, el peso, el % de grasa y la grasa visceral, más las medidas con cinta de la
+          pestaña “Medidas”. Los valores por segmento se suman en la fase 4.
         </p>
       </div>
     </div>

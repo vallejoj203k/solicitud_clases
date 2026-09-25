@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { wrap, type Remote } from 'comlink';
 import type { ApiMotor, ResultadoMotor } from './motor.worker';
-import type { CuerpoBase, PesosMorph } from './tipos';
+import type { ControlesMacro } from './controles';
+import type { CuerpoBase } from './tipos';
 
 let motor: Remote<ApiMotor> | null = null;
 const iniciados = new WeakMap<CuerpoBase, Promise<void>>();
 
 /** Un solo Worker para toda la página (se crea al primer uso). */
-function obtenerMotor(): Remote<ApiMotor> {
+export function obtenerMotor(): Remote<ApiMotor> {
   if (!motor) {
     const w = new Worker(new URL('./motor.worker.ts', import.meta.url), { type: 'module' });
     motor = wrap<ApiMotor>(w);
@@ -15,7 +16,7 @@ function obtenerMotor(): Remote<ApiMotor> {
   return motor;
 }
 
-function iniciar(cuerpo: CuerpoBase): Promise<void> {
+export function iniciar(cuerpo: CuerpoBase): Promise<void> {
   let p = iniciados.get(cuerpo);
   if (!p) {
     p = obtenerMotor().iniciar(cuerpo);
@@ -26,8 +27,10 @@ function iniciar(cuerpo: CuerpoBase): Promise<void> {
 
 interface Pedido {
   cuerpo: CuerpoBase;
-  pesos: PesosMorph;
-  pesosMagro: PesosMorph | null;
+  macro: ControlesMacro;
+  locales: Record<string, number>;
+  /** null: sin cuerpo sin grasa (la vista de grasa está apagada). */
+  pctGrasa: number | null;
   conAnillos: boolean;
 }
 
@@ -63,7 +66,7 @@ export function usarMotor(pedido: Pedido | null): { resultado: ResultadoMotor | 
         pendiente.current = null;
         try {
           await iniciar(p.cuerpo);
-          const r = await obtenerMotor().calcular(p.cuerpo.sexo, p.pesos, p.pesosMagro, p.conAnillos);
+          const r = await obtenerMotor().calcular(p.cuerpo.sexo, p.macro, p.locales, p.pctGrasa, p.conAnillos);
           if (vivo.current) {
             setResultado(r);
             setError(null);
