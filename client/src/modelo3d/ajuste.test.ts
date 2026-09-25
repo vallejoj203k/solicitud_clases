@@ -10,7 +10,7 @@ import { CLIENTES_EJEMPLO } from './clientesEjemplo';
 import { controlesLocales, pesosLocales, pesosMacro, MACRO_INICIAL } from './controles';
 import { medir, posicionesArticulaciones, prepararMedicion, type PrepMedicion } from './medicion';
 import { aplicarMorphs } from './motor';
-import { entradaAjusteDe } from './objetivos';
+import { entradaAjusteDe, entradaSinGrasaDe } from './objetivos';
 import type { Borrador } from './cliente';
 import type { CuerpoBase, MetaCuerpo, Sexo } from './tipos';
 
@@ -52,18 +52,31 @@ describe('ajuste a objetivos geométricos', () => {
     });
   }
 
-  it('grasa visceral alta = barriga prominente (caso extremo, visceral 16; informe 21-09, visceral 13)', () => {
-    const extremo = resolver(informe(3)).r;
-    const informe0 = resolver(informe(0)).r;
-    const carlos = resolver(informe(1)).r; // visceral 8
-    console.log('barriga: extremo', extremo.locales.barriga.toFixed(2), 'informe', informe0.locales.barriga.toFixed(2), 'carlos', carlos.locales.barriga.toFixed(2));
-    expect(extremo.locales.barriga).toBeGreaterThan(0.6);
-    expect(informe0.locales.barriga).toBeGreaterThan(0.4);
-    expect(carlos.locales.barriga).toBeLessThan(0.2);
+  it('grasa visceral alta = barriga prominente: de perfil, la barriga sobresale más que el pecho', () => {
+    /** Cuánto más adelante (cm) llega la barriga que el pecho, de perfil. */
+    const perfil = (b: Borrador) => {
+      const { r } = resolver(b);
+      const { cuerpo, prep } = cuerpos[b.sexo];
+      const ctl = controlesLocales(cuerpo.meta);
+      const pesos = { ...pesosMacro(r.macro, b.sexo), ...pesosLocales(r.locales, ctl) };
+      const pos = aplicarMorphs(cuerpo, pesos);
+      const { anillos } = medir(cuerpo, prep, pos, posicionesArticulaciones(prep, pesos, 0), true);
+      const frente = (a: Float32Array) => Math.max(...Array.from({ length: a.length / 3 }, (_, i) => a[i * 3 + 2]));
+      return (frente(anillos.cintura) - frente(anillos.pecho)) * 100;
+    };
+    const extremo = perfil(informe(3));
+    const informe0 = perfil(informe(0));
+    const carlos = perfil(informe(1));
+    console.log('barriga - pecho (cm): extremo', extremo.toFixed(1), 'informe', informe0.toFixed(1), 'carlos', carlos.toFixed(1));
+    expect(extremo).toBeGreaterThan(0);
+    expect(informe0).toBeGreaterThan(0);
+    expect(carlos).toBeLessThan(extremo);
   });
 
   it('con medidas completas de cinta también cumple (hombre y mujer)', () => {
-    const conCinta = (b: Borrador, m: Record<string, string>): Borrador => ({ ...b, valores: { ...b.valores, ...m } });
+    // Solo estatura, peso, % de grasa y cinta (sin los datos por segmento, que la fase 4 agrega).
+    const sinSegmentos = (v: Record<string, string>) => Object.fromEntries(Object.entries(v).filter(([k]) => !/^(musculo|grasa)_/.test(k)));
+    const conCinta = (b: Borrador, m: Record<string, string>): Borrador => ({ ...b, valores: { ...sinSegmentos(b.valores), ...m } });
     const casos: Borrador[] = [
       conCinta(informe(1), { m_pecho: '100', m_cintura: '86', m_cadera: '98', m_cuello: '38', m_brazo: '32', m_muslo: '56', m_pantorrilla: '37', m_hombros: '41', m_entrepierna: '80' }),
       conCinta(informe(2), { m_pecho: '94', m_cintura: '82', m_cadera: '104', m_cuello: '33', m_brazo: '29', m_muslo: '58', m_pantorrilla: '36', m_hombros: '36', m_entrepierna: '74' }),
@@ -103,6 +116,16 @@ describe('ajuste a objetivos geométricos', () => {
     }
   });
 
+  it('si los datos se contradicen, busca un punto medio y dice qué no alcanzó', () => {
+    // Muslo de 70 cm con una pierna de 10,3 L: imposible a la vez.
+    const b: Borrador = { ...informe(2), valores: { ...informe(2).valores, m_muslo: '70' } };
+    const { r } = resolver(b);
+    console.log('contradicción ->', reporte(r));
+    expect(r.cumple).toBe(false);
+    expect(r.residuos.some((x) => !x.cumple && x.clave.startsWith('circ:muslo'))).toBe(true);
+    expect(r.ms).toBeLessThan(600);
+  });
+
   it('tarda menos de 300 ms', () => {
     const b: Borrador = { ...informe(3), valores: { ...informe(3).valores, m_cuello: '42', m_brazo: '36', m_muslo: '62', m_hombros: '44' } };
     resolver(b); // calentar
@@ -122,5 +145,43 @@ describe('cuerpo sin grasa', () => {
     expect(magro).toBeCloseTo(69.6 / 1.1, 0);
     const s = controlesSinGrasa(cuerpo, r.macro, r.locales, magro);
     expect(s.macro.peso).toBeLessThan(r.macro.peso);
+  });
+});
+
+describe('fase 4: composición del scanner', () => {
+  const ambos = (b: Borrador) => {
+    const { cuerpo, prep } = cuerpos[b.sexo];
+    const t0 = performance.now();
+    const entrada = entradaAjusteDe(b)!;
+    const exterior = ajustar(cuerpo, prep, entrada);
+    const entradaMagro = entradaSinGrasaDe(b, exterior, entrada)!;
+    const magro = ajustar(cuerpo, prep, entradaMagro);
+    return { exterior, magro, ms: performance.now() - t0 };
+  };
+
+  for (const i of [0, 1, 2, 3]) {
+    it(`${CLIENTES_EJEMPLO[i].titulo}: brazos y piernas ±5 % (completo y sin grasa), volumen sin grasa ±2 %`, () => {
+      const { exterior, magro, ms } = ambos(informe(i));
+      console.log(CLIENTES_EJEMPLO[i].titulo, '\n  completo ->', reporte(exterior), '\n  sin grasa ->', reporte(magro), `\n  total ${ms.toFixed(0)} ms`);
+      for (const r of [...exterior.residuos, ...magro.residuos]) expect(Math.abs(r.diferencia), r.etiqueta).toBeLessThanOrEqual(r.tolerancia);
+      expect(magro.residuos.some((r) => r.clave === 'vol:brazo_izq')).toBe(true);
+    });
+  }
+
+  it('el músculo marca la diferencia: más masa muscular, músculo de MakeHuman más alto', () => {
+    const base = informe(1);
+    const fuerte = { ...base, valores: { ...base.valores, masaMuscular: '40' } };
+    const debil = { ...base, valores: { ...base.valores, masaMuscular: '30' } };
+    const a = ambos(fuerte).exterior.macro.musculo;
+    const d = ambos(debil).exterior.macro.musculo;
+    console.log('musculo fuerte', a.toFixed(2), 'débil', d.toFixed(2));
+    expect(a).toBeGreaterThan(d + 0.1);
+  });
+
+  it('los dos ajustes juntos tardan menos de 300 ms', () => {
+    ambos(informe(0));
+    const tiempos = [0, 1, 2, 3].map((i) => ambos(informe(i)).ms);
+    console.log('tiempos', tiempos.map((t) => t.toFixed(0)).join(', '));
+    for (const t of tiempos) expect(t).toBeLessThan(300);
   });
 });

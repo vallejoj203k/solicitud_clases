@@ -138,13 +138,32 @@ export function prepararParticion(tris: Indices, segVertice: ArrayLike<number>, 
 
 /** Volumen (m³) de cada segmento. Suman exactamente volumenMalla(). */
 export function volumenesSegmento(pos: Float32Array, tris: Indices, p: Particion): Float64Array {
+  const vol = volumenTriangulosPorSegmento(pos, tris, p);
+  const tapas = volumenTapas(pos, p);
+  for (let s = 0; s < vol.length; s++) vol[s] += tapas[s];
+  return vol;
+}
+
+/**
+ * Parte de los triángulos del volumen de cada segmento (m³). Con `triangulos`,
+ * solo esos (para calcular un cambio de volumen cuando se mueven pocos vértices).
+ */
+export function volumenTriangulosPorSegmento(pos: Float32Array, tris: Indices, p: Particion, triangulos?: ArrayLike<number>): Float64Array {
   const vol = new Float64Array(p.nSegmentos);
-  for (let t = 0; t < p.triSegmento.length; t++) {
+  const n = triangulos ? triangulos.length : p.triSegmento.length;
+  for (let i = 0; i < n; i++) {
+    const t = triangulos ? triangulos[i] : i;
     const a = tris[t * 3] * 3;
     const b = tris[t * 3 + 1] * 3;
     const c = tris[t * 3 + 2] * 3;
-    vol[p.triSegmento[t]] += det(pos[a], pos[a + 1], pos[a + 2], pos[b], pos[b + 1], pos[b + 2], pos[c], pos[c + 1], pos[c + 2]);
+    vol[p.triSegmento[t]] += det(pos[a], pos[a + 1], pos[a + 2], pos[b], pos[b + 1], pos[b + 2], pos[c], pos[c + 1], pos[c + 2]) / 6;
   }
+  return vol;
+}
+
+/** Parte de las tapas de las juntas del volumen de cada segmento (m³). Se cancelan entre vecinos. */
+export function volumenTapas(pos: Float32Array, p: Particion): Float64Array {
+  const vol = new Float64Array(p.nSegmentos);
   const centros = p.verticesJunta.map((vs) => {
     let x = 0, y = 0, z = 0;
     for (const v of vs) {
@@ -159,9 +178,8 @@ export function volumenesSegmento(pos: Float32Array, tris: Indices, p: Particion
     const u = p.juntaU[e] * 3;
     const v = p.juntaV[e] * 3;
     const [cx, cy, cz] = centros[p.juntaId[e]];
-    vol[p.juntaSegmento[e]] += det(pos[v], pos[v + 1], pos[v + 2], pos[u], pos[u + 1], pos[u + 2], cx, cy, cz);
+    vol[p.juntaSegmento[e]] += det(pos[v], pos[v + 1], pos[v + 2], pos[u], pos[u + 1], pos[u + 2], cx, cy, cz) / 6;
   }
-  for (let s = 0; s < vol.length; s++) vol[s] /= 6;
   return vol;
 }
 

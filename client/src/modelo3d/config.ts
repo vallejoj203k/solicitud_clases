@@ -153,7 +153,7 @@ export const CURVA_VISCERAL: [number, number][] = [
 ];
 
 /** Con dato de grasa visceral, la barriga se aleja menos de la curva (más que el 0,5 por defecto). */
-export const LAMBDA_BARRIGA_CON_VISCERAL = 1.2;
+export const LAMBDA_BARRIGA_CON_VISCERAL = 3;
 
 export function barrigaPorVisceral(nivel: number): number {
   const c = CURVA_VISCERAL;
@@ -165,3 +165,41 @@ export function barrigaPorVisceral(nivel: number): number {
   }
   return c[c.length - 1][1];
 }
+
+/* ------------------------------------------------ Composición (fase 4) */
+
+/** Densidades por segmento (kg/L): masa magra y grasa. Volumen = magra/1,06 + grasa/0,90. */
+export const DENSIDAD_MAGRA_SEGMENTO = 1.06;
+export const DENSIDAD_GRASA_SEGMENTO = 0.9;
+/** Densidad de toda la masa libre de grasa (Siri): volumen del cuerpo sin grasa = PLG / 1,1. */
+export const DENSIDAD_MAGRA_TOTAL = 1.1;
+
+/**
+ * Prior del músculo de MakeHuman: masa muscular / peso libre de grasa comparado
+ * con un valor típico por sexo. Cada `sensibilidad` por encima de la referencia
+ * sube el prior 0,5 (de 0,5 a 1).
+ */
+export const MUSCULO_REFERENCIA = { M: 0.555, F: 0.52 };
+export const MUSCULO_SENSIBILIDAD = 0.1;
+export const LAMBDA_MUSCULO_CON_DATO = 0.8;
+
+/** Controles que agregan grasa: el cuerpo sin grasa no los usa para crecer. */
+export const CONTROLES_DE_GRASA = [
+  'brazo_izq_grasa',
+  'brazo_der_grasa',
+  'pierna_izq_grasa',
+  'pierna_der_grasa',
+  'barriga',
+  'cintura',
+  'cadera',
+  'pecho',
+  'cuello',
+  'torso_ancho',
+  'gluteos',
+  'cara_grasa',
+  'papada',
+  'pecho_graso',
+];
+
+/** Controles del esqueleto: el cuerpo sin grasa los copia del cuerpo completo. */
+export const CONTROLES_DE_ESQUELETO = ['macro:altura', 'local:hombros', 'local:entrepierna'];

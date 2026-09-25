@@ -30,7 +30,10 @@ export function ResumenAjuste() {
     );
   }
 
-  const fallan = ajuste.residuos.filter((r) => !r.cumple);
+  const grupos: [string, Residuo[]][] = [['Cuerpo completo', ajuste.exterior.residuos]];
+  if (ajuste.magro) grupos.push(['Cuerpo sin grasa (músculo, hueso, órganos)', ajuste.magro.residuos]);
+  const todos = grupos.flatMap(([, rs]) => rs);
+  const fallan = todos.filter((r) => !r.cumple);
   return (
     <div
       className={`space-y-2 rounded-xl border px-3 py-2.5 text-xs ${fallan.length ? 'border-amber-400/50 bg-amber-400/10' : 'border-[#8CC63F]/50 bg-[#8CC63F]/10'}`}
@@ -39,12 +42,12 @@ export function ResumenAjuste() {
     >
       <p className="font-semibold text-humo-100">
         {fallan.length
-          ? `⚠ El cuerpo no alcanzó ${fallan.length} de ${ajuste.residuos.length} objetivos`
-          : `✓ El cuerpo cumple los ${ajuste.residuos.length} objetivos`}
+          ? `⚠ El cuerpo no alcanzó ${fallan.length} de ${todos.length} objetivos`
+          : `✓ El cuerpo cumple los ${todos.length} objetivos`}
         <span className="font-normal text-humo-500"> · {ajustando ? 'ajustando…' : `${Math.round(ajuste.ms)} ms`}</span>
       </p>
       {fallan.map((r) => (
-        <p key={r.clave} className="text-amber-100">
+        <p key={r.etiqueta} className="text-amber-100">
           {explicar(r)}
         </p>
       ))}
@@ -59,23 +62,30 @@ export function ResumenAjuste() {
               <th />
             </tr>
           </thead>
-          <tbody>
-            {ajuste.residuos.map((r) => (
-              <tr key={r.clave} className="border-t border-carbon-600/60">
-                <td className="py-1 pr-2 text-humo-300">
-                  {r.etiqueta}
-                  {r.fuente === 'estimado' && <span className="text-humo-500"> (estimado)</span>}
+          {grupos.map(([titulo, rs]) => (
+            <tbody key={titulo}>
+              <tr>
+                <td colSpan={4} className="pt-2 text-[10px] font-semibold uppercase tracking-wider text-humo-500">
+                  {titulo}
                 </td>
-                <td className="py-1 text-right">
-                  {num(r.objetivo)} {r.unidad}
-                </td>
-                <td className="py-1 text-right">
-                  {num(r.medido)} {r.unidad}
-                </td>
-                <td className="py-1 pl-2 text-right">{r.cumple ? '✓' : '⚠'}</td>
               </tr>
-            ))}
-          </tbody>
+              {rs.map((r) => (
+                <tr key={r.clave} className="border-t border-carbon-600/60">
+                  <td className="py-1 pr-2 text-humo-300">
+                    {r.etiqueta}
+                    {r.fuente === 'estimado' && <span className="text-humo-500"> (estimado)</span>}
+                  </td>
+                  <td className="py-1 text-right">
+                    {num(r.objetivo)} {r.unidad}
+                  </td>
+                  <td className="py-1 text-right">
+                    {num(r.medido)} {r.unidad}
+                  </td>
+                  <td className="py-1 pl-2 text-right">{r.cumple ? '✓' : '⚠'}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
         </table>
       </details>
       {origen === 'manual' && (

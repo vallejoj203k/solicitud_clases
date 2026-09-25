@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { wrap, type Remote } from 'comlink';
-import type { ApiMotor, ResultadoMotor } from './motor.worker';
+import type { ApiMotor, PedidoGrasa, ResultadoMotor } from './motor.worker';
 import type { ControlesMacro } from './controles';
 import type { CuerpoBase } from './tipos';
 
@@ -30,7 +30,7 @@ interface Pedido {
   macro: ControlesMacro;
   locales: Record<string, number>;
   /** null: sin cuerpo sin grasa (la vista de grasa está apagada). */
-  pctGrasa: number | null;
+  grasa: PedidoGrasa | null;
   conAnillos: boolean;
 }
 
@@ -66,7 +66,7 @@ export function usarMotor(pedido: Pedido | null): { resultado: ResultadoMotor | 
         pendiente.current = null;
         try {
           await iniciar(p.cuerpo);
-          const r = await obtenerMotor().calcular(p.cuerpo.sexo, p.macro, p.locales, p.pctGrasa, p.conAnillos);
+          const r = await obtenerMotor().calcular(p.cuerpo.sexo, p.macro, p.locales, p.grasa, p.conAnillos);
           if (vivo.current) {
             setResultado(r);
             setError(null);
