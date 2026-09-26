@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { controlesLocales, pesosLocales, pesosMacro, type ControlesMacro } from './controles';
 import type { Indices } from './geometria';
+import { SUAVIZADO_ESCULTURA } from './config';
 import { aplicarMorphs } from './motor';
 import { VERSION_ESCULTURA } from './versionModelos';
 import type { CuerpoBase, Sexo } from './tipos';
@@ -158,11 +159,83 @@ export function referenciaDe(e: Escultura, cuerpo: CuerpoBase): Referencia {
   return r;
 }
 
+/** Vecinos de cada vértice del cuerpo (por aristas de la malla), en formato CSR. */
+interface Vecinos {
+  inicio: Uint32Array;
+  lista: Uint32Array;
+}
+const vecinosCache = new WeakMap<object, Vecinos>();
+
+function vecinosDe(tris: Indices, n: number): Vecinos {
+  let v = vecinosCache.get(tris);
+  if (!v) {
+    const conjuntos = Array.from({ length: n }, () => new Set<number>());
+    for (let t = 0; t < tris.length; t += 3) {
+      for (let i = 0; i < 3; i++) {
+        const a = tris[t + i];
+        const b = tris[t + ((i + 1) % 3)];
+        conjuntos[a].add(b);
+        conjuntos[b].add(a);
+      }
+    }
+    const inicio = new Uint32Array(n + 1);
+    for (let i = 0; i < n; i++) inicio[i + 1] = inicio[i] + conjuntos[i].size;
+    const lista = new Uint32Array(inicio[n]);
+    conjuntos.forEach((c, i) => lista.set([...c], inicio[i]));
+    v = { inicio, lista };
+    vecinosCache.set(tris, v);
+  }
+  return v;
+}
+
+/**
+ * Suaviza un desplazamiento por vértice del cuerpo promediando con los vecinos
+ * de la malla (no mezcla partes separadas: dedos, piernas). Quita los cambios
+ * bruscos entre zonas vecinas (p. ej. el pectoral de MakeHuman que se hunde y el
+ * abdomen que no se mueve), que en la escultura doblarían el borde del músculo
+ * hacia adentro; el tamaño y las proporciones del cuerpo pasan igual.
+ */
+function suavizar(d: Float32Array<ArrayBuffer>, vecinos: Vecinos, vueltas: number) {
+  const { inicio, lista } = vecinos;
+  let a = d;
+  let b = new Float32Array(d.length);
+  for (let k = 0; k < vueltas; k++) {
+    for (let v = 0; v + 1 < inicio.length; v++) {
+      const i0 = inicio[v];
+      const i1 = inicio[v + 1];
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      for (let j = i0; j < i1; j++) {
+        const u = lista[j] * 3;
+        x += a[u];
+        y += a[u + 1];
+        z += a[u + 2];
+      }
+      const m = i1 - i0;
+      const i = v * 3;
+      if (m === 0) {
+        b[i] = a[i];
+        b[i + 1] = a[i + 1];
+        b[i + 2] = a[i + 2];
+      } else {
+        b[i] = 0.5 * a[i] + (0.5 * x) / m;
+        b[i + 1] = 0.5 * a[i + 1] + (0.5 * y) / m;
+        b[i + 2] = 0.5 * a[i + 2] + (0.5 * z) / m;
+      }
+    }
+    [a, b] = [b, a];
+  }
+  return a;
+}
+
 /**
  * Posiciones de la escultura para un cuerpo: cada vértice se mueve lo mismo que
  * su punto del cuerpo entre `base` (el cuerpo de referencia, con las medidas de
- * la escultura) y `pos` (el cuerpo del cliente). Con un cliente con las medidas
- * de la escultura, queda tal cual; con otro, sus medidas pasan al modelo.
+ * la escultura) y `pos` (el cuerpo del cliente), con ese movimiento suavizado
+ * (`SUAVIZADO_ESCULTURA` vueltas). Con un cliente con las medidas de la
+ * escultura, queda tal cual; con otro, sus medidas pasan al modelo y la forma de
+ * los músculos esculpidos se conserva.
  */
 export function posicionesEscultura(
   e: Escultura,
@@ -170,8 +243,11 @@ export function posicionesEscultura(
   base: ArrayLike<number>,
   pos: ArrayLike<number>,
   destino: Float32Array<ArrayBuffer>,
+  vueltas = SUAVIZADO_ESCULTURA,
 ) {
   const tris = triangulosCanonicos(trisCuerpo);
+  let d = Float32Array.from(pos, (x, i) => x - base[i]);
+  if (vueltas > 0) d = suavizar(d, vecinosDe(trisCuerpo, d.length / 3), vueltas);
   for (let v = 0; v < e.nTotal; v++) {
     const t = e.tri[v] * 3;
     const a = tris[t] * 3;
@@ -180,10 +256,7 @@ export function posicionesEscultura(
     const w1 = e.b1[v];
     const w2 = e.b2[v];
     const w0 = 1 - w1 - w2;
-    for (let k = 0; k < 3; k++) {
-      destino[v * 3 + k] =
-        e.original[v * 3 + k] + w0 * (pos[a + k] - base[a + k]) + w1 * (pos[b + k] - base[b + k]) + w2 * (pos[c + k] - base[c + k]);
-    }
+    for (let k = 0; k < 3; k++) destino[v * 3 + k] = e.original[v * 3 + k] + w0 * d[a + k] + w1 * d[b + k] + w2 * d[c + k];
   }
   return destino;
 }

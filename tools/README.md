@@ -108,7 +108,10 @@ npm run modelo3d:escultura     # simplifica (~150 000 triángulos), comprime y c
    de la escultura (estatura, volumen, contornos, hombros, entrepierna): primero
    calza la superficie (brazos y piernas alineados aparte, porque la pose no es
    la misma) y después las medidas con el mismo solver del navegador. Quedan en
-   el JSON de la escultura (`referencia`).
+   el JSON de la escultura (`referencia`). El pectoral y la V de la espalda
+   quedan en 0: son músculos en un lugar chico, y si la referencia los usara
+   para imitar el pecho de la escultura, a cada cliente se le restaría ese
+   músculo entero (pecho hundido).
 5. En el navegador cada vértice de la escultura se mueve lo mismo que su punto
    entre ese cuerpo de referencia y el del cliente: con la referencia queda
    idéntica, y con las medidas del cliente las toma (una cintura 10 cm más
