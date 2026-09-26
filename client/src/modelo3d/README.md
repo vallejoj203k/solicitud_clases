@@ -80,7 +80,8 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 - `CURVA_VISCERAL`: grasa visceral → barriga.
 - Densidades por segmento (1,06 / 0,90) y total (1,1).
 - `ESCALA_*`, `MAPA_CALOR`: tarjetas y mapa de calor.
-- `COLOR_GRASA`: color de la grasa. El cuerpo usa los colores pintados en el
+- `COLOR_GRASA_POCA` / `COLOR_GRASA_MUCHA` / `GROSOR_GRASA_OSCURA`: la grasa va
+  de amarillo claro a ámbar oscuro según su grosor (oscuro desde 6 cm). El cuerpo usa los colores pintados en el
   modelo, tal cual (sin teñir ni mapeo de tonos).
 
 ## Pruebas

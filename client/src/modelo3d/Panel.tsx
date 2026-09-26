@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoAtras } from '../components/Iconos.jsx';
 import type { ClienteInput, SegmentoInforme } from './cliente';
-import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA_MUCHA, COLOR_GRASA_POCA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
 import { controlesLocales, type ControlLocal } from './controles';
 import { useVisor, type Vista } from './estado';
 import { FormularioMedidas, FormularioScanner } from './FormularioScanner';
@@ -194,8 +194,10 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
           Músculo, hueso y órganos
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-sm" style={{ background: COLOR_GRASA }} />
-          Grasa (más opaca donde es más gruesa)
+          <span className="text-humo-400">poca</span>
+          <span className="h-3 w-12 rounded-sm" style={{ background: `linear-gradient(to right, ${COLOR_GRASA_POCA}, ${COLOR_GRASA_MUCHA})` }} />
+          <span className="text-humo-400">mucha</span>
+          Grasa (más oscura donde es más gruesa)
         </span>
       </p>
     );
