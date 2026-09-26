@@ -10,7 +10,7 @@ import { CLIENTES_EJEMPLO } from './clientesEjemplo';
 import { controlesLocales, pesosLocales, pesosMacro, MACRO_INICIAL } from './controles';
 import { medir, posicionesArticulaciones, prepararMedicion, type PrepMedicion } from './medicion';
 import { aplicarMorphs } from './motor';
-import { entradaAjusteDe, entradaSinGrasaDe } from './objetivos';
+import { conEsqueletoDe, entradaAjusteDe, entradaGrasaDe, entradaMusculoDe } from './objetivos';
 import type { Borrador } from './cliente';
 import type { CuerpoBase, MetaCuerpo, Sexo } from './tipos';
 
@@ -31,10 +31,14 @@ beforeAll(async () => {
   }
 });
 
+/** Como el Worker: primero el músculo (cuerpo sin grasa) y encima la grasa (cuerpo completo). */
 function resolver(b: Borrador) {
-  const entrada = entradaAjusteDe(b)!;
   const { cuerpo, prep } = cuerpos[b.sexo];
-  return { entrada, r: ajustar(cuerpo, prep, entrada) };
+  const t0 = performance.now();
+  const entrada = entradaAjusteDe(b)!;
+  const magro = ajustar(cuerpo, prep, entradaMusculoDe(b)!);
+  const r = ajustar(cuerpo, prep, entradaGrasaDe(entrada, magro));
+  return { entrada, r, magro: conEsqueletoDe(magro, r), ms: performance.now() - t0 };
 }
 
 const informe = (i: number) => CLIENTES_EJEMPLO[i].borrador;
@@ -126,12 +130,12 @@ describe('ajuste a objetivos geométricos', () => {
     expect(r.ms).toBeLessThan(600);
   });
 
-  it('tarda menos de 300 ms', () => {
+  it('los dos ajustes (músculo y grasa) tardan menos de 450 ms', () => {
     const b: Borrador = { ...informe(3), valores: { ...informe(3).valores, m_cuello: '42', m_brazo: '36', m_muslo: '62', m_hombros: '44' } };
     resolver(b); // calentar
-    const { r } = resolver(b);
-    console.log('tiempo con 10 objetivos:', r.ms.toFixed(0), 'ms');
-    expect(r.ms).toBeLessThan(300);
+    const { ms } = resolver(b);
+    console.log('tiempo con 10 objetivos:', ms.toFixed(0), 'ms');
+    expect(ms).toBeLessThan(450);
   });
 });
 
@@ -150,13 +154,8 @@ describe('cuerpo sin grasa', () => {
 
 describe('fase 4: composición del scanner', () => {
   const ambos = (b: Borrador) => {
-    const { cuerpo, prep } = cuerpos[b.sexo];
-    const t0 = performance.now();
-    const entrada = entradaAjusteDe(b)!;
-    const exterior = ajustar(cuerpo, prep, entrada);
-    const entradaMagro = entradaSinGrasaDe(b, exterior, entrada)!;
-    const magro = ajustar(cuerpo, prep, entradaMagro);
-    return { exterior, magro, ms: performance.now() - t0 };
+    const { r, magro, ms } = resolver(b);
+    return { exterior: r, magro, ms };
   };
 
   for (const i of [0, 1, 2, 3]) {
@@ -188,10 +187,7 @@ describe('fase 4: composición del scanner', () => {
 
 describe('la composición decide la forma (músculo vs grasa)', () => {
   const base = (valores: Record<string, string>): Borrador => ({ nombre: '', sexo: 'M', valores: { estatura: '175', edad: '30', ...valores }, evaluacion: {} });
-  const exterior = (b: Borrador) => {
-    const { cuerpo, prep } = cuerpos[b.sexo];
-    return ajustar(cuerpo, prep, entradaAjusteDe(b)!);
-  };
+  const exterior = (b: Borrador) => resolver(b).r;
 
   it('mismo peso: mucha masa libre de grasa se ve musculoso; mucha grasa, gordo', () => {
     const atleta = exterior(base({ peso: '90', grasa: '10', plg: '80' }));
@@ -210,5 +206,35 @@ describe('la composición decide la forma (músculo vs grasa)', () => {
     const despues = exterior(base({ peso: '90', grasa: '16', plg: '74' }));
     console.log('PLG 64 -> 74: músculo', antes.macro.musculo.toFixed(2), '->', despues.macro.musculo.toFixed(2), '| peso MH', antes.macro.peso.toFixed(2), '->', despues.macro.peso.toFixed(2));
     expect(despues.macro.musculo).toBeGreaterThan(antes.macro.musculo + 0.15);
+  });
+});
+
+describe('músculo y grasa son independientes', () => {
+  const b = (valores: Record<string, string>): Borrador => ({ nombre: '', sexo: 'M', valores: { estatura: '175', edad: '30', ...valores }, evaluacion: {} });
+  const forma = (r: ReturnType<typeof ajustar>) => ({ ...r.macro, ...r.locales }) as Record<string, number>;
+  const medido = (r: ReturnType<typeof ajustar>, clave: string) => r.residuos.find((x) => x.clave === clave)!.medido;
+  const iguales = (a: Record<string, number>, c: Record<string, number>) =>
+    Object.keys({ ...a, ...c }).every((k) => Math.abs((a[k] ?? 0) - (c[k] ?? 0)) < 1e-9);
+
+  it('el músculo sale de la masa libre de grasa: más PLG, más músculo', () => {
+    const debil = resolver(b({ peso: '90', grasa: '32', plg: '58' })).magro.macro.musculo;
+    const fuerte = resolver(b({ peso: '90', grasa: '10', plg: '80' })).magro.macro.musculo;
+    console.log('músculo sin grasa: PLG 58', debil.toFixed(2), '| PLG 80', fuerte.toFixed(2));
+    expect(fuerte).toBeGreaterThan(debil + 0.5);
+  });
+
+  it('con la misma masa libre de grasa, subir la grasa no cambia el músculo', () => {
+    const flaco = resolver(b({ peso: '68', plg: '60' }));
+    const gordo = resolver(b({ peso: '105', plg: '60' }));
+    console.log('volumen', medido(flaco.r, 'volumen').toFixed(1), '->', medido(gordo.r, 'volumen').toFixed(1), 'L; músculo', medido(flaco.magro, 'volumen').toFixed(1), '->', medido(gordo.magro, 'volumen').toFixed(1), 'L');
+    expect(iguales(forma(flaco.magro), forma(gordo.magro))).toBe(true);
+    expect(medido(gordo.r, 'volumen')).toBeGreaterThan(medido(flaco.r, 'volumen') + 30);
+  });
+
+  it('la cintura escrita cambia la grasa (y la cintura del modelo), no el músculo', () => {
+    const casos = ['80', '95', '110'].map((c) => resolver(b({ peso: '85', plg: '65', m_cintura: c })));
+    console.log('cintura', casos.map((x) => medido(x.r, 'circ:cintura').toFixed(1)).join(' / '));
+    for (const [i, c] of [80, 95, 110].entries()) expect(Math.abs(medido(casos[i].r, 'circ:cintura') - c)).toBeLessThanOrEqual(1.5);
+    expect(iguales(forma(casos[0].magro), forma(casos[2].magro))).toBe(true);
   });
 });

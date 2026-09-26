@@ -8,8 +8,9 @@
  *   _ATADO    uint16  x4  triángulo del cuerpo, baricéntricas b1 y b2 (×65535), 0
  *   _COLOR    uint8   x4  color pintado en la escultura (sRGB, tal cual), 255
  *
- * El JSON lleva `calce`: cuánto se movió cada vértice del cuerpo base para
- * calzar sobre la escultura (0,1 mm), para llevar anillos de medida a ella.
+ * El JSON lleva `calce` (cuánto se movió cada vértice del cuerpo base para
+ * calzar sobre la escultura, en 0,1 mm) y `referencia`: los controles de
+ * MakeHuman con las medidas de la escultura (tools/referencia_escultura.ts).
  *
  * Uso:  node tools/escultura_glb.mjs tools/build client/public/modelo3d
  */
@@ -132,7 +133,11 @@ async function armar(entrada, salida, sexo) {
   };
   const etiqueta = sexo === 'M' ? 'hombre' : 'mujer';
   escribirGlb(`${salida}/escultura-${etiqueta}.glb`, json, Buffer.concat(partes));
-  fs.writeFileSync(`${salida}/escultura-${etiqueta}.json`, JSON.stringify({ version: 2, calce: cab.calce }));
+  // Referencia: los controles de MakeHuman con las medidas de la escultura (tools/referencia_escultura.ts).
+  const rutaRef = `${entrada}/escultura-${sexo}-referencia.json`;
+  if (!fs.existsSync(rutaRef)) throw new Error(`Falta ${rutaRef}: correr antes npx vite-node tools/referencia_escultura.ts`);
+  const referencia = JSON.parse(fs.readFileSync(rutaRef, 'utf8'));
+  fs.writeFileSync(`${salida}/escultura-${etiqueta}.json`, JSON.stringify({ version: 3, calce: cab.calce, referencia }));
   const mb = fs.statSync(`${salida}/escultura-${etiqueta}.glb`).size / 1e6;
   console.log(`escultura-${etiqueta}: ${cab.triangulos} -> ${indices.length / 3} triángulos, ${n} vértices, ${mb.toFixed(2)} MB`);
 }

@@ -93,6 +93,7 @@ y la escultura se mueve con él.
 ```bash
 .blenv/bin/python tools/export_escultura.py --salida tools/build \
   --pesos ruta/a/mpfb2/src/mpfb/data/rigs/standard/weights.default.json
+npx vite-node tools/referencia_escultura.ts   # controles de MakeHuman con las medidas de la escultura
 npm run modelo3d:escultura     # simplifica (~150 000 triángulos), comprime y copia
 ```
 
@@ -103,8 +104,15 @@ npm run modelo3d:escultura     # simplifica (~150 000 triángulos), comprime y c
 3. Guarda los colores pintados en la escultura (sRGB, promediados por vértice)
    y asocia cada vértice al punto más cercano de ese cuerpo
    calzado (triángulo y baricéntricas, fuera de dedos, ojos y boca).
-4. En el navegador cada vértice de la escultura se mueve lo mismo que su punto
-   entre el cuerpo base y el del cliente: con el cuerpo base queda idéntica.
+4. `referencia_escultura.ts` busca los controles de MakeHuman con las medidas
+   de la escultura (estatura, volumen, contornos, hombros, entrepierna): primero
+   calza la superficie (brazos y piernas alineados aparte, porque la pose no es
+   la misma) y después las medidas con el mismo solver del navegador. Quedan en
+   el JSON de la escultura (`referencia`).
+5. En el navegador cada vértice de la escultura se mueve lo mismo que su punto
+   entre ese cuerpo de referencia y el del cliente: con la referencia queda
+   idéntica, y con las medidas del cliente las toma (una cintura 10 cm más
+   grande que la de la escultura se ve 10 cm más grande).
 
 Requiere haber corrido antes `export_bodies.py` (usa `tools/build/cuerpo-*.glb`).
 

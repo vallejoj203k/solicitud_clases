@@ -1,42 +1,49 @@
 import type { EntradaAjuste, Objetivo, ResultadoAjuste } from './ajuste';
 import { leerNumero, TODOS_LOS_CAMPOS, type Borrador } from './campos';
 import {
-  CONTROLES_DE_ESQUELETO,
   CONTROLES_DE_GRASA,
-  FIJOS_SIN_GRASA,
+  CURVA_MUSCULO_POR_GRASA,
   DENSIDAD_GRASA_SEGMENTO,
   DENSIDAD_MAGRA_SEGMENTO,
   DENSIDAD_MAGRA_TOTAL,
-  LAMBDA_BARRIGA_CON_VISCERAL,
-  CURVA_MUSCULO_POR_GRASA,
+  FORMA_GRASA_CORRECCION_MAX,
+  FORMA_GRASA_POR_PUNTO_DE_INDICE,
   GRASA_REFERENCIA,
   INDICE_MAGRO_PROMEDIO,
+  INDICE_MAGRO_REAL,
+  LAMBDA_BARRIGA_CON_VISCERAL,
+  LAMBDA_FORMA_GRASA,
   LAMBDA_MUSCULO_CON_DATO,
   MUSCULO_CORRECCION_INDICE_MAX,
   MUSCULO_CORRECCION_MAX,
   MUSCULO_POR_PUNTO_DE_INDICE,
-  PARAMETROS_AJUSTE,
   MUSCULO_REFERENCIA,
   MUSCULO_SENSIBILIDAD,
-  interpolar,
+  MUSCULO_SIN_GRASA_PROMEDIO,
+  PARAMETROS_AJUSTE,
   PCT_GRASA_POR_DEFECTO,
   TOLERANCIAS,
   barrigaPorVisceral,
+  interpolar,
 } from './config';
 import { MACRO_INICIAL } from './controles';
 
 /**
- * Fase 3: objetivos geométricos directos a partir de lo escrito en el
- * formulario. No hace falta que el formulario esté completo: con estatura y
- * peso ya se puede ajustar, y cada medida con cinta que se agregue suma un
- * objetivo.
+ * Objetivos del ajuste a partir de lo escrito en el formulario. Se arman dos
+ * cuerpos, en este orden, y el músculo NO depende de la grasa:
  *
- * Fase 4: los datos de composición del scanner. Cada brazo y cada pierna debe
- * tener el volumen de su masa magra más su grasa (magra/1,06 + grasa/0,90); el
- * tronco queda como resto del volumen total. La masa muscular fija el punto de
- * partida del músculo. Y se arma un segundo cuerpo, el sin grasa (lo rojo de la
- * vista "grasa sobre músculo"), con la masa libre de grasa total y la masa
- * magra de cada brazo y pierna.
+ * 1. Músculo (cuerpo sin grasa, lo rojo): estatura, masa libre de grasa (su
+ *    volumen, PLG / 1,1), masa magra de cada brazo y pierna, y las medidas de
+ *    esqueleto (hombros, entrepierna). Nada de grasa: ni % ni kg ni cinta de
+ *    contornos (la cinta mide músculo + grasa).
+ * 2. Grasa (el cuerpo completo, lo amarillo): parte del músculo, con su
+ *    esqueleto y su músculo fijos, y suma grasa hasta el volumen total (peso /
+ *    densidad de Siri), el volumen de cada brazo y pierna (magra/1,06 +
+ *    grasa/0,90) y los contornos medidos con cinta. La grasa visceral decide la
+ *    barriga. El "peso" de MakeHuman no puede quedar por debajo del músculo.
+ *
+ * No hace falta que el formulario esté completo: con estatura y peso ya se
+ * puede ajustar, y cada medida que se agregue suma un objetivo.
  */
 
 /** "Peso" de MakeHuman al que tiende el cuerpo sin grasa. */
@@ -79,9 +86,9 @@ const CINTA: [string, string[], string][] = [
 ];
 
 /**
- * null si todavía no hay estatura y peso válidos.
- * `mantener`: medidas del modelo antes del cambio (modo "Editar un valor"); las
- * que no se escribieron con cinta se piden suaves para que no se muevan.
+ * Objetivos del cuerpo completo (músculo + grasa). null si todavía no hay
+ * estatura y peso válidos. `mantener`: medidas del modelo antes del cambio (modo
+ * "Editar un valor"); las que no se escribieron con cinta se piden suaves.
  */
 export function entradaAjusteDe(b: Borrador, mantener?: Record<string, number>): EntradaAjuste | null {
   const estatura = numero(b, 'estatura');
@@ -145,23 +152,22 @@ export function entradaAjusteDe(b: Borrador, mantener?: Record<string, number>):
     priors['local:barriga'] = barrigaPorVisceral(visceral);
     lambdas['local:barriga'] = LAMBDA_BARRIGA_CON_VISCERAL;
   }
-  // La composición decide la forma (ver config): el volumen fija el tamaño y el
-  // % de grasa, si el cuerpo pesado es musculoso o gordo.
+  // La forma de la grasa (ver config): con el mismo volumen, el % de grasa
+  // decide si el cuerpo pesado se ve musculoso o gordo.
   if (pctEscrito !== undefined) {
-    const ajustar = (x: number, max: number) => Math.max(-max, Math.min(max, x));
+    const ajustarA = (x: number, max: number) => Math.max(-max, Math.min(max, x));
     let musculo = interpolar(CURVA_MUSCULO_POR_GRASA[b.sexo], pctEscrito);
     const plg = pesoLibreDeGrasa(b);
     if (plg !== undefined) {
       const indice = plg / (estatura / 100) ** 2;
-      musculo += ajustar((indice - INDICE_MAGRO_PROMEDIO[b.sexo]) * MUSCULO_POR_PUNTO_DE_INDICE, MUSCULO_CORRECCION_INDICE_MAX);
+      musculo += ajustarA((indice - INDICE_MAGRO_REAL[b.sexo]) * FORMA_GRASA_POR_PUNTO_DE_INDICE, FORMA_GRASA_CORRECCION_MAX);
       const masaMuscular = numero(b, 'masaMuscular');
       if (masaMuscular !== undefined) {
-        const r = ((masaMuscular / plg - MUSCULO_REFERENCIA[b.sexo]) / MUSCULO_SENSIBILIDAD) * MUSCULO_CORRECCION_MAX;
-        musculo += ajustar(r, MUSCULO_CORRECCION_MAX);
+        musculo += ajustarA(((masaMuscular / plg - MUSCULO_REFERENCIA[b.sexo]) / MUSCULO_SENSIBILIDAD) * MUSCULO_CORRECCION_MAX, MUSCULO_CORRECCION_MAX);
       }
     }
     priors['macro:musculo'] = Math.min(1, Math.max(0, musculo));
-    lambdas['macro:musculo'] = LAMBDA_MUSCULO_CON_DATO;
+    lambdas['macro:musculo'] = LAMBDA_FORMA_GRASA;
 
     // Con poca grasa, los controles de grasa son caros: el volumen lo ponen el
     // peso y el músculo, no la barriga ni los flancos.
@@ -205,13 +211,10 @@ export function pesoLibreDeGrasa(b: Borrador): number | undefined {
 }
 
 /**
- * Cuerpo sin grasa: misma estatura y mismo esqueleto que el cuerpo completo,
- * con el volumen de la masa libre de grasa y la masa magra de cada brazo y
- * pierna. Parte del cuerpo completo; los controles de grasa tienden a no sumar
- * (prior = mínimo entre su valor y 0) y los de músculo, a quedar como estaban.
- * En la mujer se usa la copa mínima: el busto es sobre todo grasa.
+ * 1. El músculo (cuerpo sin grasa): solo con datos magros. null si no hay
+ * estatura y peso (o masa libre de grasa).
  */
-export function entradaSinGrasaDe(b: Borrador, exterior: ResultadoAjuste, entradaExterior: EntradaAjuste): EntradaAjuste | null {
+export function entradaMusculoDe(b: Borrador): EntradaAjuste | null {
   const estatura = numero(b, 'estatura');
   const plg = pesoLibreDeGrasa(b);
   if (estatura === undefined || plg === undefined) return null;
@@ -229,6 +232,10 @@ export function entradaSinGrasaDe(b: Borrador, exterior: ResultadoAjuste, entrad
       tolerancia: TOLERANCIAS.volumen.tolerancia * volumen,
     },
   ];
+  // Hombros y entrepierna quedan en el promedio: sus medidas con cinta son del
+  // cuerpo completo (la entrepierna depende de lo gruesos que sean los muslos)
+  // y las ajusta la grasa; el Worker se las pasa después a este cuerpo.
+  const fijar: Record<string, number> = { 'local:hombros': 0, 'local:entrepierna': 0 };
   for (const s of EXTREMIDADES) {
     const seg = segmentoDe(b, s);
     if (!seg) continue;
@@ -244,34 +251,54 @@ export function entradaSinGrasaDe(b: Borrador, exterior: ResultadoAjuste, entrad
     });
   }
 
-  const valorDe = (clave: string) => {
-    const [tipo, k] = clave.split(':');
-    return tipo === 'macro' ? (exterior.macro as unknown as Record<string, number>)[k] : exterior.locales[k] ?? 0;
-  };
-  const fijar: Record<string, number> = {};
-  for (const k of CONTROLES_DE_ESQUELETO) fijar[k] = valorDe(k);
-  // Lo que ningún objetivo del cuerpo sin grasa mide queda como en el completo
-  // (o en 0 si es grasa): menos columnas en el Jacobiano, ajuste más rápido.
-  for (const k of FIJOS_SIN_GRASA) fijar[`local:${k}`] = CONTROLES_DE_GRASA.includes(k) ? Math.min(0, exterior.locales[k] ?? 0) : exterior.locales[k] ?? 0;
-  const priors: Record<string, number> = {};
-  const inicial: Record<string, number> = { 'macro:musculo': exterior.macro.musculo, 'macro:peso': exterior.macro.peso };
-  for (const [k, v] of Object.entries(exterior.locales)) {
-    const clave = `local:${k}`;
-    inicial[clave] = v;
-    priors[clave] = CONTROLES_DE_GRASA.includes(k) ? Math.min(v, 0) : v;
+  // Cuánto músculo: por el índice de masa libre de grasa y la masa muscular
+  // (no por la grasa). El "peso" de MakeHuman parte bajo (da forma de grasa).
+  const ajustarA = (x: number, max: number) => Math.max(-max, Math.min(max, x));
+  const indice = plg / (estatura / 100) ** 2;
+  let musculo = MUSCULO_SIN_GRASA_PROMEDIO + ajustarA((indice - INDICE_MAGRO_PROMEDIO[b.sexo]) * MUSCULO_POR_PUNTO_DE_INDICE, MUSCULO_CORRECCION_INDICE_MAX);
+  const masaMuscular = numero(b, 'masaMuscular');
+  if (masaMuscular !== undefined) {
+    musculo += ajustarA(((masaMuscular / plg - MUSCULO_REFERENCIA[b.sexo]) / MUSCULO_SENSIBILIDAD) * MUSCULO_CORRECCION_MAX, MUSCULO_CORRECCION_MAX);
   }
-  // El cuerpo sin grasa crece con músculo, no con el "peso" de MakeHuman (que
-  // da forma de grasa): el peso parte bajo y el músculo se mueve casi libre.
-  priors['macro:musculo'] = exterior.macro.musculo;
-  priors['macro:peso'] = Math.min(exterior.macro.peso, PESO_SIN_GRASA);
+  musculo = Math.min(1, Math.max(0, musculo));
+
+  // Sin grasa: los controles de grasa en 0 (también el busto: copa mínima).
+  for (const k of CONTROLES_DE_GRASA) fijar[`local:${k}`] = 0;
   return {
     objetivos,
-    fijos: { edad: entradaExterior.fijos.edad, copa: b.sexo === 'F' ? 0 : exterior.macro.copa },
+    fijos: { edad: Math.max(MACRO_INICIAL.edad, numero(b, 'edad') ?? MACRO_INICIAL.edad), copa: b.sexo === 'F' ? 0 : MACRO_INICIAL.copa },
     fijar,
-    priors,
-    lambdas: { 'macro:peso': 0.4, 'macro:musculo': 0.15 },
-    inicial,
-    // Parte del cuerpo completo: converge en pocas vueltas.
-    maxIteraciones: 12,
+    priors: { 'macro:musculo': musculo, 'macro:peso': PESO_SIN_GRASA },
+    lambdas: { 'macro:musculo': LAMBDA_MUSCULO_CON_DATO, 'macro:peso': 0.4 },
+    inicial: { 'macro:musculo': musculo, 'macro:peso': PESO_SIN_GRASA },
+    maxIteraciones: 20,
   };
+}
+
+/**
+ * 2. La grasa (cuerpo completo) sobre ese músculo: los objetivos del cuerpo
+ * completo, partiendo de la altura del cuerpo sin grasa. Lo demás queda libre porque solo da la forma de la capa amarilla: el
+ * cuerpo sin grasa (lo rojo) ya está decidido y no cambia.
+ */
+export function entradaGrasaDe(completo: EntradaAjuste, musculo: ResultadoAjuste): EntradaAjuste {
+  // Hombros y entrepierna solo se mueven si se midieron con cinta: si no, no
+  // sirven para sumar volumen.
+  const fijar: Record<string, number> = {};
+  const medidas = new Set(completo.objetivos.map((o) => o.clave));
+  for (const k of ['hombros', 'entrepierna']) if (!medidas.has(k)) fijar[`local:${k}`] = 0;
+  // La altura parte de la del músculo (la corrige apenas si hace falta por la
+  // entrepierna medida).
+  const priors = { ...completo.priors, 'macro:altura': musculo.macro.altura };
+  // La grasa no puede dejar el cuerpo más chico que el músculo: el Worker corre
+  // hacia afuera la capa donde lo tocaría (motor.contenerFuera).
+  return { ...completo, fijar, priors, maxIteraciones: 20 };
+}
+
+/**
+ * El esqueleto que el músculo toma del cuerpo completo: hombros y entrepierna
+ * (los ajusta la cinta, que se mide sobre la grasa). Así los dos cuerpos tienen
+ * el mismo esqueleto.
+ */
+export function conEsqueletoDe(musculo: ResultadoAjuste, completo: ResultadoAjuste): ResultadoAjuste {
+  return { ...musculo, locales: { ...musculo.locales, hombros: completo.locales.hombros ?? 0, entrepierna: completo.locales.entrepierna ?? 0 } };
 }

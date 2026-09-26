@@ -48,23 +48,24 @@ export function estatura(pos: Float32Array): number {
 }
 
 /**
- * Mete el cuerpo sin grasa dentro del cuerpo completo: si un vértice interior
- * queda afuera (o a menos de `margen`) de la superficie exterior, medido sobre
- * la normal exterior de ese mismo vértice, se empuja hacia adentro. Los dos
- * cuerpos comparten topología, así que el vértice i de uno es el i del otro.
+ * La grasa por fuera del músculo: donde el cuerpo completo quedaría por dentro
+ * del cuerpo sin grasa (o a menos de `margen`), se empuja hacia afuera sobre la
+ * normal del músculo. Se corrige la grasa, nunca el músculo (así el músculo no
+ * depende de cuánta grasa hay).
  */
-export function contenerDentro(interior: Float32Array, exterior: Float32Array, normalesExterior: Float32Array, margen = 0.001) {
-  for (let v = 0; v < interior.length; v += 3) {
-    const nx = normalesExterior[v];
-    const ny = normalesExterior[v + 1];
-    const nz = normalesExterior[v + 2];
-    const d = (interior[v] - exterior[v]) * nx + (interior[v + 1] - exterior[v + 1]) * ny + (interior[v + 2] - exterior[v + 2]) * nz;
-    if (d > -margen) {
-      const k = d + margen;
-      interior[v] -= k * nx;
-      interior[v + 1] -= k * ny;
-      interior[v + 2] -= k * nz;
+export function contenerFuera(exterior: Float32Array, interior: Float32Array, normalesInterior: Float32Array, margen = 0.001) {
+  const out = Float32Array.from(exterior);
+  for (let v = 0; v < out.length; v += 3) {
+    const nx = normalesInterior[v];
+    const ny = normalesInterior[v + 1];
+    const nz = normalesInterior[v + 2];
+    const d = (out[v] - interior[v]) * nx + (out[v + 1] - interior[v + 1]) * ny + (out[v + 2] - interior[v + 2]) * nz;
+    if (d < margen) {
+      const k = margen - d;
+      out[v] += k * nx;
+      out[v + 1] += k * ny;
+      out[v + 2] += k * nz;
     }
   }
-  return interior;
+  return out;
 }

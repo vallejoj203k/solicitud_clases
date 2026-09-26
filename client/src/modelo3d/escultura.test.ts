@@ -6,8 +6,9 @@ import type { BufferGeometry, Mesh } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { desdeGltf } from './cargar';
-import { MACRO_INICIAL, pesosMacro } from './controles';
-import { atributoEscultura, desdeGeometria, posicionesEscultura, type Escultura } from './escultura';
+import { controlesLocales, MACRO_INICIAL, pesosLocales, pesosMacro } from './controles';
+import { atributoEscultura, desdeGeometria, posicionesEscultura, referenciaDe, type Escultura } from './escultura';
+import { medir, posicionesArticulaciones, prepararMedicion } from './medicion';
 import { aplicarMorphs } from './motor';
 import type { CuerpoBase, MetaCuerpo, Sexo } from './tipos';
 
@@ -35,14 +36,31 @@ for (const sexo of ['M', 'F'] as Sexo[]) {
       (await glb(`escultura-${etiqueta}`)).scene.traverse((o) => {
         if ((o as Mesh).isMesh) malla = o as Mesh;
       });
-      e = desdeGeometria(sexo, malla!.geometry as BufferGeometry, JSON.parse(readFileSync(`${carpeta}escultura-${etiqueta}.json`, 'utf8')).calce);
+      const meta = JSON.parse(readFileSync(`${carpeta}escultura-${etiqueta}.json`, 'utf8'));
+      e = desdeGeometria(sexo, malla!.geometry as BufferGeometry, meta.calce, meta.referencia);
     });
 
-    it('con el cuerpo base la escultura queda tal cual es', () => {
-      const out = posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, cuerpo.posiciones, new Float32Array(e.nTotal * 3));
+    it('con el cuerpo de referencia la escultura queda tal cual es', () => {
+      const ref = referenciaDe(e, cuerpo).pos;
+      const out = posicionesEscultura(e, cuerpo.indicesTriangulos, ref, ref, new Float32Array(e.nTotal * 3));
       let max = 0;
       for (let i = 0; i < out.length; i++) max = Math.max(max, Math.abs(out[i] - e.original[i]));
       expect(max).toBe(0);
+    });
+
+    it('el cuerpo de referencia tiene las medidas de la escultura (calzada sobre el cuerpo base)', () => {
+      expect(e.referencia).not.toBeNull();
+      const prep = prepararMedicion(cuerpo);
+      const pesos = { ...pesosMacro(e.referencia!.macro, sexo), ...pesosLocales(e.referencia!.locales, controlesLocales(cuerpo.meta)) };
+      const art = posicionesArticulaciones(prep, pesos, 0);
+      const ref = referenciaDe(e, cuerpo);
+      const calzada = Float32Array.from(ref.pos, (x, i) => x + ref.desfase[i]);
+      const a = medir(cuerpo, prep, ref.pos, art, false).medidas;
+      const b = medir(cuerpo, prep, calzada, art, false).medidas;
+      console.log(etiqueta, 'referencia vs escultura: estatura', a.estaturaCm.toFixed(1), b.estaturaCm.toFixed(1), '| volumen', a.volumenL.toFixed(1), b.volumenL.toFixed(1), '| cintura', a.circunferenciasCm.cintura.toFixed(1), b.circunferenciasCm.cintura.toFixed(1));
+      expect(Math.abs(a.estaturaCm - b.estaturaCm)).toBeLessThan(1);
+      expect(Math.abs(a.volumenL / b.volumenL - 1)).toBeLessThan(0.04);
+      for (const c of ['pecho', 'cintura', 'brazo_izq', 'muslo_izq']) expect(Math.abs(a.circunferenciasCm[c] - b.circunferenciasCm[c]), c).toBeLessThan(2);
     });
 
     it('crece con un cuerpo más pesado, sin puntos sueltos, y es rápida', () => {

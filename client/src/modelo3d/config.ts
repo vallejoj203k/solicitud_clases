@@ -171,12 +171,38 @@ export const DENSIDAD_GRASA_SEGMENTO = 0.9;
 export const DENSIDAD_MAGRA_TOTAL = 1.1;
 
 /**
- * La composición decide la forma. En MakeHuman el "peso" pone el tamaño y el
- * "músculo" la composición: a igual peso, más músculo casi no agranda el cuerpo
- * pero lo hace musculoso en vez de gordo (con peso alto: músculo 0 = obeso,
- * músculo 1 = pesado y musculoso). El volumen ya fija el peso; el músculo
- * arranca del % de grasa (curva [% grasa, músculo] por sexo), corregido por el
- * índice de masa libre de grasa (PLG / estatura²) respecto del promedio.
+ * Cuánto músculo tiene el cuerpo sin grasa. El músculo sale solo de datos
+ * magros: el índice de masa libre de grasa (PLG / estatura²) y la masa muscular.
+ * La grasa no lo mueve.
+ *
+ * En MakeHuman, sin grasa, "músculo" 0,5 con "peso" bajo corresponde a un índice
+ * de ~22,5 (hombre) / ~19,5 (mujer): su cuerpo más flaco todavía tiene algo de
+ * grasa. Con menos índice el músculo baja (cuerpo débil y fino), con más sube
+ * (definido), y el "peso" completa el volumen. Medido con la rejilla músculo x
+ * peso a 175 / 162 cm.
+ */
+export const MUSCULO_SIN_GRASA_PROMEDIO = 0.5;
+export const INDICE_MAGRO_PROMEDIO = { M: 22.5, F: 19.5 };
+/** Cuánto sube el músculo por cada punto de índice (hasta ±0,5). */
+export const MUSCULO_POR_PUNTO_DE_INDICE = 0.11;
+/** El músculo del cuerpo sin grasa se queda cerca del que dicen los datos: el volumen lo completa el peso. */
+export const LAMBDA_MUSCULO_CON_DATO = 3;
+
+/**
+ * Masa muscular / peso libre de grasa comparado con un valor típico por sexo:
+ * corrige un poco el músculo (hasta ±0,15) según cuánto de la masa magra es músculo.
+ */
+export const MUSCULO_REFERENCIA = { M: 0.555, F: 0.52 };
+export const MUSCULO_SENSIBILIDAD = 0.1;
+export const MUSCULO_CORRECCION_MAX = 0.15;
+export const MUSCULO_CORRECCION_INDICE_MAX = 0.5;
+
+/**
+ * La forma de la capa de grasa (cuerpo completo). En MakeHuman, con peso alto,
+ * el "músculo" es la composición: músculo 0 = obeso, músculo 1 = pesado y
+ * musculoso. En el completo arranca del % de grasa (curva [% grasa, músculo] por
+ * sexo), corregido por el índice de masa libre de grasa real (PLG / estatura²)
+ * y la masa muscular. No toca el cuerpo sin grasa (lo rojo).
  */
 export const CURVA_MUSCULO_POR_GRASA: Record<'M' | 'F', [number, number][]> = {
   M: [
@@ -194,26 +220,16 @@ export const CURVA_MUSCULO_POR_GRASA: Record<'M' | 'F', [number, number][]> = {
     [42, 0],
   ],
 };
-/** Índice de masa libre de grasa promedio (kg/m²) y cuánto sube el músculo por cada punto de más (hasta ±0,15). */
-export const INDICE_MAGRO_PROMEDIO = { M: 18.5, F: 15.5 };
-export const MUSCULO_POR_PUNTO_DE_INDICE = 0.05;
-export const LAMBDA_MUSCULO_CON_DATO = 1.2;
-
+/** Índice de masa libre de grasa promedio real (kg/m²) y cuánto corrige la forma de la grasa por punto (hasta ±0,15). */
+export const INDICE_MAGRO_REAL = { M: 18.5, F: 15.5 };
+export const FORMA_GRASA_POR_PUNTO_DE_INDICE = 0.05;
+export const FORMA_GRASA_CORRECCION_MAX = 0.15;
+export const LAMBDA_FORMA_GRASA = 1.2;
 /**
- * Los controles de grasa (barriga, flancos, cadera, grasa de brazos y piernas…)
- * con un % de grasa por debajo de esta referencia son más caros de usar: el
- * volumen lo ponen el peso y el músculo.
+ * Con un % de grasa por debajo de esta referencia, los controles de grasa
+ * (barriga, flancos, cadera…) son más caros: el volumen lo ponen peso y músculo.
  */
 export const GRASA_REFERENCIA = { M: 20, F: 28 };
-
-/**
- * Masa muscular / peso libre de grasa comparado con un valor típico por sexo:
- * corrige un poco el músculo (hasta ±0,15) según cuánto de la masa magra es músculo.
- */
-export const MUSCULO_REFERENCIA = { M: 0.555, F: 0.52 };
-export const MUSCULO_SENSIBILIDAD = 0.1;
-export const MUSCULO_CORRECCION_MAX = 0.15;
-export const MUSCULO_CORRECCION_INDICE_MAX = 0.15;
 
 /** Interpolación lineal por tramos en una curva [x, y] (plana fuera de los extremos). */
 export function interpolar(curva: [number, number][], x: number): number {
@@ -244,11 +260,8 @@ export const CONTROLES_DE_GRASA = [
   'pecho_graso',
 ];
 
-/** Controles del esqueleto: el cuerpo sin grasa los copia del cuerpo completo. */
+/** Controles del esqueleto: los decide el cuerpo sin grasa y el completo los hereda. */
 export const CONTROLES_DE_ESQUELETO = ['macro:altura', 'local:hombros', 'local:entrepierna'];
-
-/** Controles que el ajuste del cuerpo sin grasa no mueve (ninguno de sus objetivos los mide). */
-export const FIJOS_SIN_GRASA = ['pectoral', 'espalda_v', 'cuello', 'cara_grasa', 'papada', 'pecho_graso'];
 
 /* ------------------------------------------------- Resultados (fase 5) */
 
