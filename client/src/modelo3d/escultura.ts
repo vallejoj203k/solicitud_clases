@@ -1,9 +1,11 @@
 import { Color, SRGBColorSpace, type BufferGeometry, type Mesh } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { controlesLocales, pesosLocales, pesosMacro, type ControlesMacro } from './controles';
 import type { Indices } from './geometria';
+import { aplicarMorphs } from './motor';
 import { VERSION_ESCULTURA } from './versionModelos';
-import type { Sexo } from './tipos';
+import type { CuerpoBase, Sexo } from './tipos';
 
 /**
  * El cuerpo que se ve: las esculturas "Muscle Male" / "Muscle Female"
@@ -12,8 +14,9 @@ import type { Sexo } from './tipos';
  * Las medidas y el ajuste se calculan con el cuerpo de MakeHuman, que no se
  * muestra. Cada vértice de la escultura está asociado a un punto de ese cuerpo
  * (triángulo y baricéntricas) y se mueve lo mismo que ese punto entre el cuerpo
- * base y el del cliente: con el cuerpo base la escultura queda tal cual es, y
- * cambia con la estatura, el peso, el músculo y la grasa del cliente.
+ * de referencia (el de MakeHuman con las medidas de la escultura) y el del
+ * cliente: con las medidas de la escultura queda tal cual es, y con las del
+ * cliente las toma (estatura, peso, cintura, brazos...).
  */
 export interface Escultura {
   sexo: Sexo;
@@ -28,6 +31,8 @@ export interface Escultura {
   b2: Float32Array;
   /** Cuánto se movió cada vértice del cuerpo base para calzar sobre la escultura (m). */
   calce: Float32Array;
+  /** Controles de MakeHuman con las medidas de la escultura (tools/referencia_escultura.ts). */
+  referencia: { macro: ControlesMacro; locales: Record<string, number> } | null;
 }
 
 const ARCHIVO: Record<Sexo, string> = { M: 'escultura-hombre', F: 'escultura-mujer' };
@@ -50,7 +55,7 @@ export function cargarEscultura(sexo: Sexo): Promise<Escultura> {
       loader.loadAsync(`${base}.glb${v}`),
       fetch(`${base}.json${v}`).then((r) => {
         if (!r.ok) throw new Error(`No se pudo cargar ${base}.json`);
-        return r.json() as Promise<{ calce: number[] }>;
+        return r.json() as Promise<{ calce: number[]; referencia?: Escultura['referencia'] }>;
       }),
     ]).then(([gltf, meta]) => {
       let malla: Mesh | undefined;
@@ -58,7 +63,7 @@ export function cargarEscultura(sexo: Sexo): Promise<Escultura> {
         if ((o as Mesh).isMesh) malla = o as Mesh;
       });
       if (!malla) throw new Error('El GLB de la escultura no trae malla');
-      const e = desdeGeometria(sexo, malla.geometry as BufferGeometry, meta.calce);
+      const e = desdeGeometria(sexo, malla.geometry as BufferGeometry, meta.calce, meta.referencia ?? null);
       listas.set(sexo, e);
       return e;
     });
@@ -76,7 +81,7 @@ export function esculturaDe(sexo: Sexo): Escultura {
 }
 
 /** Arma la escultura a partir de la geometría del GLB (separado para probarlo en Node). */
-export function desdeGeometria(sexo: Sexo, geo: BufferGeometry, calce: number[]): Escultura {
+export function desdeGeometria(sexo: Sexo, geo: BufferGeometry, calce: number[], referencia: Escultura['referencia'] = null): Escultura {
   const atado = geo.getAttribute('_atado').array as Uint16Array;
   const n = atado.length / 4;
   const e: Escultura = {
@@ -88,6 +93,7 @@ export function desdeGeometria(sexo: Sexo, geo: BufferGeometry, calce: number[])
     b1: new Float32Array(n),
     b2: new Float32Array(n),
     calce: Float32Array.from(calce, (x) => x / 10000),
+    referencia,
     color: new Float32Array(n * 3),
   };
   // Los colores vienen en sRGB (bytes); three.js trabaja en lineal. Un GLB sin
@@ -128,8 +134,35 @@ export function triangulosCanonicos(tris: Indices): Uint32Array {
 }
 
 /**
+ * El cuerpo de referencia: el de MakeHuman con las medidas de la escultura, y
+ * cuánto le falta en cada vértice para quedar sobre ella (para los anillos). Sin
+ * referencia en el JSON (versión vieja) se usa el cuerpo base.
+ */
+export interface Referencia {
+  pos: Float32Array;
+  desfase: Float32Array;
+}
+const referencias = new WeakMap<Escultura, Referencia>();
+
+export function referenciaDe(e: Escultura, cuerpo: CuerpoBase): Referencia {
+  let r = referencias.get(e);
+  if (!r) {
+    const pos = e.referencia
+      ? aplicarMorphs(cuerpo, { ...pesosMacro(e.referencia.macro, cuerpo.sexo), ...pesosLocales(e.referencia.locales, controlesLocales(cuerpo.meta)) })
+      : Float32Array.from(cuerpo.posiciones);
+    // Calzado (cuerpo base + calce) menos la referencia.
+    const desfase = Float32Array.from(pos, (x, i) => cuerpo.posiciones[i] + e.calce[i] - x);
+    r = { pos, desfase };
+    referencias.set(e, r);
+  }
+  return r;
+}
+
+/**
  * Posiciones de la escultura para un cuerpo: cada vértice se mueve lo mismo que
- * su punto del cuerpo entre `base` (cuerpo base) y `pos` (cuerpo del cliente).
+ * su punto del cuerpo entre `base` (el cuerpo de referencia, con las medidas de
+ * la escultura) y `pos` (el cuerpo del cliente). Con un cliente con las medidas
+ * de la escultura, queda tal cual; con otro, sus medidas pasan al modelo.
  */
 export function posicionesEscultura(
   e: Escultura,
@@ -172,9 +205,10 @@ export function atributoEscultura(e: Escultura, trisCuerpo: Indices, valores: Ar
 
 /**
  * Lleva puntos medidos sobre el cuerpo del cliente (los anillos de medida) a la
- * escultura: les suma el calce del vértice del cuerpo más cercano.
+ * escultura: les suma el desfase (escultura − referencia) del vértice del cuerpo
+ * más cercano.
  */
-export function llevarAEscultura(e: Escultura, pos: ArrayLike<number>, puntos: Float32Array) {
+export function llevarAEscultura(e: Escultura, ref: Referencia, pos: ArrayLike<number>, puntos: Float32Array) {
   const out = new Float32Array(puntos.length);
   const n = pos.length / 3;
   for (let i = 0; i < puntos.length; i += 3) {
@@ -190,7 +224,7 @@ export function llevarAEscultura(e: Escultura, pos: ArrayLike<number>, puntos: F
         mejor = v;
       }
     }
-    for (let c = 0; c < 3; c++) out[i + c] = puntos[i + c] + e.calce[mejor * 3 + c];
+    for (let c = 0; c < 3; c++) out[i + c] = puntos[i + c] + ref.desfase[mejor * 3 + c];
   }
   return out;
 }

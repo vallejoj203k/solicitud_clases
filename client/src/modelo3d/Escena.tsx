@@ -23,7 +23,7 @@ import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
 import type { SegmentoInforme } from './cliente';
 import { normalesVertice } from './geometria';
-import { atributoEscultura, esculturaDe, llevarAEscultura, posicionesEscultura, type Escultura } from './escultura';
+import { atributoEscultura, esculturaDe, llevarAEscultura, posicionesEscultura, referenciaDe, type Escultura } from './escultura';
 import type { CuerpoBase } from './tipos';
 
 /**
@@ -69,8 +69,9 @@ export function Escena(props: {
   const anillos = useMemo(() => {
     if (!actual || !verAnillos) return null;
     const e = esculturaDe(cuerpo.sexo);
-    return Object.fromEntries(Object.entries(actual.anillos).map(([k, a]) => [k, llevarAEscultura(e, actual.cuerpo.pos, a)]));
-  }, [actual, verAnillos, cuerpo.sexo]);
+    const ref = referenciaDe(e, cuerpo);
+    return Object.fromEntries(Object.entries(actual.anillos).map(([k, a]) => [k, llevarAEscultura(e, ref, actual.cuerpo.pos, a)]));
+  }, [actual, verAnillos, cuerpo]);
 
   let contenido: React.ReactNode = null;
   if (actual) {
@@ -230,7 +231,7 @@ function volcar(geometria: BufferGeometry, malla: Malla) {
   const cuerpo = geometria.userData.cuerpo as CuerpoBase;
   const e = geometria.userData.escultura as Escultura;
   const pos = geometria.getAttribute('position') as BufferAttribute;
-  posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, malla.pos, pos.array as Float32Array<ArrayBuffer>);
+  posicionesEscultura(e, cuerpo.indicesTriangulos, referenciaDe(e, cuerpo).pos, malla.pos, pos.array as Float32Array<ArrayBuffer>);
   pos.needsUpdate = true;
   const nor = geometria.getAttribute('normal') as BufferAttribute;
   normalesVertice(pos.array as Float32Array, e.indices, nor.array as Float32Array);

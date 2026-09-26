@@ -2,11 +2,11 @@
 import { expose, transfer } from 'comlink';
 import { ajustar, controlesSinGrasa, fraccionVolumenGrasa, type ResultadoAjuste } from './ajuste';
 import type { Borrador } from './campos';
-import { entradaAjusteDe, entradaSinGrasaDe } from './objetivos';
+import { conEsqueletoDe, entradaAjusteDe, entradaGrasaDe, entradaMusculoDe } from './objetivos';
 import { controlesLocales, pesosLocales, pesosMacro, type ControlesMacro } from './controles';
 import { normalesVertice } from './geometria';
 import { medir, posicionesArticulaciones, prepararMedicion, type Anillos, type Medidas, type PrepMedicion } from './medicion';
-import { aplicarMorphs, contenerDentro } from './motor';
+import { aplicarMorphs, contenerFuera } from './motor';
 import type { CuerpoBase, Sexo } from './tipos';
 
 /**
@@ -53,34 +53,21 @@ const api = {
   },
 
   /**
-   * Fases 3 y 4: ajusta el cuerpo completo a los datos del formulario y, con él,
-   * el cuerpo sin grasa. null si todavía no hay estatura y peso.
+   * Ajusta los dos cuerpos a los datos del formulario, en este orden: el músculo
+   * (cuerpo sin grasa) solo con datos magros, y la grasa (cuerpo completo) sobre
+   * ese músculo. Así el músculo no cambia cuando cambia la grasa. null si todavía
+   * no hay estatura y peso.
    */
   ajustarCliente(borrador: Borrador, mantener?: Record<string, number>): ResultadoCliente | null {
-    const r = api.ajustarExterior(borrador, mantener);
-    return r ? api.ajustarSinGrasa(borrador, r) : null;
-  },
-
-  /** Solo el cuerpo completo (lo que se ve primero). */
-  ajustarExterior(borrador: Borrador, mantener?: Record<string, number>): ResultadoCliente | null {
     const c = cuerpos.get(borrador.sexo);
     if (!c) throw new Error(`El cuerpo ${borrador.sexo} no está iniciado en el Worker`);
     const t0 = performance.now();
-    const entrada = entradaAjusteDe(borrador, mantener);
-    if (!entrada) return null;
-    const exterior = ajustar(c.cuerpo, c.prep, entrada);
-    return { exterior, magro: null, ms: performance.now() - t0 };
-  },
-
-  /** Completa un resultado con el cuerpo sin grasa (vista "grasa sobre músculo"). */
-  ajustarSinGrasa(borrador: Borrador, r: ResultadoCliente): ResultadoCliente {
-    const c = cuerpos.get(borrador.sexo);
-    if (!c) throw new Error(`El cuerpo ${borrador.sexo} no está iniciado en el Worker`);
-    const t0 = performance.now();
-    const entrada = entradaAjusteDe(borrador);
-    const entradaMagro = entrada ? entradaSinGrasaDe(borrador, r.exterior, entrada) : null;
-    const magro = entradaMagro ? ajustar(c.cuerpo, c.prep, entradaMagro) : null;
-    return { ...r, magro, ms: r.ms + performance.now() - t0 };
+    const entradaMusculo = entradaMusculoDe(borrador);
+    const entradaCompleto = entradaAjusteDe(borrador, mantener);
+    if (!entradaMusculo || !entradaCompleto) return null;
+    const magro = ajustar(c.cuerpo, c.prep, entradaMusculo);
+    const exterior = ajustar(c.cuerpo, c.prep, entradaGrasaDe(entradaCompleto, magro));
+    return { exterior, magro: conEsqueletoDe(magro, exterior), ms: performance.now() - t0 };
   },
 
   /**
@@ -101,11 +88,9 @@ const api = {
     const pesos = { ...pesosMacro(macro, sexo), ...pesosLocales(locales, controlesLocales(cuerpo.meta)) };
 
     const info = { desplazoY: 0 };
-    const pos = aplicarMorphs(cuerpo, pesos, undefined, info);
+    let pos = aplicarMorphs(cuerpo, pesos, undefined, info);
     const msMorphs = performance.now() - t0;
-    const normales = normalesVertice(pos, cuerpo.indicesTriangulos);
     const articulaciones = posicionesArticulaciones(prep, pesos, info.desplazoY);
-    const { medidas, anillos } = medir(cuerpo, prep, pos, articulaciones, conAnillos);
 
     let magro: Malla | undefined;
     let espesor: Float32Array | undefined;
@@ -116,11 +101,18 @@ const api = {
         sinGrasa = aplicarMorphs(cuerpo, { ...pesosMacro(m.macro, sexo), ...pesosLocales(m.locales, controlesLocales(cuerpo.meta)) });
       } else {
         // Sin ajuste (controles movidos a mano): se achica hasta el volumen sin grasa.
-        const volumenMagro = medidas.volumenL * (1 - fraccionVolumenGrasa(grasa.pctGrasa));
+        const volumenMagro = medir(cuerpo, prep, pos, articulaciones, false).medidas.volumenL * (1 - fraccionVolumenGrasa(grasa.pctGrasa));
         sinGrasa = controlesSinGrasa(cuerpo, macro, locales, volumenMagro).pos;
       }
-      const pm = contenerDentro(sinGrasa, pos, normales, 0.003);
-      magro = { pos: pm, normales: normalesVertice(pm, cuerpo.indicesTriangulos) };
+      // El músculo queda tal cual; la grasa se corre hacia afuera donde lo tocaría.
+      const normalesMagro = normalesVertice(sinGrasa, cuerpo.indicesTriangulos);
+      pos = contenerFuera(pos, sinGrasa, normalesMagro, 0.003);
+      magro = { pos: sinGrasa, normales: normalesMagro };
+    }
+    const normales = normalesVertice(pos, cuerpo.indicesTriangulos);
+    const { medidas, anillos } = medir(cuerpo, prep, pos, articulaciones, conAnillos);
+    if (magro) {
+      const pm = magro.pos;
       espesor = new Float32Array(pos.length / 3);
       for (let v = 0; v < espesor.length; v++) {
         const i = v * 3;

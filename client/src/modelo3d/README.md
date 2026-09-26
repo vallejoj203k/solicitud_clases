@@ -13,28 +13,40 @@ Los cuerpos base son de MakeHuman / MPFB2 (CC0). Cómo se regeneran los GLB:
 
 ```
 Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Levenberg-Marquardt)
-  cliente.ts / campos.ts      │                 1. cuerpo completo  (estatura, volumen,
-  (zod + coherencia)          │                    brazos y piernas, cinta, barriga)
-                              │                 2. cuerpo sin grasa (masa libre de grasa,
-                              ▼                    músculo de brazos y piernas)
+  cliente.ts / campos.ts      │                 1. músculo = cuerpo sin grasa (estatura,
+  (zod + coherencia)          │                    masa libre de grasa, masa magra de
+                              │                    brazos y piernas, masa muscular)
+                              │                 2. grasa = cuerpo completo encima (peso,
+                              ▼                    % de grasa, cinta, grasa visceral)
                     controles de MakeHuman  ──►  Worker: motor.ts + medicion.ts
                                                   (morphs, normales, medidas, grosor de grasa)
                                                            │
                               Escena.tsx (three.js / r3f) ◄┘  Panel.tsx (pestañas, tarjetas)
 ```
 
+- **Músculo y grasa, independientes:** primero se ajusta el músculo (el cuerpo
+  sin grasa, lo rojo) solo con datos magros: estatura, peso libre de grasa,
+  masa magra de cada brazo y pierna y masa muscular (`entradaMusculoDe`). Los
+  controles de grasa quedan en 0. Después la grasa (el cuerpo completo, lo
+  amarillo) se ajusta encima con el peso, el % de grasa, la cinta y la grasa
+  visceral (`entradaGrasaDe`). Subir la grasa o cambiar la cintura con el mismo
+  peso libre de grasa no toca el músculo; donde la grasa quedaría por dentro
+  del músculo, la capa se corre hacia afuera (`motor.contenerFuera`). Hombros y
+  entrepierna medidos con cinta los ajusta el cuerpo completo y el músculo los
+  copia (mismo esqueleto).
 - **Forma:** en MakeHuman el "peso" pone el tamaño y el "músculo" la
-  composición. El volumen (peso / densidad de Siri) fija el tamaño; el % de
-  grasa, el índice de masa libre de grasa y la masa muscular deciden si ese
-  cuerpo es musculoso o gordo. La grasa visceral decide la barriga.
-- **Vista "grasa y músculo":** el cuerpo sin grasa (rojo) va dentro del
-  completo; la grasa (amarillo) es la diferencia, más opaca donde es más gruesa.
+  composición. En el músculo, el "músculo" sale del índice de masa libre de
+  grasa (y de la masa muscular) y el "peso" completa el volumen. En la grasa,
+  el % de grasa decide si el cuerpo pesado se ve musculoso o gordo, y la grasa
+  visceral, la barriga.
+- **Vista "grasa y músculo":** el músculo (rojo) va dentro de la grasa; la
+  grasa (amarillo) es la diferencia, más opaca donde es más gruesa.
 - **Cómo se ve:** la figura es la escultura "Muscle Male / Female" (Floriane
   Legros-Collard, `images/2284-*`), tal cual se subió (`escultura.ts`). El
   cuerpo de MakeHuman no se muestra: solo sirve para medir y ajustar. Cada
   vértice de la escultura se mueve lo mismo que su punto de ese cuerpo entre el
-  cuerpo base y el del cliente, así la escultura cambia con la estatura, el
-  peso, el músculo y la grasa; el músculo (rojo) y la grasa (amarillo) son la
+  cuerpo de referencia (MakeHuman con las medidas de la escultura) y el del
+  cliente: los centímetros escritos pasan casi 1 a 1 a la figura; el músculo (rojo) y la grasa (amarillo) son la
   escultura movida con el cuerpo sin grasa y con el cuerpo completo. Cómo se
   genera: [`tools/README.md`](../../../tools/README.md#cuerpo-esculpido).
   Los colores son los pintados en el modelo, sin cambios.
@@ -74,7 +86,7 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 ## Pruebas
 
 ```bash
-npm test -w client        # 72 tests: geometría, medición, solver, escultura, formulario, resultados
+npm test -w client        # 79 tests: geometría, medición, solver, escultura, formulario, resultados
 npm run typecheck -w client
 ```
 
