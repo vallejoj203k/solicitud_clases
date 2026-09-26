@@ -16,10 +16,13 @@ export const COLOR_SEGMENTO: Record<string, string> = {
 /**
  * Vista "grasa sobre músculo": el cuerpo sin grasa (músculo, hueso, órganos) en
  * rojo músculo y la grasa en amarillo, la convención de los diagramas de
- * composición corporal.
+ * composición corporal. El amarillo se oscurece donde la capa es más gruesa:
+ * claro con poca grasa, ámbar tostado desde `GROSOR_GRASA_OSCURA` metros.
  */
 export const COLOR_MAGRO = '#BA6C61'; // color medio del modelo (solo para la leyenda)
-export const COLOR_GRASA = '#F5B323';
+export const COLOR_GRASA_POCA = '#FFD23F';
+export const COLOR_GRASA_MUCHA = '#8F6B00';
+export const GROSOR_GRASA_OSCURA = 0.06;
 
 /**
  * Circunferencias que mide el motor (fase 2).

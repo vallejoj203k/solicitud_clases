@@ -17,7 +17,7 @@ import {
   Vector3,
 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA_MUCHA, COLOR_GRASA_POCA, COLOR_SEGMENTO, GROSOR_GRASA_OSCURA, MAPA_CALOR } from './config';
 import { useVisor } from './estado';
 import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
@@ -362,9 +362,12 @@ function coloresCalor(cuerpo: CuerpoBase, estados: Record<SegmentoInforme, Estad
  * grasa lo cubre como una capa amarilla translúcida, iluminada como un objeto
  * más, para que se lea que está por encima.
  *
- * - Donde la capa tapa al cuerpo sin grasa, su opacidad crece con el grosor de
- *   grasa de ese punto: la barriga se ve amarilla y maciza, las canillas casi
- *   transparentes, y donde no hay grasa desaparece (el músculo sigue rojo).
+ * - El color depende del grosor de grasa de cada punto: amarillo claro donde
+ *   hay poca y ámbar cada vez más oscuro donde hay más (la barriga de alguien
+ *   con mucha grasa se ve tostada, las canillas casi sin color).
+ * - Donde la capa tapa al cuerpo sin grasa sigue siendo translúcida (se ven
+ *   los músculos debajo): la opacidad sube poco con el grosor, y donde no hay
+ *   grasa desaparece (el músculo queda tal cual).
  * - Donde sobresale del contorno del cuerpo sin grasa (el stencil lo marca) se
  *   pinta casi opaca: es la silueta amarilla del dibujo de referencia, vista
  *   desde cualquier ángulo.
@@ -385,12 +388,14 @@ function crearMaterialesGrasa() {
   const capa = (encima: boolean) => {
     const m = new ShaderMaterial({
       uniforms: {
-        color: { value: new Color(COLOR_GRASA) },
-        // Opacidad según el grosor de grasa: 0 sin grasa (se ve el músculo tal cual),
-        // `minima` apenas hay grasa y `maxima` desde `lleno` metros.
-        minima: { value: encima ? 0.08 : 0.72 },
-        maxima: { value: encima ? 0.42 : 0.88 },
-        lleno: { value: 0.05 },
+        // Color según el grosor de grasa: `claro` apenas hay y `oscuro` desde `lleno` metros.
+        claro: { value: new Color(COLOR_GRASA_POCA) },
+        oscuro: { value: new Color(COLOR_GRASA_MUCHA) },
+        // Opacidad: 0 sin grasa (se ve el músculo tal cual), `minima` apenas hay
+        // grasa y `maxima` desde `lleno` metros (baja encima del músculo, para verlo).
+        minima: { value: encima ? 0.2 : 0.75 },
+        maxima: { value: encima ? 0.58 : 0.92 },
+        lleno: { value: GROSOR_GRASA_OSCURA },
       },
       vertexShader: `
         attribute float espesor;
@@ -405,7 +410,8 @@ function crearMaterialesGrasa() {
           gl_Position = projectionMatrix * viewMatrix * mundo;
         }`,
       fragmentShader: `
-        uniform vec3 color;
+        uniform vec3 claro;
+        uniform vec3 oscuro;
         uniform float minima;
         uniform float maxima;
         uniform float lleno;
@@ -423,8 +429,10 @@ function crearMaterialesGrasa() {
           float brillo = 0.28 * pow(max(dot(n, normalize(principal + v)), 0.0), 50.0);
           // Menos de ~1,5 mm de grasa: la capa desaparece y el músculo conserva su color.
           float hay = smoothstep(0.0005, 0.0025, vEsp);
-          float a = mix(minima, maxima, smoothstep(0.0, lleno, vEsp));
-          a = hay * clamp(a + 0.35 * pow(f, 2.0) + brillo, 0.0, 1.0);
+          float cuanta = smoothstep(0.0015, lleno, vEsp);
+          float a = mix(minima, maxima, cuanta);
+          a = hay * clamp(a + 0.3 * pow(f, 2.0) + brillo, 0.0, 1.0);
+          vec3 color = mix(claro, oscuro, cuanta);
           vec3 c = color * luz + vec3(1.0, 0.96, 0.85) * (brillo + 0.2 * pow(f, 3.0));
           gl_FragColor = vec4(c, a);
           #include <colorspace_fragment>
