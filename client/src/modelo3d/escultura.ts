@@ -1,4 +1,4 @@
-import type { BufferGeometry, Mesh } from 'three';
+import { Color, SRGBColorSpace, type BufferGeometry, type Mesh } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { Indices } from './geometria';
@@ -20,6 +20,8 @@ export interface Escultura {
   indices: Uint32Array;
   /** Posición de cada vértice en la escultura. */
   original: Float32Array;
+  /** Color pintado en la escultura (rgb lineal, tal cual viene en el modelo). */
+  color: Float32Array;
   tri: Uint16Array;
   b1: Float32Array;
   b2: Float32Array;
@@ -80,7 +82,15 @@ export function desdeGeometria(sexo: Sexo, geo: BufferGeometry, calce: number[])
     b1: new Float32Array(n),
     b2: new Float32Array(n),
     calce: Float32Array.from(calce, (x) => x / 10000),
+    color: new Float32Array(n * 3),
   };
+  // Los colores vienen en sRGB (bytes); three.js trabaja en lineal.
+  const crudo = geo.getAttribute('_color').array as Uint8Array;
+  const c = new Color();
+  for (let v = 0; v < n; v++) {
+    c.setRGB(crudo[v * 4] / 255, crudo[v * 4 + 1] / 255, crudo[v * 4 + 2] / 255, SRGBColorSpace);
+    e.color.set([c.r, c.g, c.b], v * 3);
+  }
   for (let v = 0; v < n; v++) {
     e.tri[v] = atado[v * 4];
     e.b1[v] = atado[v * 4 + 1] / 65535;

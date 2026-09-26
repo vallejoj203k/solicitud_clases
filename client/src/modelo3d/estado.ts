@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { COLORES_CUERPO } from './config';
 import { MACRO_INICIAL, type ControlesMacro } from './controles';
 import type { ResultadoCliente } from './motor.worker';
 import type { Sexo } from './tipos';
@@ -7,14 +6,14 @@ import type { Sexo } from './tipos';
 /**
  * Modos de vista:
  * - grasa: el cuerpo sin grasa en rojo dentro de la capa de grasa amarilla (principal).
- * - realista: el cuerpo solo, con material de piel mate y el color elegido.
+ * - realista: el modelo solo, con sus colores originales.
  * - calor: cada segmento coloreado según su estado (bajo / normal / alto) de grasa o de músculo.
  * - comparar: actual y objetivo, lado a lado o el objetivo dentro de un fantasma del actual.
  * Los anillos de medida se pueden sumar a cualquier vista.
  */
 export type Vista = 'grasa' | 'realista' | 'calor' | 'comparar';
 
-type Ajustes = 'vista' | 'verAnillos' | 'verSegmentos' | 'calorDe' | 'comparar' | 'mezcla' | 'colorCuerpo' | 'modoMedidas' | 'giro';
+type Ajustes = 'vista' | 'verAnillos' | 'verSegmentos' | 'calorDe' | 'comparar' | 'mezcla' | 'modoMedidas' | 'giro';
 
 interface EstadoVisor {
   sexo: Sexo;
@@ -36,7 +35,6 @@ interface EstadoVisor {
   comparar: 'lado' | 'fantasma';
   /** Transición actual (0) -> objetivo (1) en la vista fantasma. */
   mezcla: number;
-  colorCuerpo: string;
   /**
    * Al escribir una medida: 'autoequilibrio' deja que las medidas no escritas se
    * acomoden solas; 'editar' las mantiene como estaban y solo cambia la escrita.
@@ -69,7 +67,6 @@ export const useVisor = create<EstadoVisor>((set) => ({
   calorDe: 'grasa',
   comparar: 'lado',
   mezcla: 1,
-  colorCuerpo: COLORES_CUERPO[0],
   modoMedidas: 'autoequilibrio',
   giro: 0,
   setSexo: (sexo) => set({ sexo, ajuste: null, objetivo: null }),

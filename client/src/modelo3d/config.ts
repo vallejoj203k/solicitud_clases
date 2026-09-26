@@ -18,7 +18,7 @@ export const COLOR_SEGMENTO: Record<string, string> = {
  * rojo músculo y la grasa en amarillo, la convención de los diagramas de
  * composición corporal.
  */
-export const COLOR_MAGRO = '#B03A2E';
+export const COLOR_MAGRO = '#BA6C61'; // color medio del modelo (solo para la leyenda)
 export const COLOR_GRASA = '#F5B323';
 
 /**
@@ -328,5 +328,3 @@ export const MAPA_CALOR = {
   colores: { bajo: '#4CE0E0', normal: '#8CC63F', alto: '#F5A524', sinDato: '#8A93A3' },
 };
 
-/** Tonos del cuerpo en la vista realista (el primero es el maniquí de porcelana). */
-export const COLORES_CUERPO = ['#D3CFC8', '#F1D3C0', '#D9A77F', '#B07A52', '#7A4B2E', '#4A2E1E'];

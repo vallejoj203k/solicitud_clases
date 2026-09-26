@@ -6,6 +6,7 @@
  * Atributos de cada vértice (ver client/src/modelo3d/escultura.ts):
  *   POSITION  float32 x3  posición en la escultura
  *   _ATADO    uint16  x4  triángulo del cuerpo, baricéntricas b1 y b2 (×65535), 0
+ *   _COLOR    uint8   x4  color pintado en la escultura (sRGB, tal cual), 255
  *
  * El JSON lleva `calce`: cuánto se movió cada vértice del cuerpo base para
  * calzar sobre la escultura (0,1 mm), para llevar anillos de medida a ella.
@@ -70,6 +71,7 @@ async function armar(entrada, salida, sexo) {
   const n = orden.length;
   const pos = new Float32Array(n * 3);
   const atado = new Uint16Array(n * 4);
+  const color = new Uint8Array(n * 4);
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
   orden.forEach((v, i) => {
@@ -81,11 +83,13 @@ async function armar(entrada, salida, sexo) {
     }
     if (a.tri[v] > 65535) throw new Error('triángulo del cuerpo fuera de uint16');
     atado.set([a.tri[v], Math.round(a.bary[v * 3 + 1] * 65535), Math.round(a.bary[v * 3 + 2] * 65535), 0], i * 4);
+    color.set([a.color[v * 3], a.color[v * 3 + 1], a.color[v * 3 + 2], 255], i * 4);
   });
 
   const vistas = [
     { datos: pos, stride: 12, modo: 'ATTRIBUTES', count: n, target: 34962 },
     { datos: atado, stride: 8, modo: 'ATTRIBUTES', count: n, target: 34962 },
+    { datos: color, stride: 4, modo: 'ATTRIBUTES', count: n, target: 34962 },
     { datos: indices, stride: 4, modo: 'TRIANGLES', count: indices.length, target: 34963 },
   ];
   const partes = [];
@@ -117,9 +121,10 @@ async function armar(entrada, salida, sexo) {
     accessors: [
       { bufferView: 0, componentType: 5126, count: n, type: 'VEC3', min, max },
       { bufferView: 1, componentType: 5123, count: n, type: 'VEC4' },
-      { bufferView: 2, componentType: 5125, count: indices.length, type: 'SCALAR' },
+      { bufferView: 2, componentType: 5121, normalized: true, count: n, type: 'VEC4' },
+      { bufferView: 3, componentType: 5125, count: indices.length, type: 'SCALAR' },
     ],
-    meshes: [{ name: 'escultura', primitives: [{ attributes: { POSITION: 0, _ATADO: 1 }, indices: 2 }] }],
+    meshes: [{ name: 'escultura', primitives: [{ attributes: { POSITION: 0, _ATADO: 1, _COLOR: 2 }, indices: 3 }] }],
     nodes: [{ mesh: 0, name: 'escultura' }],
     scenes: [{ nodes: [0] }],
     scene: 0,
