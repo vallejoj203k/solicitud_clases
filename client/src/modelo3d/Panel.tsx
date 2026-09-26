@@ -197,7 +197,7 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
           <span className="text-humo-400">poca</span>
           <span className="h-3 w-12 rounded-sm" style={{ background: `linear-gradient(to right, ${COLOR_GRASA_POCA}, ${COLOR_GRASA_MUCHA})` }} />
           <span className="text-humo-400">mucha</span>
-          Grasa (más oscura donde es más gruesa)
+          Grasa: casi transparente donde es fina, más densa y oscura donde es gruesa
         </span>
       </p>
     );
