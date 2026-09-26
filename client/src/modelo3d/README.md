@@ -37,6 +37,7 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
   peso, el músculo y la grasa; el músculo (rojo) y la grasa (amarillo) son la
   escultura movida con el cuerpo sin grasa y con el cuerpo completo. Cómo se
   genera: [`tools/README.md`](../../../tools/README.md#cuerpo-esculpido).
+  Los colores son los pintados en el modelo, sin cambios.
 - **Comparar:** el cuerpo objetivo aplica los controles de grasa y músculo del
   informe repartidos en proporción a cada segmento (`resultados.ts`).
 
@@ -67,7 +68,8 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 - `CURVA_VISCERAL`: grasa visceral → barriga.
 - Densidades por segmento (1,06 / 0,90) y total (1,1).
 - `ESCALA_*`, `MAPA_CALOR`: tarjetas y mapa de calor.
-- `COLOR_MAGRO`, `COLOR_GRASA`, `COLORES_CUERPO`: colores.
+- `COLOR_GRASA`: color de la grasa. El cuerpo usa los colores pintados en el
+  modelo, tal cual (sin teñir ni mapeo de tonos).
 
 ## Pruebas
 

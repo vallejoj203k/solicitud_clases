@@ -62,12 +62,29 @@ def leer_fbx(ruta):
     o = next(o for o in bpy.context.scene.objects if o.type == 'MESH')
     mw = o.matrix_world
     co = np.array([tuple(mw @ v.co) for v in o.data.vertices])
+    # Colores pintados en la escultura (por esquina, en sRGB): se promedian por vértice.
+    color = np.full((len(co), 3), 0.8)
+    if o.data.color_attributes:
+        attr = o.data.color_attributes[0]
+        crudo = np.empty(len(attr.data) * 4)
+        attr.data.foreach_get('color_srgb', crudo)
+        crudo = crudo.reshape(-1, 4)[:, :3]
+        if attr.domain == 'CORNER':
+            vert = np.empty(len(o.data.loops), dtype=np.int64)
+            o.data.loops.foreach_get('vertex_index', vert)
+            suma = np.zeros((len(co), 3))
+            cuenta = np.zeros(len(co))
+            np.add.at(suma, vert, crudo)
+            np.add.at(cuenta, vert, 1)
+            color = np.where(cuenta[:, None] > 0, suma / np.maximum(cuenta, 1)[:, None], color)
+        else:
+            color = crudo
     tris = []
     for p in o.data.polygons:
         vs = list(p.vertices)
         for i in range(1, len(vs) - 1):
             tris.append((vs[0], vs[i], vs[i + 1]))
-    return a_gltf(co), np.array(tris, dtype=np.int64)
+    return a_gltf(co), np.array(tris, dtype=np.int64), color
 
 
 def leer_glb_cuerpo(ruta):
@@ -258,7 +275,7 @@ def main():
         print(f'=== {etiqueta} ===', flush=True)
         base, tris = leer_glb_cuerpo(os.path.join(args.salida, f'cuerpo-{etiqueta}.glb'))
         tris = canonicos(tris)
-        esc, tris_esc = leer_fbx(os.path.join(RAIZ, fbx))
+        esc, tris_esc, color = leer_fbx(os.path.join(RAIZ, fbx))
         esc = alinear(esc, base)
         print(f'  escultura: {len(esc)} vértices, {len(tris_esc)} triángulos', flush=True)
         malo = vertices_sin_ancla(pesos, len(base))
@@ -270,6 +287,7 @@ def main():
             'reposo': esc.astype('<f4'),
             'tri': tri.astype('<u4'),
             'bary': bary.astype('<f4'),
+            'color': np.round(np.clip(color, 0, 1) * 255).astype('<u2'),
             'indices': tris_esc.astype('<u4'),
         }
         # Cuánto se movió cada vértice del cuerpo base para calzar sobre la escultura (en 0,1 mm).

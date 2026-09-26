@@ -100,7 +100,8 @@ npm run modelo3d:escultura     # simplifica (~150 000 triángulos), comprime y c
 2. Registro no rígido: el cuerpo base se deforma hasta calzar sobre la
    escultura (puntos más cercanos en las dos direcciones + Laplaciano, rigidez
    decreciente). Dedos, ojos y boca de MakeHuman quedan libres.
-3. Asocia cada vértice de la escultura al punto más cercano de ese cuerpo
+3. Guarda los colores pintados en la escultura (sRGB, promediados por vértice)
+   y asocia cada vértice al punto más cercano de ese cuerpo
    calzado (triángulo y baricéntricas, fuera de dedos, ojos y boca).
 4. En el navegador cada vértice de la escultura se mueve lo mismo que su punto
    entre el cuerpo base y el del cliente: con el cuerpo base queda idéntica.

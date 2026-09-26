@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconoAtras } from '../components/Iconos.jsx';
 import type { ClienteInput, SegmentoInforme } from './cliente';
-import { CIRCUNFERENCIAS, COLORES_CUERPO, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
 import { controlesLocales, type ControlLocal } from './controles';
 import { useVisor, type Vista } from './estado';
 import { FormularioMedidas, FormularioScanner } from './FormularioScanner';
@@ -184,7 +184,7 @@ export function Panel(props: DatosPanel) {
 /* ------------------------------------------------------- Opciones de vista */
 
 function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
-  const { vista, colorCuerpo, calorDe, comparar, mezcla, objetivo, set } = useVisor();
+  const { vista, calorDe, comparar, mezcla, objetivo, set } = useVisor();
 
   if (vista === 'grasa') {
     return (
@@ -202,29 +202,7 @@ function OpcionesVista({ estados, resumenObjetivo }: DatosPanel) {
   }
 
   if (vista === 'realista') {
-    return (
-      <div className="flex items-center gap-2" role="group" aria-label="Color del cuerpo">
-        <span className="text-xs text-humo-300">Color</span>
-        {COLORES_CUERPO.map((c) => (
-          <button
-            key={c}
-            type="button"
-            aria-label={`Color ${c}`}
-            aria-pressed={colorCuerpo === c}
-            onClick={() => set({ colorCuerpo: c })}
-            className={`h-7 w-7 rounded-full border-2 ${colorCuerpo === c ? 'border-white' : 'border-carbon-600'}`}
-            style={{ background: c }}
-          />
-        ))}
-        <input
-          type="color"
-          aria-label="Otro color"
-          value={colorCuerpo}
-          onChange={(e) => set({ colorCuerpo: e.target.value })}
-          className="h-7 w-9 cursor-pointer rounded border border-carbon-600 bg-transparent"
-        />
-      </div>
-    );
+    return <p className="text-[11px] text-humo-300">El modelo con sus colores originales.</p>;
   }
 
   if (vista === 'calor') {

@@ -8,7 +8,7 @@ import {
   CanvasTexture,
   Color,
   EqualStencilFunc,
-  MeshPhysicalMaterial,
+  MeshStandardMaterial,
   NotEqualStencilFunc,
   ReplaceStencilOp,
   ShaderMaterial,
@@ -17,7 +17,7 @@ import {
   Vector3,
 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_MAGRO, COLOR_SEGMENTO, MAPA_CALOR } from './config';
+import { CIRCUNFERENCIAS, COLOR_GRASA, COLOR_SEGMENTO, MAPA_CALOR } from './config';
 import { useVisor } from './estado';
 import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
@@ -53,7 +53,6 @@ export function Escena(props: {
   const comparar = useVisor((s) => s.comparar);
   const verAnillos = useVisor((s) => s.verAnillos);
   const verSegmentos = useVisor((s) => s.verSegmentos);
-  const colorCuerpo = useVisor((s) => s.colorCuerpo);
   const calorDe = useVisor((s) => s.calorDe);
   const mezcla = useVisor((s) => s.mezcla);
   const giro = useVisor((s) => s.giro);
@@ -78,7 +77,7 @@ export function Escena(props: {
     if (verSegmentos) {
       contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresSegmento(cuerpo)} />;
     } else if (vista === 'realista') {
-      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} color={colorCuerpo} />;
+      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} />;
     } else if (vista === 'calor') {
       contenido = (
         <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresCalor(cuerpo, estados, calorDe)} />
@@ -219,6 +218,8 @@ function crearGeometria(cuerpo: CuerpoBase) {
   g.setAttribute('position', new BufferAttribute(Float32Array.from(e.original), 3));
   g.setAttribute('normal', new BufferAttribute(new Float32Array(e.nTotal * 3), 3));
   g.setIndex(new BufferAttribute(e.indices, 1));
+  // Los colores del modelo, tal cual (el mapa de calor y los segmentos los reemplazan).
+  g.setAttribute('color', new BufferAttribute(Float32Array.from(e.color), 3));
   g.computeVertexNormals();
   g.userData.cuerpo = cuerpo;
   g.userData.escultura = e;
@@ -292,7 +293,11 @@ function mezclar(a: ResultadoMotor, b: ResultadoMotor, t: number): DatosCuerpo {
 
 /* ------------------------------------------------------ Cuerpo realista */
 
-function CuerpoSolido({ cuerpo, malla, color, colores }: { cuerpo: CuerpoBase; malla: Malla; color?: string; colores?: Float32Array }) {
+/**
+ * El cuerpo solo: con los colores del modelo tal cual (vista realista) o con los
+ * del mapa de calor o los segmentos.
+ */
+function CuerpoSolido({ cuerpo, malla, colores }: { cuerpo: CuerpoBase; malla: Malla; colores?: Float32Array }) {
   const g = usarGeometria(cuerpo);
   const redibujar = usarRedibujar();
   useEffect(() => {
@@ -300,32 +305,31 @@ function CuerpoSolido({ cuerpo, malla, color, colores }: { cuerpo: CuerpoBase; m
     redibujar();
   }, [g, malla, redibujar]);
   useEffect(() => {
-    if (!colores) return;
-    ponerAtributo(g, 'color', colores, 3);
+    if (colores) ponerAtributo(g, 'color', colores, 3);
+    else ponerColoresDelModelo(g);
     redibujar();
   }, [g, colores, redibujar]);
-  const material = useMemo(() => crearMaterialPiel(colores ? '#ffffff' : color ?? '#ffffff', !!colores), [color, colores]);
+  const material = useMemo(crearMaterialModelo, []);
   useEffect(() => () => material.dispose(), [material]);
   return <mesh geometry={g} material={material} />;
 }
 
+/** Vuelve a poner los colores pintados en el modelo (tras el mapa de calor). */
+function ponerColoresDelModelo(g: BufferGeometry) {
+  const e = g.userData.escultura as Escultura;
+  const attr = g.getAttribute('color') as BufferAttribute;
+  (attr.array as Float32Array).set(e.color);
+  attr.needsUpdate = true;
+}
+
 /**
- * Porcelana satinada: base algo rugosa, una capa de barniz muy suave y un
- * brillo aterciopelado en el contorno (sheen) que redondea la silueta.
+ * Material del modelo: sus colores por vértice sin teñir (base blanca), mate y
+ * sin el mapeo de tonos de la escena, para que se vean como en el archivo.
  */
-function crearMaterialPiel(color: string, vertexColors: boolean) {
-  return new MeshPhysicalMaterial({
-    color,
-    vertexColors,
-    roughness: 0.6,
-    metalness: 0,
-    clearcoat: 0.2,
-    clearcoatRoughness: 0.5,
-    sheen: 0.6,
-    sheenRoughness: 0.5,
-    sheenColor: '#ffffff',
-    envMapIntensity: 0.6,
-  });
+function crearMaterialModelo() {
+  const m = new MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.65, metalness: 0, envMapIntensity: 0.5 });
+  m.toneMapped = false;
+  return m;
 }
 
 function coloresPorSegmento(cuerpo: CuerpoBase, colorDe: (segmento: string) => string) {
@@ -365,17 +369,8 @@ function coloresCalor(cuerpo: CuerpoBase, estados: Record<SegmentoInforme, Estad
  *   desde cualquier ángulo.
  */
 function crearMaterialesGrasa() {
-  const magro = new MeshPhysicalMaterial({
-    color: COLOR_MAGRO,
-    roughness: 0.55,
-    metalness: 0,
-    clearcoat: 0.15,
-    clearcoatRoughness: 0.5,
-    sheen: 0.4,
-    sheenRoughness: 0.5,
-    sheenColor: '#FFB0A0',
-    envMapIntensity: 0.7,
-  });
+  // El cuerpo sin grasa con los colores del modelo, tal cual.
+  const magro = crearMaterialModelo();
   magro.stencilWrite = true;
   magro.stencilRef = 1;
   magro.stencilFunc = AlwaysStencilFunc;
