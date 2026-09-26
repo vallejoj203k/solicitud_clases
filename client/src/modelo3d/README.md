@@ -83,7 +83,10 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 - Densidades por segmento (1,06 / 0,90) y total (1,1).
 - `ESCALA_*`, `MAPA_CALOR`: tarjetas y mapa de calor.
 - `COLOR_GRASA_POCA` / `COLOR_GRASA_MUCHA` / `GROSOR_GRASA_OSCURA`: la grasa va
-  de amarillo claro a ámbar oscuro según su grosor (oscuro desde 6 cm). El cuerpo usa los colores pintados en el
+  de amarillo claro a mostaza oscuro según su grosor (oscuro desde 6 cm).
+- `DENSIDAD_OPTICA_GRASA` / `OPACIDAD_MAXIMA_GRASA`: opacidad por cantidad de
+  grasa atravesada (ley de Beer): una capa fina casi no se ve, una gruesa se ve
+  densa, siempre dejando ver el músculo. El cuerpo usa los colores pintados en el
   modelo, tal cual (sin teñir ni mapeo de tonos).
 
 ## Pruebas
