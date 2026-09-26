@@ -46,7 +46,9 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
   cuerpo de MakeHuman no se muestra: solo sirve para medir y ajustar. Cada
   vértice de la escultura se mueve lo mismo que su punto de ese cuerpo entre el
   cuerpo de referencia (MakeHuman con las medidas de la escultura) y el del
-  cliente: los centímetros escritos pasan casi 1 a 1 a la figura; el músculo (rojo) y la grasa (amarillo) son la
+  cliente (ese movimiento se suaviza un poco sobre la malla para que la
+  escultura no se doble donde MakeHuman cambia de golpe): los centímetros
+  escritos pasan casi 1 a 1 a la figura; el músculo (rojo) y la grasa (amarillo) son la
   escultura movida con el cuerpo sin grasa y con el cuerpo completo. Cómo se
   genera: [`tools/README.md`](../../../tools/README.md#cuerpo-esculpido).
   Los colores son los pintados en el modelo, sin cambios.

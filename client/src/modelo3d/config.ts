@@ -19,6 +19,13 @@ export const COLOR_SEGMENTO: Record<string, string> = {
  * composición corporal. El amarillo se oscurece donde la capa es más gruesa:
  * claro con poca grasa, ámbar tostado desde `GROSOR_GRASA_OSCURA` metros.
  */
+/**
+ * Vueltas de suavizado del movimiento que pasa del cuerpo de MakeHuman a la
+ * escultura (ver escultura.ts): sin él, donde MakeHuman cambia de golpe (el
+ * pectoral frente al abdomen) la escultura se dobla hacia adentro.
+ */
+export const SUAVIZADO_ESCULTURA = 15;
+
 export const COLOR_MAGRO = '#BA6C61'; // color medio del modelo (solo para la leyenda)
 export const COLOR_GRASA_POCA = '#FFD23F';
 export const COLOR_GRASA_MUCHA = '#8F6B00';

@@ -36,6 +36,14 @@ const PESO_CABEZA = 0.2;
 /** Regularización hacia los valores base (por control, en unidades del control). */
 const LAMBDA = 1e-4;
 const ITERACIONES = 25;
+/**
+ * Controles que la referencia deja en 0: cambian la forma de un músculo en un
+ * lugar chico (el pectoral, la V de la espalda). Si la referencia los usa para
+ * imitar el pecho de la escultura, a cada cliente (que casi nunca los tiene) se
+ * le resta ese músculo entero y la escultura queda con el pecho hundido. El
+ * tamaño del pecho sale de controles amplios (caja torácica, macros).
+ */
+const FIJOS_EN_CERO = ['local:pectoral', 'local:espalda_v'];
 
 async function cargarCuerpo(sexo: Sexo) {
   const etiqueta = sexo === 'M' ? 'hombre' : 'mujer';
@@ -57,7 +65,7 @@ async function referencia(sexo: Sexo) {
   const pesoV = Float32Array.from({ length: n }, (_, v) => (cuerpo.segmentos[v] === cabeza ? PESO_CABEZA : 1));
 
   // Parámetros: los del ajuste (sin los de otro sexo) + la copa en la mujer.
-  const defs = PARAMETROS_AJUSTE.filter((d) => !d.solo || d.solo === sexo).map((d) => ({ clave: d.clave, min: d.min, max: d.max }));
+  const defs = PARAMETROS_AJUSTE.filter((d) => (!d.solo || d.solo === sexo) && !FIJOS_EN_CERO.includes(d.clave)).map((d) => ({ clave: d.clave, min: d.min, max: d.max }));
   if (sexo === 'F') defs.push({ clave: 'macro:copa', min: 0, max: 1 });
   const inicio = defs.map((d) => {
     const [tipo, k] = d.clave.split(':');
@@ -170,7 +178,8 @@ async function referencia(sexo: Sexo) {
     const inicial: Record<string, number> = {};
     for (const [k, v] of Object.entries(ref.macro)) inicial[`macro:${k}`] = v;
     for (const [k, v] of Object.entries(ref.locales)) inicial[`local:${k}`] = v;
-    const r = ajustar(cuerpo, prep, { objetivos, fijos: { edad: MACRO_INICIAL.edad, copa: ref.macro.copa }, inicial, maxIteraciones: 60 });
+    const fijar = Object.fromEntries(FIJOS_EN_CERO.map((k) => [k, 0]));
+    const r = ajustar(cuerpo, prep, { objetivos, fijos: { edad: MACRO_INICIAL.edad, copa: ref.macro.copa }, fijar, inicial, maxIteraciones: 60 });
     ref = { macro: r.macro, locales: r.locales, pos: aplicarMorphs(cuerpo, { ...pesosMacro(r.macro, sexo), ...pesosLocales(r.locales, locales) }) };
     const cumplen = r.residuos.filter((q) => q.cumple).length;
     console.log(`  ${sexo}: vuelta ${vuelta + 1}: ${cumplen}/${r.residuos.length} medidas dentro de tolerancia`);
