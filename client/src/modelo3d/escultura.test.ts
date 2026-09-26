@@ -22,18 +22,6 @@ async function glb(nombre: string) {
   return loader.parseAsync(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength), '');
 }
 
-const caja = (p: Float32Array) => {
-  const min = [Infinity, Infinity, Infinity];
-  const max = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < p.length; i += 3) {
-    for (let c = 0; c < 3; c++) {
-      min[c] = Math.min(min[c], p[i + c]);
-      max[c] = Math.max(max[c], p[i + c]);
-    }
-  }
-  return { min, max };
-};
-
 for (const sexo of ['M', 'F'] as Sexo[]) {
   const etiqueta = sexo === 'M' ? 'hombre' : 'mujer';
   describe(`escultura ${etiqueta}`, () => {
@@ -47,34 +35,40 @@ for (const sexo of ['M', 'F'] as Sexo[]) {
       (await glb(`escultura-${etiqueta}`)).scene.traverse((o) => {
         if ((o as Mesh).isMesh) malla = o as Mesh;
       });
-      e = desdeGeometria(sexo, malla!.geometry as BufferGeometry, JSON.parse(readFileSync(`${carpeta}escultura-${etiqueta}.json`, 'utf8')).regiones);
+      e = desdeGeometria(sexo, malla!.geometry as BufferGeometry, JSON.parse(readFileSync(`${carpeta}escultura-${etiqueta}.json`, 'utf8')).calce);
     });
 
-    it('sobre el cuerpo base queda de su estatura, sin puntos sueltos', () => {
-      const out = posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, new Float32Array(e.nTotal * 3));
-      expect(out.every(Number.isFinite)).toBe(true);
-      const a = caja(out);
-      const b = caja(cuerpo.posiciones);
-      // Misma estatura (±2 cm) y nada fuera del cuerpo más de 4 cm (las manos de la escultura van algo abiertas).
-      expect(Math.abs(a.max[1] - b.max[1])).toBeLessThan(0.02);
-      for (let c = 0; c < 3; c++) {
-        expect(a.min[c]).toBeGreaterThan(b.min[c] - 0.04);
-        expect(a.max[c]).toBeLessThan(b.max[c] + 0.04);
-      }
+    it('con el cuerpo base la escultura queda tal cual es', () => {
+      const out = posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, cuerpo.posiciones, new Float32Array(e.nTotal * 3));
+      let max = 0;
+      for (let i = 0; i < out.length; i++) max = Math.max(max, Math.abs(out[i] - e.original[i]));
+      expect(max).toBe(0);
     });
 
-    it('sigue a un cuerpo muy distinto y es rápida', () => {
+    it('crece con un cuerpo más pesado, sin puntos sueltos, y es rápida', () => {
       const pos = aplicarMorphs(cuerpo, pesosMacro({ ...MACRO_INICIAL, peso: 1 }, sexo));
       const out = new Float32Array(e.nTotal * 3);
-      posicionesEscultura(e, cuerpo.indicesTriangulos, pos, out);
+      posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, pos, out);
       const t0 = performance.now();
-      posicionesEscultura(e, cuerpo.indicesTriangulos, pos, out);
+      posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, pos, out);
       const ms = performance.now() - t0;
-      const a = caja(out);
-      const b = caja(pos);
-      // Más ancha que la escultura sobre el cuerpo base, y dentro del cuerpo gordo.
-      expect(a.max[0] - a.min[0]).toBeGreaterThan(0.9 * (b.max[0] - b.min[0]));
-      for (let c = 0; c < 3; c++) expect(a.max[c]).toBeLessThan(b.max[c] + 0.05);
+      expect(out.every(Number.isFinite)).toBe(true);
+      // Los mismos vértices del tronco (a la altura de la cintura) quedan más lejos del eje.
+      let antes = 0;
+      let despues = 0;
+      for (let v = 0; v < e.nTotal; v++) {
+        const [x, y, z] = [e.original[v * 3], e.original[v * 3 + 1], e.original[v * 3 + 2]];
+        if (Math.abs(y - 0.55 * 1.75) > 0.05 || Math.abs(x) > 0.22) continue;
+        antes += Math.hypot(x, z);
+        despues += Math.hypot(out[v * 3], out[v * 3 + 2]);
+      }
+      expect(despues).toBeGreaterThan(antes * 1.05);
+      // Ningún vértice se mueve más que el cuerpo (el mayor desplazamiento de un vértice del cuerpo).
+      let maxCuerpo = 0;
+      for (let v = 0; v < pos.length; v += 3) maxCuerpo = Math.max(maxCuerpo, Math.hypot(pos[v] - cuerpo.posiciones[v], pos[v + 1] - cuerpo.posiciones[v + 1], pos[v + 2] - cuerpo.posiciones[v + 2]));
+      let maxEsc = 0;
+      for (let v = 0; v < out.length; v += 3) maxEsc = Math.max(maxEsc, Math.hypot(out[v] - e.original[v], out[v + 1] - e.original[v + 1], out[v + 2] - e.original[v + 2]));
+      expect(maxEsc).toBeLessThanOrEqual(maxCuerpo + 1e-6);
       expect(ms).toBeLessThan(100);
     });
 

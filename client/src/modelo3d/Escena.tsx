@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import { ContactShadows, Environment, Line, OrbitControls } from '@react-three/drei';
 import {
@@ -8,7 +8,6 @@ import {
   CanvasTexture,
   Color,
   EqualStencilFunc,
-  type Material,
   MeshPhysicalMaterial,
   NotEqualStencilFunc,
   ReplaceStencilOp,
@@ -24,8 +23,7 @@ import type { Malla, ResultadoMotor } from './motor.worker';
 import type { Estado, EstadoSegmento } from './resultados';
 import type { SegmentoInforme } from './cliente';
 import { normalesVertice } from './geometria';
-import { atributoEscultura, cargarEscultura, posicionesEscultura, type Escultura } from './escultura';
-import { ojos, prepararPulido, pulirAtributo, pulirPosiciones } from './pulido';
+import { atributoEscultura, esculturaDe, llevarAEscultura, posicionesEscultura, type Escultura } from './escultura';
 import type { CuerpoBase } from './tipos';
 
 /**
@@ -68,15 +66,22 @@ export function Escena(props: {
     return mezclar(actual, objetivo, mezcla);
   }, [vista, comparar, actual, objetivo, mezcla]);
 
+  // Los anillos se miden sobre el cuerpo de MakeHuman: se llevan a la escultura.
+  const anillos = useMemo(() => {
+    if (!actual || !verAnillos) return null;
+    const e = esculturaDe(cuerpo.sexo);
+    return Object.fromEntries(Object.entries(actual.anillos).map(([k, a]) => [k, llevarAEscultura(e, actual.cuerpo.pos, a)]));
+  }, [actual, verAnillos, cuerpo.sexo]);
+
   let contenido: React.ReactNode = null;
   if (actual) {
     if (verSegmentos) {
-      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresSegmento(cuerpo)} colorOjos={COLOR_SEGMENTO.cabeza} />;
+      contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresSegmento(cuerpo)} />;
     } else if (vista === 'realista') {
       contenido = <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} color={colorCuerpo} />;
     } else if (vista === 'calor') {
       contenido = (
-        <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresCalor(cuerpo, estados, calorDe)} colorOjos={MAPA_CALOR.colores.sinDato} />
+        <CuerpoSolido cuerpo={cuerpo} malla={actual.cuerpo} colores={coloresCalor(cuerpo, estados, calorDe)} />
       );
     } else if (lado && objetivo) {
       contenido = (
@@ -115,7 +120,7 @@ export function Escena(props: {
       ))}
       <group rotation-y={giro}>
         {contenido}
-        {verAnillos && actual && !lado && <AnillosMedida anillos={actual.anillos} medidas={actual.medidas.circunferenciasCm} />}
+        {verAnillos && anillos && actual && !lado && <AnillosMedida anillos={anillos} medidas={actual.medidas.circunferenciasCm} />}
       </group>
       <ContactShadows position={[0, 0.001, 0]} scale={lado ? 4 : 2.4} blur={2.6} opacity={0.6} far={1.2} resolution={512} color="#000000" />
       <Piso radio={lado ? 1.8 : 1.1} />
@@ -205,71 +210,43 @@ function Camara({ lado }: { lado: boolean }) {
 /* ------------------------------------------------------------ Geometrías */
 
 /**
- * Malla con la que se muestra un cuerpo: la escultura atada al cuerpo (cuando
- * ya bajó, ver escultura.ts) o, mientras tanto, el cuerpo de MakeHuman pulido
- * (pulido.ts). Las dos se rearman desde las posiciones del cuerpo que se mide.
+ * Geometría de un cuerpo: la escultura (escultura.ts), movida según el cuerpo
+ * de MakeHuman que se mide (ese cuerpo no se muestra).
  */
-interface Forma {
-  nTotal: number;
-  indices: Uint32Array;
-  esEscultura: boolean;
-  posiciones: (pos: ArrayLike<number>, dst: Float32Array<ArrayBuffer>) => void;
-  atributo: (valores: ArrayLike<number>, k: number, dst: Float32Array<ArrayBuffer>) => void;
-}
-
-function formaPulida(cuerpo: CuerpoBase): Forma {
-  const p = prepararPulido(cuerpo);
-  return {
-    nTotal: p.nTotal,
-    indices: p.indices,
-    esEscultura: false,
-    posiciones: (pos, dst) => pulirPosiciones(p, pos, dst),
-    atributo: (valores, k, dst) => pulirAtributo(p, valores, k, dst),
-  };
-}
-
-function formaEscultura(cuerpo: CuerpoBase, e: Escultura): Forma {
-  return {
-    nTotal: e.nTotal,
-    indices: e.indices,
-    esEscultura: true,
-    posiciones: (pos, dst) => posicionesEscultura(e, cuerpo.indicesTriangulos, pos, dst),
-    atributo: (valores, k, dst) => atributoEscultura(e, cuerpo.indicesTriangulos, valores, k, dst),
-  };
-}
-
-function crearGeometria(cuerpo: CuerpoBase, forma: Forma) {
+function crearGeometria(cuerpo: CuerpoBase) {
+  const e = esculturaDe(cuerpo.sexo);
   const g = new BufferGeometry();
-  const pos = new Float32Array(forma.nTotal * 3);
-  forma.posiciones(cuerpo.posiciones, pos);
-  g.setAttribute('position', new BufferAttribute(pos, 3));
-  g.setAttribute('normal', new BufferAttribute(new Float32Array(forma.nTotal * 3), 3));
-  g.setIndex(new BufferAttribute(forma.indices, 1));
+  g.setAttribute('position', new BufferAttribute(Float32Array.from(e.original), 3));
+  g.setAttribute('normal', new BufferAttribute(new Float32Array(e.nTotal * 3), 3));
+  g.setIndex(new BufferAttribute(e.indices, 1));
   g.computeVertexNormals();
-  g.userData.forma = forma;
+  g.userData.cuerpo = cuerpo;
+  g.userData.escultura = e;
   return g;
 }
 
 function volcar(geometria: BufferGeometry, malla: Malla) {
-  const forma = geometria.userData.forma as Forma;
+  const cuerpo = geometria.userData.cuerpo as CuerpoBase;
+  const e = geometria.userData.escultura as Escultura;
   const pos = geometria.getAttribute('position') as BufferAttribute;
-  forma.posiciones(malla.pos, pos.array as Float32Array<ArrayBuffer>);
+  posicionesEscultura(e, cuerpo.indicesTriangulos, cuerpo.posiciones, malla.pos, pos.array as Float32Array<ArrayBuffer>);
   pos.needsUpdate = true;
   const nor = geometria.getAttribute('normal') as BufferAttribute;
-  normalesVertice(pos.array as Float32Array, forma.indices, nor.array as Float32Array);
+  normalesVertice(pos.array as Float32Array, e.indices, nor.array as Float32Array);
   nor.needsUpdate = true;
   geometria.computeBoundingSphere();
 }
 
-/** Atributo por vértice del cuerpo (colores, espesor) llevado a la geometría que se muestra. */
+/** Atributo por vértice del cuerpo (colores, espesor) llevado a la escultura. */
 function ponerAtributo(geometria: BufferGeometry, nombre: string, valores: Float32Array, k: number) {
-  const forma = geometria.userData.forma as Forma;
+  const cuerpo = geometria.userData.cuerpo as CuerpoBase;
+  const e = geometria.userData.escultura as Escultura;
   let attr = geometria.getAttribute(nombre) as BufferAttribute | undefined;
   if (!attr || attr.itemSize !== k) {
-    attr = new BufferAttribute(new Float32Array(forma.nTotal * k), k);
+    attr = new BufferAttribute(new Float32Array(e.nTotal * k), k);
     geometria.setAttribute(nombre, attr);
   }
-  forma.atributo(valores, k, attr.array as Float32Array<ArrayBuffer>);
+  atributoEscultura(e, cuerpo.indicesTriangulos, valores, k, attr.array as Float32Array<ArrayBuffer>);
   attr.needsUpdate = true;
 }
 
@@ -281,30 +258,8 @@ function usarRedibujar() {
   return useThree((s) => s.invalidate);
 }
 
-/** La escultura del sexo del cuerpo cuando termina de bajar (null mientras tanto o si falla). */
-function usarEscultura(cuerpo: CuerpoBase) {
-  const [e, setE] = useState<Escultura | null>(null);
-  useEffect(() => {
-    let vivo = true;
-    setE(null);
-    cargarEscultura(cuerpo.sexo)
-      .then((r) => vivo && setE(r))
-      // Sin escultura se sigue mostrando el cuerpo pulido.
-      .catch(() => {});
-    return () => {
-      vivo = false;
-    };
-  }, [cuerpo.sexo]);
-  return e && e.sexo === cuerpo.sexo ? e : null;
-}
-
-/**
- * Geometría de un cuerpo: la escultura cuando ya bajó (todas las capas, así la
- * grasa y el fantasma calzan con sus manos y su cabeza) o el cuerpo pulido.
- */
 function usarGeometria(cuerpo: CuerpoBase) {
-  const esc = usarEscultura(cuerpo);
-  const g = useMemo(() => crearGeometria(cuerpo, esc ? formaEscultura(cuerpo, esc) : formaPulida(cuerpo)), [cuerpo, esc]);
+  const g = useMemo(() => crearGeometria(cuerpo), [cuerpo]);
   useEffect(() => () => g.dispose(), [g]);
   return g;
 }
@@ -337,24 +292,7 @@ function mezclar(a: ResultadoMotor, b: ResultadoMotor, t: number): DatosCuerpo {
 
 /* ------------------------------------------------------ Cuerpo realista */
 
-/**
- * Ojos lisos, como en una escultura: la malla de MakeHuman no trae globos
- * oculares y las cuencas vacías se veían inquietantes (ver pulido.ts).
- */
-function Ojos({ malla, material }: { malla: Malla; material: Material }) {
-  const o = useMemo(() => ojos(malla.pos), [malla]);
-  return (
-    <>
-      {o.map((ojo, i) => (
-        <mesh key={i} position={ojo.centro} scale={ojo.radio} material={material}>
-          <sphereGeometry args={[1, 24, 16]} />
-        </mesh>
-      ))}
-    </>
-  );
-}
-
-function CuerpoSolido({ cuerpo, malla, color, colores, colorOjos }: { cuerpo: CuerpoBase; malla: Malla; color?: string; colores?: Float32Array; colorOjos?: string }) {
+function CuerpoSolido({ cuerpo, malla, color, colores }: { cuerpo: CuerpoBase; malla: Malla; color?: string; colores?: Float32Array }) {
   const g = usarGeometria(cuerpo);
   const redibujar = usarRedibujar();
   useEffect(() => {
@@ -367,20 +305,8 @@ function CuerpoSolido({ cuerpo, malla, color, colores, colorOjos }: { cuerpo: Cu
     redibujar();
   }, [g, colores, redibujar]);
   const material = useMemo(() => crearMaterialPiel(colores ? '#ffffff' : color ?? '#ffffff', !!colores), [color, colores]);
-  const materialOjos = useMemo(() => (colores ? crearMaterialPiel(colorOjos ?? '#ffffff', false) : material), [colores, colorOjos, material]);
-  useEffect(
-    () => () => {
-      material.dispose();
-      materialOjos.dispose();
-    },
-    [material, materialOjos],
-  );
-  return (
-    <>
-      <mesh geometry={g} material={material} />
-      {!(g.userData.forma as Forma).esEscultura && <Ojos malla={malla} material={materialOjos} />}
-    </>
-  );
+  useEffect(() => () => material.dispose(), [material]);
+  return <mesh geometry={g} material={material} />;
 }
 
 /**
@@ -549,7 +475,6 @@ function CuerpoGrasa({ cuerpo, datos }: { cuerpo: CuerpoBase; datos: DatosCuerpo
   return (
     <>
       <mesh geometry={magro} material={materiales.magro} />
-      {!(magro.userData.forma as Forma).esEscultura && <Ojos malla={datos.magro} material={materiales.magro} />}
       <mesh geometry={exterior} material={materiales.fuera} renderOrder={1} />
       <mesh geometry={exterior} material={materiales.encima} renderOrder={2} />
     </>
