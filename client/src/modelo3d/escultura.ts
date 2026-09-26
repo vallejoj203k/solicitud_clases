@@ -2,6 +2,7 @@ import { Color, SRGBColorSpace, type BufferGeometry, type Mesh } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { Indices } from './geometria';
+import { VERSION_ESCULTURA } from './versionModelos';
 import type { Sexo } from './tipos';
 
 /**
@@ -30,6 +31,8 @@ export interface Escultura {
 }
 
 const ARCHIVO: Record<Sexo, string> = { M: 'escultura-hombre', F: 'escultura-mujer' };
+/** Color medio del modelo, si el GLB no trae los suyos. */
+const COLOR_SIN_DATOS = '#BA6C61';
 const cache = new Map<Sexo, Promise<Escultura>>();
 const listas = new Map<Sexo, Escultura>();
 
@@ -40,9 +43,12 @@ export function cargarEscultura(sexo: Sexo): Promise<Escultura> {
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
     const base = `/modelo3d/${ARCHIVO[sexo]}`;
+    // La versión (huella de los archivos) cambia la URL al regenerarlos: el
+    // navegador no puede mezclar un GLB viejo guardado en caché con código nuevo.
+    const v = `?v=${VERSION_ESCULTURA}`;
     p = Promise.all([
-      loader.loadAsync(`${base}.glb`),
-      fetch(`${base}.json`).then((r) => {
+      loader.loadAsync(`${base}.glb${v}`),
+      fetch(`${base}.json${v}`).then((r) => {
         if (!r.ok) throw new Error(`No se pudo cargar ${base}.json`);
         return r.json() as Promise<{ calce: number[] }>;
       }),
@@ -84,11 +90,13 @@ export function desdeGeometria(sexo: Sexo, geo: BufferGeometry, calce: number[])
     calce: Float32Array.from(calce, (x) => x / 10000),
     color: new Float32Array(n * 3),
   };
-  // Los colores vienen en sRGB (bytes); three.js trabaja en lineal.
-  const crudo = geo.getAttribute('_color').array as Uint8Array;
+  // Los colores vienen en sRGB (bytes); three.js trabaja en lineal. Un GLB sin
+  // colores (versión vieja) se muestra de un color neutro en vez de fallar.
+  const crudo = geo.getAttribute('_color')?.array as Uint8Array | undefined;
   const c = new Color();
   for (let v = 0; v < n; v++) {
-    c.setRGB(crudo[v * 4] / 255, crudo[v * 4 + 1] / 255, crudo[v * 4 + 2] / 255, SRGBColorSpace);
+    if (crudo) c.setRGB(crudo[v * 4] / 255, crudo[v * 4 + 1] / 255, crudo[v * 4 + 2] / 255, SRGBColorSpace);
+    else c.set(COLOR_SIN_DATOS);
     e.color.set([c.r, c.g, c.b], v * 3);
   }
   for (let v = 0; v < n; v++) {

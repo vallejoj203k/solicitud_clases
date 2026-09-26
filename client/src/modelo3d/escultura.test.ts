@@ -72,6 +72,19 @@ for (const sexo of ['M', 'F'] as Sexo[]) {
       expect(ms).toBeLessThan(100);
     });
 
+    it('trae los colores del modelo y, si faltan (GLB viejo), no falla', async () => {
+      expect(e.color.some((x) => x > 0)).toBe(true);
+      let malla: Mesh | undefined;
+      (await glb(`escultura-${etiqueta}`)).scene.traverse((o) => {
+        if ((o as Mesh).isMesh) malla = o as Mesh;
+      });
+      const geo = malla!.geometry as BufferGeometry;
+      geo.deleteAttribute('_color');
+      const sinColores = desdeGeometria(sexo, geo, []);
+      expect(sinColores.color.every(Number.isFinite)).toBe(true);
+      expect(sinColores.color[0]).toBeGreaterThan(0);
+    });
+
     it('interpola atributos por vértice (colores, espesor)', () => {
       const uno = new Float32Array(cuerpo.posiciones.length / 3).fill(1);
       const out = atributoEscultura(e, cuerpo.indicesTriangulos, uno, 1, new Float32Array(e.nTotal));
