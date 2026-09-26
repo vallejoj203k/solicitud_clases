@@ -13,6 +13,7 @@
  *
  * Uso:  node tools/escultura_glb.mjs tools/build client/public/modelo3d
  */
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 
@@ -144,3 +145,15 @@ if (!entrada || !salida) {
 await MeshoptSimplifier.ready;
 await MeshoptEncoder.ready;
 for (const sexo of ['M', 'F']) if (fs.existsSync(`${entrada}/escultura-${sexo}.bin`)) await armar(entrada, salida, sexo);
+
+// Huella de los archivos: va en la URL con que el visor los pide (sin caché vieja).
+const huella = crypto.createHash('sha1');
+for (const a of ['escultura-hombre.glb', 'escultura-hombre.json', 'escultura-mujer.glb', 'escultura-mujer.json']) {
+  if (fs.existsSync(`${salida}/${a}`)) huella.update(fs.readFileSync(`${salida}/${a}`));
+}
+const version = huella.digest('hex').slice(0, 10);
+fs.writeFileSync(
+  new URL('../client/src/modelo3d/versionModelos.ts', import.meta.url),
+  `/** Generado por tools/escultura_glb.mjs: huella de los GLB de la escultura. */\nexport const VERSION_ESCULTURA = '${version}';\n`,
+);
+console.log(`versión de la escultura: ${version}`);
