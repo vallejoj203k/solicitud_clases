@@ -1,27 +1,30 @@
-"""Cuerpo esculpido (con músculos marcados) atado al cuerpo de MakeHuman.
+"""El cuerpo del visor: las esculturas "Muscle Male" y "Muscle Female".
 
-Los modelos "Muscle_Male" y "Muscle_Female" (images/2284-legroscollardfloriane-*)
-son esculturas fijas: sin esqueleto ni morphs. Para que sigan las medidas de
-cada cliente se atan a la malla de MakeHuman, que sí se deforma:
+Los modelos de images/2284-legroscollardfloriane-* son la figura que se ve. Son
+esculturas fijas (sin esqueleto ni morphs), así que los cambios de cada cliente
+(estatura, peso, músculo, grasa) se les aplican con el cuerpo de MakeHuman, que
+sí se deforma y con el que se calculan las medidas:
 
 1. Se escala la escultura a metros, con los pies en y = 0 y el tronco centrado
    sobre el del cuerpo base de MakeHuman.
 2. Registro no rígido: el cuerpo base de MakeHuman se deforma hasta calzar sobre
    la escultura (puntos más cercanos en las dos direcciones, con un término
    Laplaciano que mantiene suave el desplazamiento; la rigidez baja por etapas).
-3. Cada vértice de la escultura se ata al cuerpo calzado: triángulo, punto del
-   triángulo (baricéntricas), altura sobre la normal y residuo tangente (en el
-   marco de la primera arista). Lo que queda en el atado es el relieve de la
-   escultura (músculos), unos milímetros.
-4. Cabeza, manos y pies se mueven enteros (ver PIEZAS).
-5. En el navegador el mismo atado sobre el cuerpo del cliente devuelve la
-   escultura con su forma y en su pose (client/src/modelo3d/escultura.ts).
+3. Cada vértice de la escultura se asocia a un triángulo del cuerpo calzado (el
+   más cercano, fuera de dedos, ojos y boca) y un punto en él (baricéntricas).
+4. En el navegador (client/src/modelo3d/escultura.ts) cada vértice de la
+   escultura se mueve lo mismo que ese punto del cuerpo entre el cuerpo base y
+   el del cliente. Con el cuerpo base la escultura queda exactamente como es.
+
+Además se guarda cuánto se movió cada vértice del cuerpo para calzar (sirve para
+llevar a la escultura cosas medidas sobre el cuerpo, como los anillos).
 
 Los triángulos se usan en forma canónica (empiezan por el vértice menor): la
 compresión meshopt de los índices del cuerpo puede rotarlos.
 
 Uso (Blender como módulo, con numpy y scipy):
-    .blenv/bin/python tools/export_escultura.py --salida tools/build
+    .blenv/bin/python tools/export_escultura.py --salida tools/build \\
+        --pesos ruta/a/mpfb2/src/mpfb/data/rigs/standard/weights.default.json
     npm run modelo3d:escultura
 """
 import argparse
@@ -215,69 +218,31 @@ def vertices_sin_ancla(pesos, n):
     return np.array([h.startswith(SIN_ANCLA) for h in hueso])
 
 
-# Piezas que se mueven enteras (afín) con su zona del cuerpo: la cabeza, las
-# manos y los pies de la escultura tienen su propia forma (cara, puño, dedos) y
-# atados punto a punto a la malla de MakeHuman se arrugaban. Cada una sigue la
-# transformación que mejor lleva los vértices de su zona (calzados) a los del
-# cuerpo del cliente, mezclada con el atado normal según el peso del esqueleto
-# (así la unión en el cuello, la muñeca y el tobillo es suave).
-PIEZAS = [
-    ('cabeza', lambda h: h in ('head', 'neck03') or h.startswith(('jaw', 'eye', 'oculi', 'orbicularis', 'oris', 'levator',
-                                                                 'risorius', 'tongue', 'special', 'temporalis'))),
-    ('mano_izq', lambda h: h.endswith('.L') and h.startswith(('wrist', 'metacarpal', 'finger'))),
-    ('mano_der', lambda h: h.endswith('.R') and h.startswith(('wrist', 'metacarpal', 'finger'))),
-    ('pie_izq', lambda h: h.endswith('.L') and h.startswith(('foot', 'toe'))),
-    ('pie_der', lambda h: h.endswith('.R') and h.startswith(('foot', 'toe'))),
-]
-# Vértices de cada zona que se usan para estimar su transformación (uno de cada k).
-PASO_ANCLAS = 3
-
-
-def pesos_pieza(pesos, n):
-    """Peso de cada pieza en cada vértice del cuerpo (suma de sus huesos), n × piezas."""
-    w = np.zeros((n, len(PIEZAS)))
-    for nombre, lista in pesos.items():
-        for k, (_, es_de) in enumerate(PIEZAS):
-            if es_de(nombre):
-                for vi, x in lista:
-                    if vi < n:
-                        w[vi, k] += x
-    return np.clip(w, 0, 1)
-
-
 def triangulos_ancla(malo, tris):
     """Triángulos que pueden servir de ancla (ningún vértice sin ancla)."""
     return np.nonzero(~malo[tris].any(1))[0]
 
 
 def atar(esc, x, tris, anclas, k=24):
-    """Triángulo, baricéntricas, altura y residuo tangente de cada vértice de la escultura."""
-    nor = normales(x, tris)
+    """Triángulo (de los ancla) y baricéntricas del punto más cercano del cuerpo calzado."""
     arbol = cKDTree(x[tris[anclas]].mean(1))
     tri = np.empty(len(esc), np.int64)
     bary = np.empty((len(esc), 3))
+    distancia = np.empty(len(esc))
     for i in range(0, len(esc), 20000):
         q = esc[i:i + 20000]
-        # Candidatos: los triángulos cercanos cuya normal no se opone a la del punto.
         _, cand = arbol.query(q, k=k)
         cand = anclas[cand]
         a, b, c = (x[tris[cand, j]] for j in range(3))
         ba = punto_triangulo(q[:, None, :], a, b, c)
         s = ba[..., 0:1] * a + ba[..., 1:2] * b + ba[..., 2:3] * c
-        m = np.linalg.norm(s - q[:, None, :], axis=-1).argmin(1)
+        d = np.linalg.norm(s - q[:, None, :], axis=-1)
+        m = d.argmin(1)
         r = np.arange(len(q))
         tri[i:i + 20000] = cand[r, m]
         bary[i:i + 20000] = ba[r, m]
-    pts = x[tris[tri]]
-    s = (bary[:, :, None] * pts).sum(1)
-    n = (bary[:, :, None] * nor[tris[tri]]).sum(1)
-    n /= np.linalg.norm(n, axis=1, keepdims=True)
-    e1 = pts[:, 1] - pts[:, 0]
-    t1 = e1 - (e1 * n).sum(1, keepdims=True) * n
-    t1 /= np.linalg.norm(t1, axis=1, keepdims=True)
-    t2 = np.cross(n, t1)
-    d = esc - s
-    return tri, bary, np.stack([(d * n).sum(1), (d * t1).sum(1), (d * t2).sum(1)], 1)
+        distancia[i:i + 20000] = d[r, m]
+    return tri, bary, distancia
 
 
 def main():
@@ -298,41 +263,24 @@ def main():
         print(f'  escultura: {len(esc)} vértices, {len(tris_esc)} triángulos', flush=True)
         malo = vertices_sin_ancla(pesos, len(base))
         x = registrar(base, tris, esc, tris_esc, malo)
-        tri, bary, desp = atar(esc, x, tris, triangulos_ancla(malo, tris))
-        print(f'  atado: altura de {desp[:, 0].min() * 1000:.0f} a {desp[:, 0].max() * 1000:.0f} mm '
-              f'(mediana |h| {np.median(np.abs(desp[:, 0])) * 1000:.1f} mm), '
-              f'residuo tangente medio {np.hypot(desp[:, 1], desp[:, 2]).mean() * 1000:.2f} mm', flush=True)
-        # Pieza y peso de cada vértice de la escultura (del punto donde está atado).
-        wp = pesos_pieza(pesos, len(base))
-        wv = (bary[:, :, None] * wp[tris[tri]]).sum(1)
-        pieza = np.where(wv.max(1) > 0.02, wv.argmax(1) + 1, 0)
-        peso = np.where(pieza > 0, wv.max(1), 0.0)
-        # Suaviza el peso: la mezcla empieza donde la pieza ya domina.
-        peso = np.clip((peso - 0.15) / 0.7, 0, 1)
-        peso = peso * peso * (3 - 2 * peso)
-        regiones = []
-        for k, (nombre, _) in enumerate(PIEZAS):
-            vs = np.nonzero(wp[:, k] > 0.5)[0][::PASO_ANCLAS]
-            regiones.append({'nombre': nombre, 'vertices': vs.tolist(),
-                             'calzado': np.round(x[vs], 5).ravel().tolist()})
-            print(f'  pieza {nombre}: {int((pieza == k + 1).sum())} vértices, {len(vs)} anclas', flush=True)
+        tri, bary, distancia = atar(esc, x, tris, triangulos_ancla(malo, tris))
+        print(f'  asociada: distancia al cuerpo calzado mediana {np.median(distancia) * 1000:.1f} mm, '
+              f'p95 {np.percentile(distancia, 95) * 1000:.1f} mm', flush=True)
         arrays = {
             'reposo': esc.astype('<f4'),
             'tri': tri.astype('<u4'),
             'bary': bary.astype('<f4'),
-            'desp': desp.astype('<f4'),
-            'pieza': pieza.astype('<u2'),
-            'peso': peso.astype('<f4'),
             'indices': tris_esc.astype('<u4'),
         }
-        cab = {'sexo': sexo, 'vertices': len(esc), 'triangulos': len(tris_esc), 'regiones': regiones, 'arrays': []}
+        # Cuánto se movió cada vértice del cuerpo base para calzar sobre la escultura (en 0,1 mm).
+        calce = np.round((x - base) * 10000).astype(int).ravel().tolist()
+        cab = {'sexo': sexo, 'vertices': len(esc), 'triangulos': len(tris_esc), 'calce': calce, 'arrays': []}
         with open(os.path.join(args.salida, f'escultura-{sexo}.bin'), 'wb') as f:
             for k, a in arrays.items():
                 cab['arrays'].append({'nombre': k, 'dtype': a.dtype.str, 'forma': list(a.shape), 'offset': f.tell()})
                 f.write(np.ascontiguousarray(a).tobytes())
         with open(os.path.join(args.salida, f'escultura-{sexo}.json'), 'w') as f:
             json.dump(cab, f)
-        np.save(os.path.join(args.salida, f'escultura-{sexo}-calzado.npy'), x)
 
 
 if __name__ == '__main__':

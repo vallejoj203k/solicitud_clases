@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { componerCaptura, compartirODescargar } from './captura';
 import { cargarCuerpo } from './cargar';
+import { cargarEscultura } from './escultura';
 import { validar } from './cliente';
 import { PCT_GRASA_POR_DEFECTO } from './config';
 import { Escena } from './Escena';
@@ -44,8 +45,9 @@ export default function PaginaModelo3D() {
     let vivo = true;
     setCuerpo(null);
     setError(null);
-    cargarCuerpo(sexo)
-      .then((c) => vivo && setCuerpo(c))
+    // El cuerpo de MakeHuman (para medir) y la escultura (lo que se ve).
+    Promise.all([cargarCuerpo(sexo), cargarEscultura(sexo)])
+      .then(([c]) => vivo && setCuerpo(c))
       .catch((e: Error) => vivo && setError(e.message));
     return () => {
       vivo = false;

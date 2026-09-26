@@ -4,11 +4,11 @@
  * malla, la compacta y la escribe comprimida con meshopt.
  *
  * Atributos de cada vértice (ver client/src/modelo3d/escultura.ts):
- *   POSITION  float32 x3  posición en la escultura (calzada sobre el cuerpo)
- *   _ATADO    uint16  x4  triángulo del cuerpo, baricéntricas b1 y b2 (×65535), pieza (0 ninguna)
- *   _DESP     float32 x4  altura sobre la normal (m), residuo tangente (c1, c2), peso de la pieza
+ *   POSITION  float32 x3  posición en la escultura
+ *   _ATADO    uint16  x4  triángulo del cuerpo, baricéntricas b1 y b2 (×65535), 0
  *
- * El JSON lleva, por pieza, los vértices del cuerpo que la anclan y su posición calzada.
+ * El JSON lleva `calce`: cuánto se movió cada vértice del cuerpo base para
+ * calzar sobre la escultura (0,1 mm), para llevar anillos de medida a ella.
  *
  * Uso:  node tools/escultura_glb.mjs tools/build client/public/modelo3d
  */
@@ -70,7 +70,6 @@ async function armar(entrada, salida, sexo) {
   const n = orden.length;
   const pos = new Float32Array(n * 3);
   const atado = new Uint16Array(n * 4);
-  const desp = new Float32Array(n * 4);
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
   orden.forEach((v, i) => {
@@ -81,14 +80,12 @@ async function armar(entrada, salida, sexo) {
       max[c] = Math.max(max[c], x);
     }
     if (a.tri[v] > 65535) throw new Error('triángulo del cuerpo fuera de uint16');
-    atado.set([a.tri[v], Math.round(a.bary[v * 3 + 1] * 65535), Math.round(a.bary[v * 3 + 2] * 65535), a.pieza[v]], i * 4);
-    desp.set([a.desp[v * 3], a.desp[v * 3 + 1], a.desp[v * 3 + 2], a.peso[v]], i * 4);
+    atado.set([a.tri[v], Math.round(a.bary[v * 3 + 1] * 65535), Math.round(a.bary[v * 3 + 2] * 65535), 0], i * 4);
   });
 
   const vistas = [
     { datos: pos, stride: 12, modo: 'ATTRIBUTES', count: n, target: 34962 },
     { datos: atado, stride: 8, modo: 'ATTRIBUTES', count: n, target: 34962 },
-    { datos: desp, stride: 16, modo: 'ATTRIBUTES', count: n, target: 34962 },
     { datos: indices, stride: 4, modo: 'TRIANGLES', count: indices.length, target: 34963 },
   ];
   const partes = [];
@@ -120,17 +117,16 @@ async function armar(entrada, salida, sexo) {
     accessors: [
       { bufferView: 0, componentType: 5126, count: n, type: 'VEC3', min, max },
       { bufferView: 1, componentType: 5123, count: n, type: 'VEC4' },
-      { bufferView: 2, componentType: 5126, count: n, type: 'VEC4' },
-      { bufferView: 3, componentType: 5125, count: indices.length, type: 'SCALAR' },
+      { bufferView: 2, componentType: 5125, count: indices.length, type: 'SCALAR' },
     ],
-    meshes: [{ name: 'escultura', primitives: [{ attributes: { POSITION: 0, _ATADO: 1, _DESP: 2 }, indices: 3 }] }],
+    meshes: [{ name: 'escultura', primitives: [{ attributes: { POSITION: 0, _ATADO: 1 }, indices: 2 }] }],
     nodes: [{ mesh: 0, name: 'escultura' }],
     scenes: [{ nodes: [0] }],
     scene: 0,
   };
   const etiqueta = sexo === 'M' ? 'hombre' : 'mujer';
   escribirGlb(`${salida}/escultura-${etiqueta}.glb`, json, Buffer.concat(partes));
-  fs.writeFileSync(`${salida}/escultura-${etiqueta}.json`, JSON.stringify({ version: 1, regiones: cab.regiones }));
+  fs.writeFileSync(`${salida}/escultura-${etiqueta}.json`, JSON.stringify({ version: 2, calce: cab.calce }));
   const mb = fs.statSync(`${salida}/escultura-${etiqueta}.glb`).size / 1e6;
   console.log(`escultura-${etiqueta}: ${cab.triangulos} -> ${indices.length / 3} triángulos, ${n} vértices, ${mb.toFixed(2)} MB`);
 }

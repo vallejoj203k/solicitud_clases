@@ -87,7 +87,8 @@ three.js, sin descargar nada de otro sitio.
 
 La figura que se ve es la escultura "Muscle Male" / "Muscle Female" de
 Floriane Legros-Collard (`images/2284-legroscollardfloriane-*/source/*.fbx`),
-atada al cuerpo de MakeHuman para que siga las medidas de cada cliente:
+tal cual. El cuerpo de MakeHuman no se muestra: calcula las medidas y el ajuste,
+y la escultura se mueve con él.
 
 ```bash
 .blenv/bin/python tools/export_escultura.py --salida tools/build \
@@ -98,13 +99,11 @@ npm run modelo3d:escultura     # simplifica (~150 000 triángulos), comprime y c
 1. Escala la escultura a la estatura del cuerpo base y centra el tronco.
 2. Registro no rígido: el cuerpo base se deforma hasta calzar sobre la
    escultura (puntos más cercanos en las dos direcciones + Laplaciano, rigidez
-   decreciente). Dedos, ojos y boca de MakeHuman quedan libres (siguen a sus
-   vecinos): la escultura no los tiene igual.
-3. Ata cada vértice de la escultura a ese cuerpo calzado (solo a triángulos
-   fuera de dedos, ojos y boca): triángulo, baricéntricas, altura y residuo.
-4. Cabeza, manos y pies llevan además su pieza y un peso (del esqueleto): en el
-   navegador se mueven enteros con la semejanza que mejor lleva su zona del
-   cuerpo calzado a la del cliente.
+   decreciente). Dedos, ojos y boca de MakeHuman quedan libres.
+3. Asocia cada vértice de la escultura al punto más cercano de ese cuerpo
+   calzado (triángulo y baricéntricas, fuera de dedos, ojos y boca).
+4. En el navegador cada vértice de la escultura se mueve lo mismo que su punto
+   entre el cuerpo base y el del cliente: con el cuerpo base queda idéntica.
 
 Requiere haber corrido antes `export_bodies.py` (usa `tools/build/cuerpo-*.glb`).
 

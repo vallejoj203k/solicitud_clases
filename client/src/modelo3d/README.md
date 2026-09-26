@@ -29,15 +29,14 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
   cuerpo es musculoso o gordo. La grasa visceral decide la barriga.
 - **Vista "grasa y músculo":** el cuerpo sin grasa (rojo) va dentro del
   completo; la grasa (amarillo) es la diferencia, más opaca donde es más gruesa.
-- **Cómo se ve:** el cuerpo que se mide (13 380 vértices de MakeHuman) se
-  muestra con la escultura "Muscle Male / Female" (Floriane Legros-Collard,
-  `images/2284-*`), atada a ese cuerpo (`escultura.ts`): cada vértice guarda un
-  triángulo del cuerpo, un punto en él, una altura y un residuo, así la
-  escultura toma la estatura, el volumen y la forma del cliente y conserva el
-  relieve de los músculos. Cabeza, manos y pies se mueven enteros (una
-  semejanza por pieza). Mientras la escultura baja (~3 MB) se ve el cuerpo de
-  MakeHuman pulido (`pulido.ts`). Es solo para mostrar: medidas y ajuste usan
-  la malla original. Cómo se genera: [`tools/README.md`](../../../tools/README.md#cuerpo-esculpido).
+- **Cómo se ve:** la figura es la escultura "Muscle Male / Female" (Floriane
+  Legros-Collard, `images/2284-*`), tal cual se subió (`escultura.ts`). El
+  cuerpo de MakeHuman no se muestra: solo sirve para medir y ajustar. Cada
+  vértice de la escultura se mueve lo mismo que su punto de ese cuerpo entre el
+  cuerpo base y el del cliente, así la escultura cambia con la estatura, el
+  peso, el músculo y la grasa; el músculo (rojo) y la grasa (amarillo) son la
+  escultura movida con el cuerpo sin grasa y con el cuerpo completo. Cómo se
+  genera: [`tools/README.md`](../../../tools/README.md#cuerpo-esculpido).
 - **Comparar:** el cuerpo objetivo aplica los controles de grasa y músculo del
   informe repartidos en proporción a cada segmento (`resultados.ts`).
 
@@ -47,8 +46,7 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 | --- | --- |
 | `PaginaModelo3D.tsx` | Página: carga el cuerpo, lanza ajustes y cálculos, captura PNG, teclado. |
 | `Escena.tsx` | Escena 3D: modos de vista, materiales, luces, anillos con etiquetas, cámara, HDRI. |
-| `escultura.ts` | Cuerpo esculpido atado al cuerpo: carga, posiciones y atributos. |
-| `pulido.ts` | Cuerpo liso mientras baja la escultura: subdivisión de Loop, cabeza alisada, ojos. |
+| `escultura.ts` | La figura (escultura): carga, posiciones según el cuerpo, colores, anillos. |
 | `Panel.tsx`, `FormularioScanner.tsx`, `TarjetasResultado.tsx`, `ResumenAjuste.tsx` | Interfaz. |
 | `campos.ts` / `cliente.ts` | Campos del informe; validación (zod) y avisos de coherencia. |
 | `objetivos.ts` | Datos del formulario → objetivos y puntos de partida del solver. |
@@ -74,7 +72,7 @@ Formulario (texto)  ──►  objetivos.ts  ──►  Worker: ajuste.ts (Leven
 ## Pruebas
 
 ```bash
-npm test -w client        # 75 tests: geometría, medición, solver, pulido, escultura, formulario, resultados
+npm test -w client        # 72 tests: geometría, medición, solver, escultura, formulario, resultados
 npm run typecheck -w client
 ```
 
@@ -88,7 +86,8 @@ musculoso, y que los dos ajustes tarden menos de 300 ms.
 - El visor se descarga aparte (~310 KB comprimidos), solo al entrar a la
   página; los archivos con hash se cachean un año.
 - El canvas dibuja solo cuando algo cambia (en reposo no gasta batería).
-- Rearmar la escultura sobre el cuerpo cuesta ~10-20 ms por capa y por cambio.
+- Mover la escultura con el cuerpo cuesta ~10 ms por capa y por cambio (la
+  página espera a tener cuerpo y escultura, ~3 MB, para mostrar el visor).
 - Modelos de ~0,9 MB (meshopt) y HDRI de 0,5 MB.
 - Teclado: flechas para girar el modelo, flechas entre pestañas, foco visible;
   descripción del cuerpo para lectores de pantalla; "reducir movimiento" salta
