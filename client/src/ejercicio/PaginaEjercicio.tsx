@@ -10,10 +10,12 @@ import {
   ARRIBA,
   ContadorSentadilla,
   ejeDePie,
+  promedioEjes,
   ETIQUETA_FALLA,
   medirSentadilla,
   resumir,
   VOZ_FALLA,
+  type Ejes,
   type Repeticion,
   type Resumen,
 } from './sentadilla';
@@ -146,7 +148,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
   const contador = useRef(new ContadorSentadilla());
   const bloqueo = useRef<{ release(): Promise<void> } | null>(null);
   /** La vertical medida de pie al preparar (sirve aunque el celular esté torcido). */
-  const eje = useRef<readonly number[]>(ARRIBA);
+  const eje = useRef<Ejes>(ARRIBA);
   const vozRef = useRef(voz);
   vozRef.current = voz;
 
@@ -162,11 +164,18 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
     async (usarFrontal: boolean) => {
       apagarCamara();
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('sin-camara');
+      // Sin pedir resolución ni proporción: lo que da el celular por defecto (4:3,
+      // ~640×480) es el sensor entero. Pedir 16:9 o 720×1280 recorta los lados
+      // del sensor en muchos teléfonos y obligaba a alejarse de más.
       const s = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: usarFrontal ? 'user' : 'environment', width: { ideal: 720 }, height: { ideal: 1280 } },
+        video: { facingMode: usarFrontal ? 'user' : 'environment' },
       });
       flujo.current = s;
+      // Y sin zoom: algunos celulares arrancan la cámara con un poco.
+      const pista = s.getVideoTracks()[0];
+      const zoom = (pista?.getCapabilities?.() as { zoom?: { min: number } } | undefined)?.zoom;
+      if (zoom) await pista.applyConstraints({ advanced: [{ zoom: zoom.min } as MediaTrackConstraintSet] }).catch(() => {});
       const v = video.current!;
       v.srcObject = s;
       await v.play();
@@ -228,7 +237,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
     let raf = 0;
     let ultimoCuadro = -1;
     let deEsDesde: number | null = null;
-    const ejes: number[][] = [];
+    const ejes: Ejes[] = [];
     let destacado: { tipo: 'bien' | 'mal'; hasta: number } | null = null;
     let ultimoMovimiento = performance.now() / 1000;
     let fueraDesde: number | null = null;
@@ -265,16 +274,19 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       const cont = contador.current;
 
       if (preparando) {
-        // Esperar a verla entera, de pie y quieta un momento; de ahí sale la vertical.
-        if (lectura.tipo === 'ok' && lectura.cuadro.rodilla >= 160 && pose) {
+        // Esperar a verla de perfil, de pie y quieta un momento; de ahí sale la
+        // vertical. De frente no se mide bien la profundidad: se pide ponerse de lado.
+        if (lectura.tipo === 'ok' && lectura.cuadro.vista === 'frente') {
+          deEsDesde = null;
+          ejes.length = 0;
+          mensaje = 'Ponte de lado (de perfil) a la cámara para empezar.';
+        } else if (lectura.tipo === 'ok' && lectura.cuadro.rodilla >= 160 && pose) {
           deEsDesde ??= t;
           const e = ejeDePie(pose);
           if (e) ejes.push(e);
           mensaje = 'Quédate de pie un momento…';
           if (t - deEsDesde >= S_PARA_EMPEZAR && ejes.length) {
-            const s = ejes.reduce((a, e2) => a.map((x, i) => x + e2[i]), [0, 0, 0]);
-            const n = Math.hypot(s[0], s[1], s[2]) || 1;
-            eje.current = s.map((x) => x / n);
+            eje.current = promedioEjes(ejes);
             preparando = false;
             ultimoMovimiento = t;
             setFase('contando');
@@ -369,11 +381,11 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
           ref={video}
           playsInline
           muted
-          className={cx('absolute inset-0 w-full h-full object-cover', frontal && '-scale-x-100')}
+          className={cx('absolute inset-0 w-full h-full object-contain', frontal && '-scale-x-100')}
         />
         <canvas
           ref={lienzo}
-          className={cx('absolute inset-0 w-full h-full object-cover pointer-events-none', frontal && '-scale-x-100')}
+          className={cx('absolute inset-0 w-full h-full object-contain pointer-events-none', frontal && '-scale-x-100')}
         />
 
         {fase === 'cargando' && (
