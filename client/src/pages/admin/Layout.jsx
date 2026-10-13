@@ -15,6 +15,7 @@ import {
   IconoMusica,
   IconoCerrar,
   IconoTienda,
+  IconoPesa,
 } from '../../components/Iconos.jsx';
 
 /**
@@ -60,6 +61,9 @@ const SECCIONES = [
   { a: '/admin/tienda', texto: 'Tienda', Icono: IconoTienda },
   { a: '/admin/pagos', texto: 'Pagos', Icono: IconoDinero },
   { a: '/admin/clientes', texto: 'Clientes', Icono: IconoUsuario },
+  // Solo en la barra lateral: imprimir los QR de las máquinas se hace en el
+  // computador, y la barra inferior del móvil no tiene lugar para una octava.
+  { a: '/admin/ejercicios', texto: 'Ejercicios', Icono: IconoPesa, soloEscritorio: true },
 ];
 
 /**
@@ -185,7 +189,7 @@ export default function AdminLayout() {
       {/* Barra inferior en móvil: navegación al alcance del pulgar. */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-carbon-800/95 backdrop-blur border-t border-carbon-700 pb-segura">
         <div className="grid grid-cols-7">
-          {SECCIONES.map((seccion) => (
+          {SECCIONES.filter((s) => !s.soloEscritorio).map((seccion) => (
             <NavLink
               key={seccion.a}
               to={seccion.a}

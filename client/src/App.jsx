@@ -20,11 +20,14 @@ import AdminClientes from './pages/admin/Clientes.jsx';
 import AdminRecepcion from './pages/admin/Recepcion.jsx';
 import AdminMusica from './pages/admin/Musica.jsx';
 import AdminTienda from './pages/admin/Tienda.jsx';
+import AdminEjercicios from './pages/admin/Ejercicios.jsx';
 import { INICIO_TABLET, MUSICA_TABLET } from './lib/tablet.js';
 import { Cargando } from './components/ui.jsx';
 
 // El visor 3D trae three.js (cientos de KB): se carga aparte, solo al entrar ahí.
 const PaginaModelo3D = lazy(() => import('./modelo3d/PaginaModelo3D.tsx'));
+// El conteo por cámara trae el detector de postura (MediaPipe): también aparte.
+const PaginaEjercicio = lazy(() => import('./ejercicio/PaginaEjercicio.tsx'));
 
 export default function App() {
   return (
@@ -41,6 +44,16 @@ export default function App() {
         element={
           <Suspense fallback={<Cargando texto="Cargando visor 3D…" />}>
             <PaginaModelo3D />
+          </Suspense>
+        }
+      />
+
+      {/* Conteo de repeticiones: se llega por el QR pegado en cada máquina. */}
+      <Route
+        path="/ejercicio/:slug"
+        element={
+          <Suspense fallback={<Cargando texto="Cargando…" />}>
+            <PaginaEjercicio />
           </Suspense>
         }
       />
@@ -71,6 +84,7 @@ export default function App() {
         <Route path="clases/:id" element={<AdminClaseDetalle />} />
         <Route path="musica" element={<AdminMusica />} />
         <Route path="tienda" element={<AdminTienda />} />
+        <Route path="ejercicios" element={<AdminEjercicios />} />
         <Route path="pagos" element={<AdminPagos />} />
         <Route path="clientes" element={<AdminClientes />} />
       </Route>

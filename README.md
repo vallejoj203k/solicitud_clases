@@ -462,6 +462,47 @@ codificada en base64 pesa más que el archivo original.
 
 ---
 
+## Conteo de repeticiones con cámara
+
+**El QR de la máquina lleva al conteo.** Cada ejercicio tiene su dirección
+(`/ejercicio/sentadilla`, la del rack de sentadilla libre) y su código QR, que se imprime
+desde `/admin/ejercicios` (solo en la barra lateral del computador) y se pega en la
+máquina. La persona lo escanea, pone el celular vertical en el soporte, de lado a ella y
+con el cuerpo entero en la imagen, toca **Empezar** y hace su serie. Al terminar ve:
+«Total de repeticiones 10 · 8 bien hechas · 2 mal hechas», cuáles fallaron y por qué, y
+uno o dos consejos. Puede hacer otra serie y ve las anteriores debajo.
+
+**Todo pasa en el celular.** La postura la detecta MediaPipe Pose Landmarker (Apache 2.0)
+en el navegador; el motor (WebAssembly) y el modelo `lite` se sirven desde la propia app
+(`client/public/ejercicio/pose_landmarker_lite.task` y los `.wasm` del paquete
+`@mediapipe/tasks-vision`). La primera vez descarga unos 10 MB (el `.wasm` viaja
+comprimido); el video no se guarda ni se envía a ninguna parte. Necesita WebGL: si el
+detector falla cuadro tras cuadro, la página lo dice en vez de quedarse muda.
+
+**Cómo cuenta** (`client/src/ejercicio/sentadilla.ts`, lógica pura con pruebas sobre
+poses sintéticas):
+
+- Cada cuadro da el ángulo de la rodilla, cuánto baja el muslo (grados sobre la
+  horizontal), cuánto se inclina el torso y, de frente, si las rodillas se van hacia
+  adentro. Los talones no se revisan: con el detector real, en el fondo de una sentadilla
+  profunda el punto del talón «sube» unos 8 cm aunque el pie esté apoyado. Los ángulos
+  salen de los puntos en metros del detector, no de la imagen, y la vertical se mide con
+  la persona de pie al empezar: sirve aunque el celular quede un poco torcido.
+- Una repetición es de pie (rodilla ≥ 160°) → baja → de pie. Si la rodilla no bajó de
+  135° fue un acomodo y no cuenta; si la persona sale de cuadro en medio, esa no cuenta.
+- **Bien hecha** = el muslo llega al paralelo (≤ 15° sobre la horizontal, o la rodilla a
+  ≤ 85°), el torso no pasa de 60° y las rodillas no se cierran (de frente). Bajar en menos de 0,6 s no la marca mala, pero suma el consejo
+  de bajar con control. Los umbrales están en `UMBRALES`.
+- **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
+  o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
+  (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
+  («3, más abajo»). La pantalla no se apaga durante la serie.
+
+Para sumar otro ejercicio: su entrada en `client/src/ejercicio/ejercicios.ts` (aparece
+solo en `/admin/ejercicios` con su QR) y su analizador, como el de la sentadilla.
+
+---
+
 ## Música
 
 **La música suena de verdad, desde YouTube.** El cliente busca en todo YouTube desde su

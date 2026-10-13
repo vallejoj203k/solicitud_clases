@@ -14,5 +14,5 @@
     "resolveJsonModule": true,
     "types": ["vite/client"]
   },
-  "include": ["src/modelo3d"]
+  "include": ["src/modelo3d", "src/ejercicio"]
 }
