@@ -37,7 +37,7 @@ type Fase = 'inicio' | 'cargando' | 'preparando' | 'contando' | 'resultado' | 'e
 /** Segundos de pie y quieto para arrancar la serie. */
 const S_PARA_EMPEZAR = 1;
 /** Con al menos una repetición: segundos de pie sin bajar para terminar la serie solo. */
-const S_PARA_TERMINAR = 8;
+const S_PARA_TERMINAR = 10;
 /** Con al menos una repetición: segundos sin ver a la persona para terminar la serie. */
 const S_FUERA_PARA_TERMINAR = 4;
 /** Cuadros seguidos en los que el detector falla antes de rendirse. */

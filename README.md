@@ -493,7 +493,7 @@ poses sintéticas):
 - **Bien hecha** = el muslo llega al paralelo (≤ 15° sobre la horizontal, o la rodilla a
   ≤ 85°), el torso no pasa de 60° y las rodillas no se cierran (de frente). Bajar en menos de 0,6 s no la marca mala, pero suma el consejo
   de bajar con control. Los umbrales están en `UMBRALES`.
-- **Termina sola** si, después de al menos una repetición, la persona se queda de pie 8 s
+- **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
   o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
   (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
   («3, más abajo»). La pantalla no se apaga durante la serie.
