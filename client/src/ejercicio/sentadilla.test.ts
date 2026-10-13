@@ -13,6 +13,8 @@ interface Forma {
   torso: number;
   /** De frente: cuánto se cierran las rodillas en el fondo (m, cada una). */
   valgo?: number;
+  /** Tibia en el fondo, grados hacia adelante (por defecto 35). */
+  tibia?: number;
 }
 
 const FEMUR = 0.45;
@@ -23,7 +25,7 @@ const TRONCO = 0.52;
 function pose(f: Forma, a: number, vista: 'perfil' | 'frente', ruido = 0, inclinacion = 0): Pose {
   const s = (x: number) => x + (Math.random() - 0.5) * ruido;
   const muslo = 90 - a * (90 - f.muslo); // grados sobre la horizontal
-  const tibia = 3 + a * 32; // grados de la tibia hacia adelante
+  const tibia = 3 + a * ((f.tibia ?? 35) - 3); // grados de la tibia hacia adelante
   const torso = 5 + a * (f.torso - 5);
   const rad = Math.PI / 180;
   // Plano sagital (adelante, arriba) en metros, tobillo en el origen.
@@ -67,7 +69,7 @@ function pose(f: Forma, a: number, vista: 'perfil' | 'frente', ruido = 0, inclin
 }
 
 /** Una serie: reps con su forma; 30 cuadros por segundo, 2 s por repetición y 1 s de pie entre ellas. */
-function serie(reps: Forma[], vista: 'perfil' | 'frente', opciones: { ruido?: number; inclinacion?: number; bajada?: number } = {}) {
+function serie(reps: Forma[], vista: 'perfil' | 'frente', opciones: { ruido?: number; inclinacion?: number; bajada?: number; alcance?: number } = {}) {
   const fps = 30;
   const contador = new ContadorSentadilla();
   const eje = ejeDePie(pose({ muslo: 0, torso: 0 }, 0, vista, 0, opciones.inclinacion ?? 0))!;
@@ -81,8 +83,9 @@ function serie(reps: Forma[], vista: 'perfil' | 'frente', opciones: { ruido?: nu
   const bajada = opciones.bajada ?? 1;
   for (const f of reps) {
     for (let i = 0; i < fps; i++) cuadro(f, 0);
-    for (let i = 0; i <= bajada * fps; i++) cuadro(f, (1 - Math.cos((Math.PI * i) / (bajada * fps))) / 2);
-    for (let i = 0; i <= fps; i++) cuadro(f, (1 + Math.cos((Math.PI * i) / fps)) / 2);
+    const k = opciones.alcance ?? 1;
+    for (let i = 0; i <= bajada * fps; i++) cuadro(f, (k * (1 - Math.cos((Math.PI * i) / (bajada * fps)))) / 2);
+    for (let i = 0; i <= fps; i++) cuadro(f, (k * (1 + Math.cos((Math.PI * i) / fps))) / 2);
   }
   for (let i = 0; i < fps; i++) cuadro(reps[0] ?? { muslo: 0, torso: 0 }, 0);
   return hechas;
@@ -158,7 +161,7 @@ describe('contador', () => {
   });
 
   it('un acomodo (doblar apenas las rodillas) no es una repetición', () => {
-    const reps = serie([{ muslo: 85, torso: 10 }], 'perfil');
+    const reps = serie([BUENA], 'perfil', { alcance: 0.15 });
     expect(reps.length).toBe(0);
     expect(resumir(reps).consejos[0]).toMatch(/No se contó/);
   });
@@ -170,12 +173,53 @@ describe('contador', () => {
     expect(rapidas.consejos.some((c) => /despacio/.test(c))).toBe(true);
   });
 
-  it('si la persona sale de cuadro en medio, esa repetición no cuenta', () => {
+  it('media sentadilla y cuarto de sentadilla cuentan, como mal hechas', () => {
+    const reps = serie([BUENA, { muslo: 40, torso: 30 }, { muslo: 65, torso: 20 }, BUENA], 'perfil');
+    expect(reps.length).toBe(4);
+    expect(reps.map((r) => r.buena)).toEqual([true, false, false, true]);
+    expect(reps[1].fallas).toEqual(['profundidad']);
+    expect(reps[2].fallas).toEqual(['profundidad']);
+  });
+
+  it('cerrar mucho la rodilla con la cadera alta (rodillas muy adelante) no es buena profundidad', () => {
+    const reps = serie([{ muslo: 20, torso: 35, tibia: 50 }], 'perfil');
+    expect(reps[0].rodillaMin).toBeLessThan(85);
+    expect(reps[0].fallas).toEqual(['profundidad']);
+  });
+
+  it('el umbral es el paralelo: 5° por encima vale, 18° no', () => {
+    const reps = serie([{ muslo: 5, torso: 40 }, { muslo: 18, torso: 40 }], 'perfil');
+    expect(reps.map((r) => r.buena)).toEqual([true, false]);
+  });
+
+  it('con la cabeza fuera de cuadro también cuenta (basta de los hombros a los pies)', () => {
     const c = new ContadorSentadilla();
     let t = 0;
-    for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(BUENA, i / 30, 'perfil')), (t += 1 / 30));
-    for (let i = 0; i < 60; i++) c.procesar(medirSentadilla(null), (t += 1 / 30));
-    for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(BUENA, 1 - i / 30, 'perfil')), (t += 1 / 30));
-    expect(c.repeticiones.length).toBe(0);
+    const sinCabeza = (a: number) => {
+      const p = pose(BUENA, a, 'perfil');
+      p.imagen[P.nariz].y = -0.1;
+      return medirSentadilla(p);
+    };
+    for (let i = 0; i < 30; i++) c.procesar(sinCabeza(0), (t += 1 / 30));
+    for (let i = 0; i <= 30; i++) c.procesar(sinCabeza((1 - Math.cos((Math.PI * i) / 30)) / 2), (t += 1 / 30));
+    for (let i = 0; i <= 30; i++) c.procesar(sinCabeza((1 + Math.cos((Math.PI * i) / 30)) / 2), (t += 1 / 30));
+    expect(c.repeticiones.map((r) => r.buena)).toEqual([true]);
+  });
+
+  it('si se pierde a la persona en medio y vuelve, la repetición cuenta (como "no se vio completa" si fue mucho)', () => {
+    const conPerdida = (cuadrosPerdidos: number) => {
+      const c = new ContadorSentadilla();
+      let t = 0;
+      for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(BUENA, 0, 'perfil')), (t += 1 / 30));
+      for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(BUENA, i / 30, 'perfil')), (t += 1 / 30));
+      for (let i = 0; i < cuadrosPerdidos; i++) c.procesar(medirSentadilla(null), (t += 1 / 30));
+      for (let i = 0; i <= 30; i++) c.procesar(medirSentadilla(pose(BUENA, 1 - i / 30, 'perfil')), (t += 1 / 30));
+      return c.repeticiones;
+    };
+    expect(conPerdida(10).map((r) => r.fallas)).toEqual([[]]);
+    expect(conPerdida(60).map((r) => r.fallas)).toEqual([['fuera']]);
+    expect(resumir(conPerdida(60)).consejos[0]).toMatch(/no se te veía entero/);
+    // Si no vuelve en mucho rato, se fue: no cuenta.
+    expect(conPerdida(250).length).toBe(0);
   });
 });

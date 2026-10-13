@@ -468,9 +468,14 @@ codificada en base64 pesa más que el archivo original.
 (`/ejercicio/sentadilla`, la del rack de sentadilla libre) y su código QR, que se imprime
 desde `/admin/ejercicios` (solo en la barra lateral del computador) y se pega en la
 máquina. La persona lo escanea, pone el celular vertical en el soporte, de lado a ella y
-con el cuerpo entero en la imagen, toca **Empezar** y hace su serie. Al terminar ve:
+de los hombros a los pies en la imagen, toca **Empezar** y hace su serie. Al terminar ve:
 «Total de repeticiones 10 · 8 bien hechas · 2 mal hechas», cuáles fallaron y por qué, y
 uno o dos consejos. Puede hacer otra serie y ve las anteriores debajo.
+
+**La cámara, sin recorte.** No se pide resolución ni proporción: lo que el celular da por
+defecto (4:3) es el sensor entero, y pedir 16:9 recortaba los lados en muchos teléfonos.
+Se quita el zoom si la cámara arranca con un poco, y el video se muestra entero
+(`object-contain`), sin recortarlo para llenar la pantalla: lo que se ve es lo que analiza.
 
 **Todo pasa en el celular.** La postura la detecta MediaPipe Pose Landmarker (Apache 2.0)
 en el navegador; el motor (WebAssembly) y el modelo `lite` se sirven desde la propia app
@@ -482,17 +487,27 @@ detector falla cuadro tras cuadro, la página lo dice en vez de quedarse muda.
 **Cómo cuenta** (`client/src/ejercicio/sentadilla.ts`, lógica pura con pruebas sobre
 poses sintéticas):
 
-- Cada cuadro da el ángulo de la rodilla, cuánto baja el muslo (grados sobre la
-  horizontal), cuánto se inclina el torso y, de frente, si las rodillas se van hacia
-  adentro. Los talones no se revisan: con el detector real, en el fondo de una sentadilla
-  profunda el punto del talón «sube» unos 8 cm aunque el pie esté apoyado. Los ángulos
-  salen de los puntos en metros del detector, no de la imagen, y la vertical se mide con
-  la persona de pie al empezar: sirve aunque el celular quede un poco torcido.
-- Una repetición es de pie (rodilla ≥ 160°) → baja → de pie. Si la rodilla no bajó de
-  135° fue un acomodo y no cuenta; si la persona sale de cuadro en medio, esa no cuenta.
-- **Bien hecha** = el muslo llega al paralelo (≤ 15° sobre la horizontal, o la rodilla a
-  ≤ 85°), el torso no pasa de 60° y las rodillas no se cierran (de frente). Bajar en menos de 0,6 s no la marca mala, pero suma el consejo
-  de bajar con control. Los umbrales están en `UMBRALES`.
+- Basta ver **de los hombros a los pies** de un lado: la cabeza puede quedar fuera, así
+  la persona no tiene que alejarse de más. Para empezar se pide estar **de perfil**: de
+  frente la profundidad no se mide bien.
+- De perfil, cada cuadro da el ángulo de la rodilla, cuánto baja el muslo (grados sobre
+  la horizontal) y cuánto se inclina el torso, medidos **en la imagen** (la pierna y el
+  torso quedan en el plano de la foto; la profundidad 3D que estima el detector es mucho
+  menos exacta). La vertical se toma con la persona de pie al empezar: sirve aunque el
+  celular quede torcido. De frente se usan los puntos 3D y, además, si las rodillas se
+  van hacia adentro. Los talones no se revisan: con el detector real, en el fondo de una
+  sentadilla profunda el punto del talón «sube» unos 8 cm aunque el pie esté apoyado.
+- Una repetición es de pie (rodilla ≥ 160°) → baja → de pie. **Media sentadilla y cuarto
+  de sentadilla cuentan** (como mal hechas): solo se ignora doblar apenas las rodillas
+  (si no bajan de 150°).
+- **Bien hecha** = el muslo llega al paralelo (≤ 10° sobre la horizontal: cadera a la
+  altura de la rodilla), el torso no pasa de 60° y las rodillas no se cierran (de
+  frente). La profundidad se juzga solo por el muslo: con las rodillas muy adelante la
+  rodilla se cierra aunque la cadera quede alta. Bajar en menos de 0,6 s no la marca
+  mala, pero suma el consejo de bajar con control. Los umbrales están en `UMBRALES`.
+- Si se deja de ver a la persona en medio de una repetición y vuelve, la repetición
+  cuenta; si fue más de 1,5 s, como mal hecha por «no se vio completa» (con el consejo
+  de alejarse). Si no vuelve en 6 s, esa no cuenta.
 - **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
   o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
   (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
