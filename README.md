@@ -468,7 +468,7 @@ codificada en base64 pesa más que el archivo original.
 (`/ejercicio/sentadilla`, la del rack de sentadilla libre) y su código QR, que se imprime
 desde `/admin/ejercicios` (solo en la barra lateral del computador) y se pega en la
 máquina. La persona lo escanea, pone el celular vertical en el soporte, de lado a ella y
-de los hombros a los pies en la imagen, toca **Empezar** y hace su serie. Al terminar ve:
+con el cuerpo entero en la imagen, toca **Empezar** y hace su serie. Al terminar ve:
 «Total de repeticiones 10 · 8 bien hechas · 2 mal hechas», cuáles fallaron y por qué, y
 uno o dos consejos. Puede hacer otra serie y ve las anteriores debajo.
 
@@ -487,9 +487,11 @@ detector falla cuadro tras cuadro, la página lo dice en vez de quedarse muda.
 **Cómo cuenta** (`client/src/ejercicio/sentadilla.ts`, lógica pura con pruebas sobre
 poses sintéticas):
 
-- Basta ver **de los hombros a los pies** de un lado: la cabeza puede quedar fuera, así
-  la persona no tiene que alejarse de más. Para empezar se pide estar **de perfil**: de
-  frente la profundidad no se mide bien.
+- Para medir basta ver **de los hombros a los pies** de un lado: si la cabeza sale de
+  cuadro en medio de la serie, sigue contando. Pero el detector de MediaPipe encuentra a
+  la persona por la cabeza, así que al empezar tiene que verse entera (la cabeza puede
+  quedar en el borde): sin cabeza, en las pruebas tardó ~30 s en encontrarla. Para
+  empezar se pide estar **de perfil**: de frente la profundidad no se mide bien.
 - De perfil, cada cuadro da el ángulo de la rodilla, cuánto baja el muslo (grados sobre
   la horizontal) y cuánto se inclina el torso, medidos **en la imagen** (la pierna y el
   torso quedan en el plano de la foto; la profundidad 3D que estima el detector es mucho

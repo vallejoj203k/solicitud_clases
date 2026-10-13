@@ -20,7 +20,7 @@ export const EJERCICIOS: Ejercicio[] = [
     preparacion: [
       'Pon el celular vertical en el soporte, más o menos a la altura de la rodilla, a unos 2 metros del rack.',
       'Párate de lado a la cámara (de perfil): así se mide bien la profundidad y la espalda.',
-      'Que se vea de los hombros a los pies. Si no cabes, aléjate un paso o usa «Cambiar cámara»: la de atrás suele ver más ancho.',
+      'Que se vea tu cuerpo entero, de la cabeza a los pies (la cabeza puede quedar justo en el borde). Si no cabes, aléjate un paso o usa «Cambiar cámara»: la de atrás suele ver más ancho.',
       'Cuando la pantalla diga «¡Listo!», haz tu serie. Al terminar, quédate de pie unos segundos o toca «Terminar serie».',
     ],
   },
