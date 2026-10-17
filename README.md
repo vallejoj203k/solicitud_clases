@@ -487,21 +487,26 @@ detector falla cuadro tras cuadro, la página lo dice en vez de quedarse muda.
 **Cómo cuenta** (`client/src/ejercicio/sentadilla.ts`, lógica pura con pruebas sobre
 poses sintéticas):
 
-- Para medir basta ver **de los hombros a los pies** de un lado: si la cabeza sale de
-  cuadro en medio de la serie, sigue contando. Pero el detector de MediaPipe encuentra a
-  la persona por la cabeza, así que al empezar tiene que verse entera (la cabeza puede
-  quedar en el borde): sin cabeza, en las pruebas tardó ~30 s en encontrarla. Para
-  empezar se pide estar **de perfil**: de frente la profundidad no se mide bien.
-- De perfil, cada cuadro da el ángulo de la rodilla, cuánto baja el muslo (grados sobre
-  la horizontal) y cuánto se inclina el torso, medidos **en la imagen** (la pierna y el
-  torso quedan en el plano de la foto; la profundidad 3D que estima el detector es mucho
-  menos exacta). La vertical se toma con la persona de pie al empezar: sirve aunque el
-  celular quede torcido. De frente se usan los puntos 3D y, además, si las rodillas se
-  van hacia adentro. Los talones no se revisan: con el detector real, en el fondo de una
+- Se puede filmar **de perfil o de frente**. Para medir basta ver de los hombros a los
+  pies (de un lado de perfil, de los dos de frente): si la cabeza sale de cuadro en
+  medio de la serie, sigue contando. Pero el detector de MediaPipe encuentra a la
+  persona por la cabeza, así que al empezar tiene que verse entera (la cabeza puede
+  quedar en el borde): sin cabeza, en las pruebas tardó ~30 s en encontrarla.
+- Al empezar, de pie, se mide la vertical (sirve aunque el celular quede torcido) y el
+  largo del muslo y del torso en la imagen.
+- Todo se mide **en la imagen**, que es mucho más exacta que la profundidad 3D que
+  estima el detector. **De perfil**, la pierna y el torso quedan en el plano de la foto y
+  los ángulos se miden directo. **De frente**, el muslo y el torso se inclinan hacia la
+  cámara y se ven más cortos: la profundidad sale de la altura de la cadera respecto a la
+  rodilla, en proporción al largo del muslo de pie (con el celular a la altura de la
+  rodilla, en el paralelo quedan a la misma altura), y la inclinación del torso, de
+  cuánto se acortó. De frente se revisa además si las rodillas se cierran respecto a los
+  tobillos. Los talones no se revisan: con el detector real, en el fondo de una
   sentadilla profunda el punto del talón «sube» unos 8 cm aunque el pie esté apoyado.
-- Una repetición es de pie (rodilla ≥ 160°) → baja → de pie. **Media sentadilla y cuarto
-  de sentadilla cuentan** (como mal hechas): solo se ignora doblar apenas las rodillas
-  (si no bajan de 150°).
+- Una repetición es de pie → baja → de pie, siguiendo el muslo (grados sobre la
+  horizontal: ~85-90 de pie, 0 en el paralelo; de pie es ≥ 75). **Media sentadilla y
+  cuarto de sentadilla cuentan** (como mal hechas): solo se ignora doblar apenas las
+  rodillas (si el muslo no baja de 65°, como doblar la rodilla a ~150°).
 - **Bien hecha** = el muslo llega al paralelo (≤ 10° sobre la horizontal: cadera a la
   altura de la rodilla), el torso no pasa de 60° y las rodillas no se cierran (de
   frente). La profundidad se juzga solo por el muslo: con las rodillas muy adelante la
