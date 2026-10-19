@@ -6,6 +6,7 @@ import { IconoAtras } from '../components/Iconos.jsx';
 import { cargarDetector, detectar } from './detector';
 import { ejercicioDe, type Ejercicio } from './ejercicios';
 import { HUESOS, type Pose } from './puntos';
+import { anclaDe, elegirPrincipal, Seguidor, type Ancla } from './seguimiento';
 import {
   ARRIBA,
   ContadorSentadilla,
@@ -17,6 +18,7 @@ import {
   resumir,
   VOZ_FALLA,
   type Ejes,
+  type Lectura,
   type Vista,
   type Repeticion,
   type Resumen,
@@ -38,6 +40,8 @@ const Boton = BotonJs as unknown as (
 
 type Fase = 'inicio' | 'cargando' | 'preparando' | 'contando' | 'resultado' | 'error';
 
+/** Al preparar, cuadros sin ver a la persona elegida antes de elegir a otra. */
+const CUADROS_PARA_SOLTAR = 15;
 /** Segundos de pie y quieto para arrancar la serie. */
 const S_PARA_EMPEZAR = 1;
 /** Con al menos una repetición: segundos de pie sin bajar para terminar la serie solo. */
@@ -84,7 +88,11 @@ function hablar(texto: string) {
   }
 }
 
-function dibujar(lienzo: HTMLCanvasElement, video: HTMLVideoElement, pose: Pose | null, destacar: 'bien' | 'mal' | null) {
+/**
+ * El esqueleto de la persona seguida en color y el de las demás en gris tenue
+ * (para que se vea que no se las tiene en cuenta).
+ */
+function dibujar(lienzo: HTMLCanvasElement, video: HTMLVideoElement, pose: Pose | null, otras: readonly Pose[], destacar: 'bien' | 'mal' | null) {
   const w = video.videoWidth;
   const h = video.videoHeight;
   if (!w || !h) return;
@@ -95,10 +103,22 @@ function dibujar(lienzo: HTMLCanvasElement, video: HTMLVideoElement, pose: Pose 
   const g = lienzo.getContext('2d');
   if (!g) return;
   g.clearRect(0, 0, w, h);
-  if (!pose) return;
-  const p = pose.imagen;
   const grosor = Math.max(3, w / 160);
   g.lineCap = 'round';
+  const huesos = (p: Pose['imagen']) => {
+    for (const [a, b] of HUESOS) {
+      if ((p[a].visibility ?? 1) < 0.4 || (p[b].visibility ?? 1) < 0.4) continue;
+      g.beginPath();
+      g.moveTo(p[a].x * w, p[a].y * h);
+      g.lineTo(p[b].x * w, p[b].y * h);
+      g.stroke();
+    }
+  };
+  g.strokeStyle = 'rgba(183, 189, 201, 0.35)';
+  g.lineWidth = grosor * 0.6;
+  for (const o of otras) if (o !== pose) huesos(o.imagen);
+  if (!pose) return;
+  const p = pose.imagen;
   g.strokeStyle = destacar === 'mal' ? '#FF6B57' : destacar === 'bien' ? '#33D67F' : 'rgba(200, 247, 81, 0.9)';
   g.lineWidth = grosor;
   for (const [a, b] of HUESOS) {
@@ -149,6 +169,8 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
   const flujo = useRef<MediaStream | null>(null);
   const detector = useRef<PoseLandmarker | null>(null);
   const contador = useRef(new ContadorSentadilla());
+  /** A quién se sigue entre la gente que se ve (se elige al preparar cada serie). */
+  const seguidor = useRef(new Seguidor());
   const bloqueo = useRef<{ release(): Promise<void> } | null>(null);
   /** La vertical medida de pie al preparar (sirve aunque el celular esté torcido). */
   const eje = useRef<Ejes>(ARRIBA);
@@ -201,6 +223,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
         const [d] = await Promise.all([cargarDetector(), encenderCamara(usarFrontal)]);
         detector.current = d;
         contador.current = new ContadorSentadilla();
+        seguidor.current = new Seguidor();
         eje.current = ARRIBA;
         setCuenta(0);
         setUltima(null);
@@ -246,6 +269,8 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
     let fueraDesde: number | null = null;
     let ultimoVivo = 0;
     let preparando = fase === 'preparando';
+    let sinVerla = 0;
+    let piesAlParar: Ancla | null = null;
     let fallos = 0;
 
     const bucle = () => {
@@ -254,9 +279,9 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       ultimoCuadro = v.currentTime;
       const ahora = performance.now();
       const t = ahora / 1000;
-      let pose: Pose | null = null;
+      let poses: Pose[] = [];
       try {
-        pose = detectar(d, v, ahora);
+        poses = detectar(d, v, ahora);
         fallos = 0;
       } catch {
         // Un cuadro que falla se salta; si fallan todos, el celular no puede.
@@ -268,9 +293,20 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
         }
         return;
       }
-      const lectura = medirSentadilla(pose, eje.current);
+      // La persona seguida: al preparar, la principal (la de adelante); después,
+      // la que tiene los pies donde los tenía ella, aunque pase más gente.
+      const seg = seguidor.current;
+      if (preparando && !seg.ancla) {
+        const principal = elegirPrincipal(poses);
+        if (principal) seg.fijar(principal);
+      }
+      const pose = seg.elegir(poses);
+      if (pose) sinVerla = 0;
+      else if (preparando && ++sinVerla > CUADROS_PARA_SOLTAR) seg.soltar(); // se fue: elegir de nuevo
+      const lectura: Lectura =
+        !pose && poses.length && seg.ancla ? { tipo: 'incompleto', motivo: 'Alguien se cruzó: te espero.' } : medirSentadilla(pose, eje.current);
       if (destacado && t > destacado.hasta) destacado = null;
-      dibujar(c, v, pose, destacado?.tipo ?? null);
+      dibujar(c, v, pose, poses, destacado?.tipo ?? null);
 
       let mensaje: string | null = lectura.tipo === 'incompleto' ? lectura.motivo : null;
       let terminaEn: number | null = null;
@@ -279,13 +315,20 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       if (preparando) {
         // Esperar a verla de pie y quieta un momento (de perfil o de frente): de
         // ahí salen la vertical y los largos del muslo y el torso.
-        if (lectura.tipo === 'ok' && lectura.cuadro.muslo >= UMBRALES.arriba && pose) {
-          deEsDesde ??= t;
+        // Quieta: los pies no se movieron desde que se paró (quien camina no cuenta).
+        const pies = pose ? anclaDe(pose) : null;
+        const quieta = !!pies && (!piesAlParar || Math.hypot(pies.x - piesAlParar.x, pies.y - piesAlParar.y) < 0.3 * piesAlParar.tibia);
+        if (lectura.tipo === 'ok' && lectura.cuadro.muslo >= UMBRALES.arriba && pose && quieta) {
+          if (deEsDesde === null) {
+            deEsDesde = t;
+            piesAlParar = pies;
+          }
           const e = ejeDePie(pose);
           if (e) ejes.push(e);
           mensaje = 'Quédate de pie un momento…';
           if (t - deEsDesde >= S_PARA_EMPEZAR && ejes.length) {
             eje.current = promedioEjes(ejes);
+            seg.fijar(pose); // desde aquí se sigue a esta persona
             preparando = false;
             ultimoMovimiento = t;
             setFase('contando');
@@ -293,6 +336,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
           }
         } else {
           deEsDesde = null;
+          piesAlParar = null;
           ejes.length = 0;
           if (lectura.tipo === 'ok') mensaje = 'Párate derecho para empezar.';
         }

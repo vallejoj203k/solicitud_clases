@@ -25,7 +25,8 @@ export function cargarDetector(): Promise<PoseLandmarker> {
       PoseLandmarker.createFromOptions(archivos, {
         baseOptions: { modelAssetPath: MODELO, delegate },
         runningMode: 'VIDEO',
-        numPoses: 1,
+        // Varias personas: en el gimnasio pasa gente; se sigue a una (ver seguimiento.ts).
+        numPoses: 3,
         minPoseDetectionConfidence: 0.5,
         minPosePresenceConfidence: 0.5,
         minTrackingConfidence: 0.5,
@@ -40,9 +41,9 @@ export function cargarDetector(): Promise<PoseLandmarker> {
   return promesa;
 }
 
-/** La pose de un cuadro del video, o null si no hay nadie. */
-export function detectar(detector: PoseLandmarker, video: HTMLVideoElement, ms: number): Pose | null {
+/** Las personas que se ven en un cuadro del video (puede no haber ninguna). */
+export function detectar(detector: PoseLandmarker, video: HTMLVideoElement, ms: number): Pose[] {
   const r = detector.detectForVideo(video, ms);
-  if (!r.landmarks.length || !r.worldLandmarks.length) return null;
-  return { imagen: r.landmarks[0], mundo: r.worldLandmarks[0], aspecto: video.videoWidth / (video.videoHeight || 1) };
+  const aspecto = video.videoWidth / (video.videoHeight || 1);
+  return r.landmarks.map((imagen, i) => ({ imagen, mundo: r.worldLandmarks[i], aspecto })).filter((p) => p.mundo?.length);
 }

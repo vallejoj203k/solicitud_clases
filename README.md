@@ -515,6 +515,16 @@ poses sintéticas):
 - Si se deja de ver a la persona en medio de una repetición y vuelve, la repetición
   cuenta; si fue más de 1,5 s, como mal hecha por «no se vio completa» (con el consejo
   de alejarse). Si no vuelve en 6 s, esa no cuenta.
+- **Con gente alrededor, sigue a una sola persona** (`client/src/ejercicio/seguimiento.ts`).
+  El detector ve hasta 3 personas por cuadro. Al preparar se elige la principal: la que
+  se ve más grande de cuerpo entero (la que está al frente), de pie y quieta 1 s (quien
+  camina no cuenta). Desde ahí se la sigue **por los pies**, que en una sentadilla no se
+  mueven: en cada cuadro se toma a quien tenga los tobillos donde los tenía ella y se vea
+  del mismo tamaño (0,8 a 1,25 veces su último tamaño, que se va actualizando porque de
+  frente la tibia se ve más corta al bajar). Quien pase por delante (más grande, pies más
+  abajo) o por detrás (más chico) se ignora y se dibuja en gris; si tapa a quien entrena
+  un momento, la pantalla dice «Alguien se cruzó: te espero» y sigue con la misma
+  persona cuando vuelve a verse. Cada serie elige de nuevo (si cambia quien entrena).
 - **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
   o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
   (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
