@@ -11,11 +11,13 @@ import {
   ContadorSentadilla,
   ejeDePie,
   promedioEjes,
+  UMBRALES,
   ETIQUETA_FALLA,
   medirSentadilla,
   resumir,
   VOZ_FALLA,
   type Ejes,
+  type Vista,
   type Repeticion,
   type Resumen,
 } from './sentadilla';
@@ -51,6 +53,7 @@ interface Vivo {
   mensaje: string | null;
   profundidad: number;
   terminaEn: number | null;
+  vista: Vista | null;
 }
 
 interface SerieHecha {
@@ -138,7 +141,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
   const [voz, setVoz] = useState(leerVoz);
   const [cuenta, setCuenta] = useState(0);
   const [ultima, setUltima] = useState<Repeticion | null>(null);
-  const [vivo, setVivo] = useState<Vivo>({ mensaje: null, profundidad: 0, terminaEn: null });
+  const [vivo, setVivo] = useState<Vivo>({ mensaje: null, profundidad: 0, terminaEn: null, vista: null });
   const [series, setSeries] = useState<SerieHecha[]>([]);
 
   const video = useRef<HTMLVideoElement>(null);
@@ -274,13 +277,9 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       const cont = contador.current;
 
       if (preparando) {
-        // Esperar a verla de perfil, de pie y quieta un momento; de ahí sale la
-        // vertical. De frente no se mide bien la profundidad: se pide ponerse de lado.
-        if (lectura.tipo === 'ok' && lectura.cuadro.vista === 'frente') {
-          deEsDesde = null;
-          ejes.length = 0;
-          mensaje = 'Ponte de lado (de perfil) a la cámara para empezar.';
-        } else if (lectura.tipo === 'ok' && lectura.cuadro.rodilla >= 160 && pose) {
+        // Esperar a verla de pie y quieta un momento (de perfil o de frente): de
+        // ahí salen la vertical y los largos del muslo y el torso.
+        if (lectura.tipo === 'ok' && lectura.cuadro.muslo >= UMBRALES.arriba && pose) {
           deEsDesde ??= t;
           const e = ejeDePie(pose);
           if (e) ejes.push(e);
@@ -323,7 +322,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       }
       if (ahora - ultimoVivo > 100) {
         ultimoVivo = ahora;
-        setVivo({ mensaje, profundidad: preparando ? 0 : cont.profundidad(), terminaEn });
+        setVivo({ mensaje, profundidad: preparando ? 0 : cont.profundidad(), terminaEn, vista: lectura.tipo === 'ok' ? lectura.cuadro.vista : null });
       }
     };
     raf = requestAnimationFrame(bucle);
@@ -404,6 +403,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-humo-500">Repeticiones</p>
               <p className="text-6xl font-extrabold tabular-nums leading-none">{cuenta}</p>
+              {vivo.vista && <p className="mt-1 text-[11px] font-semibold text-humo-300">{vivo.vista === 'frente' ? 'De frente' : 'De perfil'}</p>}
             </div>
             {ultima && (
               <div

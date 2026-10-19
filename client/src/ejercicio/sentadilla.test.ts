@@ -153,6 +153,25 @@ describe('contador', () => {
     expect(resumir(reps).consejos[0]).toMatch(/pecho arriba/);
   });
 
+  it('de frente también: 10 repeticiones, 8 buenas y 2 cortas', () => {
+    const reps = serie([BUENA, BUENA, BUENA, CORTA, BUENA, BUENA, BUENA, BUENA, CORTA, BUENA], 'frente');
+    expect(reps.every((r) => r.vista === 'frente')).toBe(true);
+    const r = resumir(reps);
+    expect([r.total, r.buenas, r.malas]).toEqual([10, 8, 2]);
+    expect(reps[3].fallas).toEqual(['profundidad']);
+    expect(reps[8].fallas).toEqual(['profundidad']);
+  });
+
+  it('de frente: media sentadilla, el paralelo justo y el torso muy inclinado', () => {
+    const reps = serie([{ muslo: 40, torso: 30 }, { muslo: 5, torso: 40 }, { muslo: 18, torso: 40 }, { muslo: -5, torso: 70 }], 'frente');
+    expect(reps.map((r) => r.fallas)).toEqual([['profundidad'], [], ['profundidad'], ['torso']]);
+  });
+
+  it('de frente con el celular torcido y con ruido', () => {
+    const reps = serie([BUENA, CORTA, BUENA, BUENA], 'frente', { inclinacion: 8, ruido: 0.01 });
+    expect(reps.map((r) => r.buena)).toEqual([true, false, true, true]);
+  });
+
   it('rodillas hacia adentro (de frente)', () => {
     const reps = serie([BUENA, { ...BUENA, valgo: 0.07 }], 'frente');
     expect(reps.map((r) => r.buena)).toEqual([true, false]);
@@ -174,7 +193,7 @@ describe('contador', () => {
   });
 
   it('media sentadilla y cuarto de sentadilla cuentan, como mal hechas', () => {
-    const reps = serie([BUENA, { muslo: 40, torso: 30 }, { muslo: 65, torso: 20 }, BUENA], 'perfil');
+    const reps = serie([BUENA, { muslo: 40, torso: 30 }, { muslo: 60, torso: 20 }, BUENA], 'perfil');
     expect(reps.length).toBe(4);
     expect(reps.map((r) => r.buena)).toEqual([true, false, false, true]);
     expect(reps[1].fallas).toEqual(['profundidad']);

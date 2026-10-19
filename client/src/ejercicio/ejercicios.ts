@@ -19,7 +19,7 @@ export const EJERCICIOS: Ejercicio[] = [
     equipo: 'Rack de sentadilla libre',
     preparacion: [
       'Pon el celular vertical en el soporte, más o menos a la altura de la rodilla, a unos 2 metros del rack.',
-      'Párate de lado a la cámara (de perfil): así se mide bien la profundidad y la espalda.',
+      'Párate de lado o de frente a la cámara. De lado se mide mejor la espalda; de frente, además, si las rodillas se van hacia adentro.',
       'Que se vea tu cuerpo entero, de la cabeza a los pies (la cabeza puede quedar justo en el borde). Si no cabes, aléjate un paso o usa «Cambiar cámara»: la de atrás suele ver más ancho.',
       'Cuando la pantalla diga «¡Listo!», haz tu serie. Al terminar, quédate de pie unos segundos o toca «Terminar serie».',
     ],

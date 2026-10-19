@@ -3,11 +3,11 @@ import { angulo, GRADOS, medio, P, visible, type Lado, type Pose, type Punto } f
 /**
  * Sentadilla libre: cuenta repeticiones y dice cuáles estuvieron bien hechas.
  *
- * Cada cuadro de la cámara se convierte en unas pocas medidas (`medirSentadilla`):
- * el ángulo de la rodilla, cuánto baja el muslo, cuánto se inclina el torso y,
- * de frente, si las rodillas se van hacia adentro. El contador (`ContadorSentadilla`)
- * sigue la rodilla: de pie → baja → sube → de pie es una repetición, y al
- * terminarla la evalúa con lo peor que pasó en ella.
+ * Se puede filmar de perfil o de frente. Cada cuadro de la cámara se convierte en
+ * unas pocas medidas (`medirSentadilla`): cuánto baja el muslo, cuánto se inclina
+ * el torso y, de frente, si las rodillas se van hacia adentro. El contador
+ * (`ContadorSentadilla`) sigue el muslo: de pie → baja → sube → de pie es una
+ * repetición, y al terminarla la evalúa con lo peor que pasó en ella.
  *
  * Todo es lógica pura (sin cámara ni detector): se prueba con poses sintéticas.
  *
@@ -17,16 +17,20 @@ import { angulo, GRADOS, medio, P, visible, type Lado, type Pose, type Punto } f
  */
 
 export const UMBRALES = {
-  /** Rodilla (grados) desde la que se considera que está de pie. */
-  arriba: 160,
-  /** Rodilla por debajo de la cual empezó a bajar. */
-  inicio: 155,
   /**
-   * Si la rodilla no bajó de aquí, fue un acomodo y no una repetición. Alto a
-   * propósito: una media sentadilla o un cuarto de sentadilla SÍ cuentan (como
-   * mal hechas por profundidad); solo se ignora doblar apenas las rodillas.
+   * Las fases salen del muslo (grados sobre la horizontal: ~85-90 de pie, 0 en
+   * el paralelo), que se mide igual de perfil y de frente. De pie: muslo ≥ 75.
    */
-  minimaRepeticion: 150,
+  arriba: 75,
+  /** Muslo por debajo del cual empezó a bajar. */
+  inicio: 72,
+  /**
+   * Si el muslo no bajó de aquí, fue un acomodo y no una repetición. Alto a
+   * propósito (equivale a doblar la rodilla a ~150°): una media sentadilla o un
+   * cuarto de sentadilla SÍ cuentan (como mal hechas por profundidad); solo se
+   * ignora doblar apenas las rodillas.
+   */
+  minimaRepeticion: 65,
   /** Una repetición dura al menos esto (s): menos es ruido del detector. */
   duracionMinima: 0.5,
   /**
@@ -54,7 +58,7 @@ export type Vista = 'perfil' | 'frente';
 
 export interface Cuadro {
   vista: Vista;
-  /** Ángulo de la rodilla (180 = estirada). */
+  /** Ángulo de la rodilla (180 = estirada). De frente es aproximado (puntos 3D): solo informativo. */
   rodilla: number;
   /** Inclinación del muslo sobre la horizontal: 90 de pie, 0 paralelo, negativo por debajo. */
   muslo: number;
@@ -80,8 +84,16 @@ const recortar = (x: number) => Math.max(-1, Math.min(1, x));
 export interface Ejes {
   mundo: readonly number[];
   imagen: readonly number[];
+  /**
+   * Largos de pie, en la imagen: el muslo (cadera → rodilla) y el torso (caderas →
+   * hombros). De pie los dos quedan verticales, de perfil y de frente. De frente,
+   * cuánto se acorta cada uno en la vertical dice cuánto se inclinó hacia la
+   * cámara. 0 si no se midieron.
+   */
+  muslo: number;
+  torso: number;
 }
-export const ARRIBA: Ejes = { mundo: [0, -1, 0], imagen: [0, -1] };
+export const ARRIBA: Ejes = { mundo: [0, -1, 0], imagen: [0, -1], muslo: 0, torso: 0 };
 
 /** Punto de la imagen en unidades iguales en x e y (x por la proporción del video). */
 const enImagen = (pose: Pose, i: number) => [pose.imagen[i].x * pose.aspecto, pose.imagen[i].y];
@@ -100,17 +112,32 @@ export function ejeDePie(pose: Pose): Ejes | null {
   const w = [(hom[0][0] + hom[1][0] - pie[0][0] - pie[1][0]) / 2, (hom[0][1] + hom[1][1] - pie[0][1] - pie[1][1]) / 2];
   const nw = norma(w);
   if (n < 0.5 || nw < 0.1) return null;
-  return { mundo: v.map((x) => x / n), imagen: w.map((x) => x / nw) };
+  const arriba = w.map((x) => x / nw);
+  // Muslo: el promedio de las piernas que se ven bien; torso: entre los puntos medios.
+  const piernas = (['izq', 'der'] as Lado[]).filter((l) => visible(pose.imagen[P.cadera[l]]) && visible(pose.imagen[P.rodilla[l]]));
+  const muslo = piernas.length
+    ? piernas.reduce((s, l) => s + escalar(dif(enImagen(pose, P.cadera[l]), enImagen(pose, P.rodilla[l])), arriba), 0) / piernas.length
+    : 0;
+  const torso = escalar(dif(mitad(pose, P.hombro.izq, P.hombro.der), mitad(pose, P.cadera.izq, P.cadera.der)), arriba);
+  return { mundo: v.map((x) => x / n), imagen: arriba, muslo: Math.max(0, muslo), torso: Math.max(0, torso) };
 }
+
+const dif = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1]];
+const mitad = (pose: Pose, i: number, j: number) => {
+  const a = enImagen(pose, i);
+  const b = enImagen(pose, j);
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+};
 
 /** Promedio de varios ejes (los cuadros de pie al preparar). */
 export function promedioEjes(ejes: Ejes[]): Ejes {
-  const suma = (k: keyof Ejes) => {
+  const suma = (k: 'mundo' | 'imagen') => {
     const s = ejes.reduce((a, e) => a.map((x, i) => x + e[k][i]), ejes[0][k].map(() => 0));
     const n = norma(s) || 1;
     return s.map((x) => x / n);
   };
-  return ejes.length ? { mundo: suma('mundo'), imagen: suma('imagen') } : ARRIBA;
+  const media = (k: 'muslo' | 'torso') => ejes.reduce((s, e) => s + e[k], 0) / ejes.length;
+  return ejes.length ? { mundo: suma('mundo'), imagen: suma('imagen'), muslo: media('muslo'), torso: media('torso') } : ARRIBA;
 }
 
 /** Ángulo (grados) del segmento a→b sobre la horizontal, según la vertical `arriba`. */
@@ -126,11 +153,18 @@ function angulo2d(a: number[], b: number[], c: number[]) {
 
 /**
  * Medidas de un cuadro, o por qué no se puede medir. Para la sentadilla basta ver
- * de un lado hombro, cadera, rodilla y tobillo: la cabeza puede quedar fuera.
+ * hombro, cadera, rodilla y tobillo (de un lado de perfil, de los dos de frente):
+ * la cabeza puede quedar fuera.
  *
- * De perfil (lo recomendado) los ángulos salen de la imagen: la pierna y el torso
- * quedan en el plano de la foto y la imagen es mucho más exacta que la
- * profundidad 3D que estima el detector. De frente salen de los puntos en metros.
+ * Todo sale de la imagen, que es mucho más exacta que la profundidad 3D que
+ * estima el detector:
+ * - De perfil, la pierna y el torso quedan en el plano de la foto: los ángulos se
+ *   miden directo.
+ * - De frente, el muslo y el torso se inclinan hacia la cámara y se ven más
+ *   cortos. La profundidad sale de la altura de la cadera respecto a la rodilla
+ *   (con el celular a la altura de la rodilla, en el paralelo están a la misma
+ *   altura), en proporción al largo del muslo de pie; la inclinación del torso,
+ *   de cuánto se acortó. Y las rodillas se comparan con los tobillos.
  */
 export function medirSentadilla(pose: Pose | null, ejes: Ejes = ARRIBA): Lectura {
   if (!pose || !pose.imagen?.length || !pose.mundo?.length) return { tipo: 'incompleto', motivo: 'No te veo: párate frente al celular.' };
@@ -142,7 +176,7 @@ export function medirSentadilla(pose: Pose | null, ejes: Ejes = ARRIBA): Lectura
   const clave = [P.hombro[lado], P.cadera[lado], P.rodilla[lado], P.tobillo[lado]];
   if (!visible(im[P.tobillo[lado]]) || !dentro(im[P.tobillo[lado]])) return { tipo: 'incompleto', motivo: 'No se ven los pies: aléjate un paso o inclina el celular hacia abajo.' };
   if (!dentro(im[P.hombro[lado]])) return { tipo: 'incompleto', motivo: 'No se ven los hombros: aléjate un paso o inclina el celular hacia arriba.' };
-  if (!clave.every((i) => visible(im[i]))) return { tipo: 'incompleto', motivo: 'No te veo bien: ponte de lado, con el cuerpo entero en la imagen.' };
+  if (!clave.every((i) => visible(im[i]))) return { tipo: 'incompleto', motivo: 'No te veo bien: que se vea tu cuerpo entero en la imagen.' };
 
   // De frente los hombros se ven anchos; de perfil, casi uno encima del otro.
   const hi = enImagen(pose, P.hombro.izq);
@@ -164,16 +198,30 @@ export function medirSentadilla(pose: Pose | null, ejes: Ejes = ARRIBA): Lectura
     };
   }
 
+  // De frente hacen falta las dos piernas.
+  const otro: Lado = lado === 'izq' ? 'der' : 'izq';
+  if (![P.cadera[otro], P.rodilla[otro], P.tobillo[otro]].every((i) => visible(im[i]) && dentro(im[i]))) {
+    return { tipo: 'incompleto', motivo: 'No se ven bien las dos piernas: que se vea tu cuerpo entero en la imagen.' };
+  }
+  const arriba = ejes.imagen;
+  const lateral = [-arriba[1], arriba[0]];
   let rodilla = 0;
   let muslo = 0;
   for (const l of ['izq', 'der'] as Lado[]) {
     rodilla += angulo(mu[P.cadera[l]], mu[P.rodilla[l]], mu[P.tobillo[l]]) / 2;
-    muslo += sobreHorizontal(resta(mu[P.cadera[l]], mu[P.rodilla[l]]), ejes.mundo) / 2;
+    muslo +=
+      (ejes.muslo > 0
+        ? grados(Math.asin(recortar(escalar(dif(enImagen(pose, P.cadera[l]), enImagen(pose, P.rodilla[l])), arriba) / ejes.muslo)))
+        : sobreHorizontal(resta(mu[P.cadera[l]], mu[P.rodilla[l]]), ejes.mundo)) / 2;
   }
-  const tronco = resta(medio(mu[P.hombro.izq], mu[P.hombro.der]), medio(mu[P.cadera.izq], mu[P.cadera.der]));
-  const torso = desdeVertical(tronco, ejes.mundo);
-  const tobillos = Math.abs(mu[P.tobillo.izq].x - mu[P.tobillo.der].x);
-  const apertura = tobillos > 0.08 ? Math.abs(mu[P.rodilla.izq].x - mu[P.rodilla.der].x) / tobillos : null;
+  const alto = escalar(dif(mitad(pose, P.hombro.izq, P.hombro.der), mitad(pose, P.cadera.izq, P.cadera.der)), arriba);
+  const torso =
+    ejes.torso > 0
+      ? grados(Math.acos(recortar(alto / ejes.torso)))
+      : desdeVertical(resta(medio(mu[P.hombro.izq], mu[P.hombro.der]), medio(mu[P.cadera.izq], mu[P.cadera.der])), ejes.mundo);
+  const separacion = (i: number, j: number) => Math.abs(escalar(dif(enImagen(pose, i), enImagen(pose, j)), lateral));
+  const tobillos = separacion(P.tobillo.izq, P.tobillo.der);
+  const apertura = tobillos > 0.02 ? separacion(P.rodilla.izq, P.rodilla.der) / tobillos : null;
   return { tipo: 'ok', cuadro: { vista, rodilla, muslo, torso, apertura } };
 }
 
@@ -243,9 +291,9 @@ export class ContadorSentadilla {
     this.actual = c;
 
     if (this.fase === 'arriba') {
-      if (c.rodilla >= this.u.arriba) this.dePie = true;
+      if (c.muslo >= this.u.arriba) this.dePie = true;
       if (!this.dePie) return null;
-      if (c.rodilla < this.u.inicio) {
+      if (c.muslo < this.u.inicio) {
         this.fase = 'bajando';
         this.enCurso = { inicio: t, fondo: t, vista: c.vista, rodillaMin: c.rodilla, musloMin: c.muslo, torsoMax: c.torso, aperturaMin: null, sinVer: false };
       }
@@ -253,21 +301,21 @@ export class ContadorSentadilla {
     }
 
     const r = this.enCurso!;
-    if (c.rodilla < r.rodillaMin) {
-      r.rodillaMin = c.rodilla;
+    if (c.muslo < r.musloMin) {
+      r.musloMin = c.muslo;
       r.fondo = t;
     }
-    r.musloMin = Math.min(r.musloMin, c.muslo);
+    r.rodillaMin = Math.min(r.rodillaMin, c.rodilla);
     r.torsoMax = Math.max(r.torsoMax, c.torso);
     // Las rodillas se miran en la parte baja, que es donde se cierran.
-    const abajo = c.rodilla < (this.u.inicio + this.u.minimaRepeticion) / 2;
+    const abajo = c.muslo < (this.u.inicio + this.u.minimaRepeticion) / 2;
     if (abajo && c.apertura !== null) r.aperturaMin = Math.min(r.aperturaMin ?? Infinity, c.apertura);
-    if (this.fase === 'bajando' && c.rodilla > r.rodillaMin + 10) this.fase = 'subiendo';
+    if (this.fase === 'bajando' && c.muslo > r.musloMin + 10) this.fase = 'subiendo';
 
-    if (c.rodilla >= this.u.arriba) {
+    if (c.muslo >= this.u.arriba) {
       this.fase = 'arriba';
       this.enCurso = null;
-      if (r.rodillaMin > this.u.minimaRepeticion || t - r.inicio < this.u.duracionMinima) return null;
+      if (r.musloMin > this.u.minimaRepeticion || t - r.inicio < this.u.duracionMinima) return null;
       const rep = this.evaluar(r, t);
       this.repeticiones.push(rep);
       return rep;
