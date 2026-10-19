@@ -326,10 +326,11 @@ export class ContadorSentadilla {
   private evaluar(r: EnCurso, fin: number): Repeticion {
     const u = this.u;
     const fallas: Falla[] = [];
-    if (r.musloMin > u.muslo) fallas.push('profundidad');
+    // Si se la dejó de ver un rato (alguien se cruzó), la profundidad vale si se la
+    // vio llegar al paralelo; si no, no se sabe: "no se vio completa".
+    if (r.musloMin > u.muslo) fallas.push(r.sinVer ? 'fuera' : 'profundidad');
     if (r.torsoMax > u.torso) fallas.push('torso');
     if (r.vista === 'frente' && r.aperturaMin !== null && r.aperturaMin < u.apertura) fallas.push('rodillas');
-    if (r.sinVer) fallas.push('fuera');
     const bajada = r.fondo - r.inicio;
     const notas: Nota[] = bajada < u.bajadaRapida ? ['rapido'] : [];
     return {
