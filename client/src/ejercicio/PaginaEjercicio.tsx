@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import type { PoseLandmarker } from '@mediapipe/tasks-vision';
 import { Boton as BotonJs, cx } from '../components/ui.jsx';
 import { IconoAtras } from '../components/Iconos.jsx';
-import { cargarDetector, detectar } from './detector';
+import { cargarDetector, detectar, modoVarias } from './detector';
 import { ejercicioDe, type Ejercicio } from './ejercicios';
 import { HUESOS, type Pose } from './puntos';
 import { anclaDe, elegirPrincipal, Seguidor, type Ancla } from './seguimiento';
@@ -42,6 +42,8 @@ type Fase = 'inicio' | 'cargando' | 'preparando' | 'contando' | 'resultado' | 'e
 
 /** Al preparar, cuadros sin ver a la persona elegida antes de elegir a otra. */
 const CUADROS_PARA_SOLTAR = 15;
+/** Cuadros seguidos viendo solo a la persona seguida para volver a buscar una sola. */
+const CUADROS_SOLA_PARA_UNA = 20;
 /** Segundos de pie y quieto para arrancar la serie. */
 const S_PARA_EMPEZAR = 1;
 /** Con al menos una repetición: segundos de pie sin bajar para terminar la serie solo. */
@@ -270,12 +272,28 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
     let ultimoVivo = 0;
     let preparando = fase === 'preparando';
     let sinVerla = 0;
+    let cuadrosSola = 0;
+    // Al preparar se buscan varias personas para elegir a la principal.
+    let varias = false;
+    let cambiandoModo = false;
+    const ponerModo = (v2: boolean) => {
+      if (cambiandoModo || v2 === varias) return;
+      cambiandoModo = true;
+      modoVarias(d, v2)
+        .then(() => {
+          varias = v2;
+          cuadrosSola = 0;
+        })
+        .catch(() => {})
+        .finally(() => (cambiandoModo = false));
+    };
+    if (preparando) ponerModo(true);
     let piesAlParar: Ancla | null = null;
     let fallos = 0;
 
     const bucle = () => {
       raf = requestAnimationFrame(bucle);
-      if (v.readyState < 2 || v.currentTime === ultimoCuadro) return;
+      if (v.readyState < 2 || v.currentTime === ultimoCuadro || cambiandoModo) return;
       ultimoCuadro = v.currentTime;
       const ahora = performance.now();
       const t = ahora / 1000;
@@ -303,6 +321,13 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       const pose = seg.elegir(poses);
       if (pose) sinVerla = 0;
       else if (preparando && ++sinVerla > CUADROS_PARA_SOLTAR) seg.soltar(); // se fue: elegir de nuevo
+      // Modo del detector: una persona (lo normal) o varias (con gente alrededor).
+      // Si lo que ve no es la persona seguida, pasa a varias para encontrarla entre
+      // todos; cuando vuelve a estar sola un rato, vuelve a una.
+      const sola = poses.length <= 1 && (!!pose || poses.length === 0);
+      cuadrosSola = sola ? cuadrosSola + 1 : 0;
+      if (!preparando && !varias && poses.length > 0 && !pose) ponerModo(true);
+      else if (!preparando && varias && cuadrosSola >= CUADROS_SOLA_PARA_UNA) ponerModo(false);
       const lectura: Lectura =
         !pose && poses.length && seg.ancla ? { tipo: 'incompleto', motivo: 'Alguien se cruzó: te espero.' } : medirSentadilla(pose, eje.current);
       if (destacado && t > destacado.hasta) destacado = null;
@@ -329,6 +354,7 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
           if (t - deEsDesde >= S_PARA_EMPEZAR && ejes.length) {
             eje.current = promedioEjes(ejes);
             seg.fijar(pose); // desde aquí se sigue a esta persona
+            if (cuadrosSola >= 5) ponerModo(false);
             preparando = false;
             ultimoMovimiento = t;
             setFase('contando');

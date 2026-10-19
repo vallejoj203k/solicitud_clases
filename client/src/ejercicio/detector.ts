@@ -25,8 +25,11 @@ export function cargarDetector(): Promise<PoseLandmarker> {
       PoseLandmarker.createFromOptions(archivos, {
         baseOptions: { modelAssetPath: MODELO, delegate },
         runningMode: 'VIDEO',
-        // Varias personas: en el gimnasio pasa gente; se sigue a una (ver seguimiento.ts).
-        numPoses: 3,
+        // Una persona: el detector la "sigue" de un cuadro al otro, que es rápido y
+        // estable en el fondo de la sentadilla. Con gente alrededor se pasa a varias
+        // (`modoVarias`), porque así re-detecta a todos en cada cuadro: más lento
+        // y a veces pierde a la persona cuando está muy agachada.
+        numPoses: 1,
         minPoseDetectionConfidence: 0.5,
         minPosePresenceConfidence: 0.5,
         minTrackingConfidence: 0.5,
@@ -39,6 +42,14 @@ export function cargarDetector(): Promise<PoseLandmarker> {
   })();
   promesa.catch(() => (promesa = null));
   return promesa;
+}
+
+/** Cuántas personas busca el detector en el modo con gente alrededor. */
+export const PERSONAS_CON_GENTE = 3;
+
+/** Pasa a buscar varias personas (con gente alrededor) o una sola (seguirla, lo normal). */
+export function modoVarias(detector: PoseLandmarker, varias: boolean): Promise<void> {
+  return detector.setOptions({ numPoses: varias ? PERSONAS_CON_GENTE : 1 });
 }
 
 /** Las personas que se ven en un cuadro del video (puede no haber ninguna). */

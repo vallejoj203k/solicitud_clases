@@ -516,7 +516,12 @@ poses sintéticas):
   cuenta; si fue más de 1,5 s, como mal hecha por «no se vio completa» (con el consejo
   de alejarse). Si no vuelve en 6 s, esa no cuenta.
 - **Con gente alrededor, sigue a una sola persona** (`client/src/ejercicio/seguimiento.ts`).
-  El detector ve hasta 3 personas por cuadro. Al preparar se elige la principal: la que
+  El detector trabaja en dos modos: **una persona** (lo normal: la «sigue» de un cuadro al
+  otro, rápido y estable en el fondo de la sentadilla) y **varias** (hasta 3: re-detecta a
+  todos en cada cuadro, más lento y a veces pierde a quien está muy agachado). Al
+  preparar busca varias para elegir a la principal; durante la serie, si lo que ve no es
+  la persona seguida pasa a varias para encontrarla entre todos, y cuando vuelve a estar
+  sola un rato (20 cuadros) vuelve a una. Al preparar se elige la principal: la que
   se ve más grande de cuerpo entero (la que está al frente), de pie y quieta 1 s (quien
   camina no cuenta). Desde ahí se la sigue **por los pies**, que en una sentadilla no se
   mueven: en cada cuadro se toma a quien tenga los tobillos donde los tenía ella y se vea
