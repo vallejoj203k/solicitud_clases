@@ -3,15 +3,20 @@ import { P, visible, type Lado, type Pose } from './puntos';
 /**
  * Seguir a una sola persona en un gimnasio lleno.
  *
- * El detector ve hasta varias personas por cuadro. Al empezar se elige la
- * principal (`elegirPrincipal`): la que se ve más grande de cuerpo entero, o sea
- * la que está al frente de la cámara. Desde ahí se la sigue por los pies
- * (`Seguidor`): en una sentadilla los pies no se mueven, así que en cada cuadro
- * se toma la persona cuyos tobillos están donde estaban los suyos y que se ve del
- * mismo tamaño. Quien pase por delante (más grande, pies más abajo) o por detrás
- * (más chico, pies más arriba) no coincide y se ignora; si tapa a la persona
- * seguida un momento, ese cuadro no tiene a nadie y se espera a que vuelva, sin
- * pasarse a otra.
+ * El detector busca una persona y la "sigue" de un cuadro al otro (así es
+ * rápido y estable en el fondo de la sentadilla, y quien pasa por detrás no lo
+ * desvía). Al empezar se fija a quién (`Seguidor.fijar`): la persona de pie y
+ * quieta frente a la cámara. Desde ahí cada cuadro se valida por los pies
+ * (`Seguidor.elegir`): en una sentadilla no se mueven, así que vale si los
+ * tobillos están donde estaban y se ve del mismo tamaño. Lo que no coincide es
+ * una de dos cosas (`Seguidor.clasificar`):
+ * - una falla del detector (pasa en el fondo de la sentadilla: el esqueleto está
+ *   donde estaba la persona pero con los pies mal ubicados): se ignora ese cuadro;
+ * - otra persona (su cuerpo está en otro lugar): el detector se pasó a ella. La
+ *   página la tapa en la imagen que analiza un momento para que vuelva a
+ *   encontrar a quien entrena.
+ * Con varias personas en el cuadro (`elegirPrincipal`), la principal es la más
+ * grande de cuerpo entero: la que está al frente.
  */
 
 export const SEGUIMIENTO = {
@@ -95,19 +100,62 @@ export function elegirPrincipal(poses: readonly Pose[]): Pose | null {
   return mejor;
 }
 
+/** Rectángulo de una persona en la imagen (coordenadas normalizadas del video, 0 a 1). */
+export interface Caja {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** El rectángulo que ocupan los puntos visibles de una persona. */
+export function cajaDe(pose: Pose): Caja | null {
+  const ps = pose.imagen.filter((p) => (p.visibility ?? 1) >= 0.3);
+  if (ps.length < 4) return null;
+  return {
+    x0: Math.min(...ps.map((p) => p.x)),
+    y0: Math.min(...ps.map((p) => p.y)),
+    x1: Math.max(...ps.map((p) => p.x)),
+    y1: Math.max(...ps.map((p) => p.y)),
+  };
+}
+
+/** Qué parte de la caja b queda dentro de la caja a (0 a 1). */
+export function solape(a: Caja, b: Caja): number {
+  const w = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0));
+  const h = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+  const area = (b.x1 - b.x0) * (b.y1 - b.y0);
+  return area > 0 ? (w * h) / area : 0;
+}
+
 export class Seguidor {
   ancla: Ancla | null = null;
+  /** Dónde se vio por última vez a la persona seguida. */
+  caja: Caja | null = null;
 
   constructor(private readonly s = SEGUIMIENTO) {}
 
   /** Empieza a seguir a esta persona. Devuelve false si no se le ven los pies. */
   fijar(pose: Pose): boolean {
     this.ancla = anclaDe(pose);
+    this.caja = cajaDe(pose);
     return this.ancla !== null;
   }
 
   soltar() {
     this.ancla = null;
+    this.caja = null;
+  }
+
+  /**
+   * Una pose que no pasó la validación: ¿falla del detector (está donde estaba la
+   * persona seguida) u otra persona (está en otro lado)?
+   */
+  clasificar(pose: Pose): 'falla' | 'otra' {
+    const c = cajaDe(pose);
+    if (!c || !this.caja) return 'falla';
+    // Comparten la mayor parte del lugar: es la misma persona mal detectada.
+    return solape(this.caja, c) >= 0.5 || solape(c, this.caja) >= 0.5 ? 'falla' : 'otra';
   }
 
   /** Cuánto se alejaron los pies de una pose del ancla, en largos de tibia (Infinity si no es comparable). */
@@ -138,6 +186,7 @@ export class Seguidor {
       const k = this.s.acomodo;
       const kt = this.s.acomodoTamano;
       this.ancla = { x: this.ancla.x + k * (a.x - this.ancla.x), y: this.ancla.y + k * (a.y - this.ancla.y), tibia: this.ancla.tibia + kt * (a.tibia - this.ancla.tibia) };
+      this.caja = cajaDe(mejor) ?? this.caja;
     }
     return mejor;
   }

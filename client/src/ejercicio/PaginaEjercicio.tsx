@@ -3,10 +3,10 @@ import { Link, useParams } from 'react-router-dom';
 import type { PoseLandmarker } from '@mediapipe/tasks-vision';
 import { Boton as BotonJs, cx } from '../components/ui.jsx';
 import { IconoAtras } from '../components/Iconos.jsx';
-import { cargarDetector, detectar, modoVarias } from './detector';
+import { cargarDetector, detectar } from './detector';
 import { ejercicioDe, type Ejercicio } from './ejercicios';
 import { HUESOS, type Pose } from './puntos';
-import { anclaDe, elegirPrincipal, Seguidor, type Ancla } from './seguimiento';
+import { anclaDe, cajaDe, elegirPrincipal, Seguidor, type Ancla, type Caja } from './seguimiento';
 import {
   ARRIBA,
   ContadorSentadilla,
@@ -42,8 +42,6 @@ type Fase = 'inicio' | 'cargando' | 'preparando' | 'contando' | 'resultado' | 'e
 
 /** Al preparar, cuadros sin ver a la persona elegida antes de elegir a otra. */
 const CUADROS_PARA_SOLTAR = 15;
-/** Cuadros seguidos viendo solo a la persona seguida para volver a buscar una sola. */
-const CUADROS_SOLA_PARA_UNA = 20;
 /** Segundos de pie y quieto para arrancar la serie. */
 const S_PARA_EMPEZAR = 1;
 /** Con al menos una repetición: segundos de pie sin bajar para terminar la serie solo. */
@@ -272,34 +270,39 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
     let ultimoVivo = 0;
     let preparando = fase === 'preparando';
     let sinVerla = 0;
-    let cuadrosSola = 0;
-    // Al preparar se buscan varias personas para elegir a la principal.
-    let varias = false;
-    let cambiandoModo = false;
-    const ponerModo = (v2: boolean) => {
-      if (cambiandoModo || v2 === varias) return;
-      cambiandoModo = true;
-      modoVarias(d, v2)
-        .then(() => {
-          varias = v2;
-          cuadrosSola = 0;
-        })
-        .catch(() => {})
-        .finally(() => (cambiandoModo = false));
-    };
-    if (preparando) ponerModo(true);
+    // Otras personas a las que el detector se pasó: se tapan en una copia del
+    // cuadro un momento para que vuelva a encontrar a quien entrena.
+    let tapadas: { caja: Caja; hasta: number }[] = [];
+    const copia = document.createElement('canvas');
     let piesAlParar: Ancla | null = null;
     let fallos = 0;
 
     const bucle = () => {
       raf = requestAnimationFrame(bucle);
-      if (v.readyState < 2 || v.currentTime === ultimoCuadro || cambiandoModo) return;
+      if (v.readyState < 2 || v.currentTime === ultimoCuadro) return;
       ultimoCuadro = v.currentTime;
       const ahora = performance.now();
       const t = ahora / 1000;
       let poses: Pose[] = [];
+      tapadas = tapadas.filter((x) => x.hasta > t);
+      let fuente: HTMLVideoElement | HTMLCanvasElement = v;
+      if (tapadas.length) {
+        const w = v.videoWidth;
+        const h = v.videoHeight;
+        if (copia.width !== w || copia.height !== h) {
+          copia.width = w;
+          copia.height = h;
+        }
+        const g = copia.getContext('2d');
+        if (g) {
+          g.drawImage(v, 0, 0, w, h);
+          g.fillStyle = '#000';
+          for (const { caja } of tapadas) g.fillRect(caja.x0 * w, caja.y0 * h, (caja.x1 - caja.x0) * w, (caja.y1 - caja.y0) * h);
+          fuente = copia;
+        }
+      }
       try {
-        poses = detectar(d, v, ahora);
+        poses = detectar(d, fuente, ahora, v.videoWidth / (v.videoHeight || 1));
         fallos = 0;
       } catch {
         // Un cuadro que falla se salta; si fallan todos, el celular no puede.
@@ -321,19 +324,28 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
       const pose = seg.elegir(poses);
       if (pose) sinVerla = 0;
       else if (preparando && ++sinVerla > CUADROS_PARA_SOLTAR) seg.soltar(); // se fue: elegir de nuevo
-      // Modo del detector: una persona (lo normal) o varias (con gente alrededor).
-      // Si lo que ve no es la persona seguida, pasa a varias para encontrarla entre
-      // todos; cuando vuelve a estar sola un rato, vuelve a una.
-      const sola = poses.length <= 1 && (!!pose || poses.length === 0);
-      cuadrosSola = sola ? cuadrosSola + 1 : 0;
-      if (!preparando && !varias && poses.length > 0 && !pose) ponerModo(true);
-      else if (!preparando && varias && cuadrosSola >= CUADROS_SOLA_PARA_UNA) ponerModo(false);
-      const lectura: Lectura =
-        !pose && poses.length && seg.ancla ? { tipo: 'incompleto', motivo: 'Alguien se cruzó: te espero.' } : medirSentadilla(pose, eje.current);
+      // Lo que no pasó la validación: una falla del detector (se ignora ese cuadro)
+      // u otra persona, que se tapa un segundo para que el detector la suelte.
+      let seCruzo = false;
+      if (!pose && seg.ancla) {
+        for (const p of poses) {
+          const caja = cajaDe(p);
+          if (!caja || seg.clasificar(p) !== 'otra') continue;
+          seCruzo = true;
+          const mx = (caja.x1 - caja.x0) * 0.25;
+          const my = (caja.y1 - caja.y0) * 0.15;
+          tapadas.push({ caja: { x0: caja.x0 - mx, y0: caja.y0 - my, x1: caja.x1 + mx, y1: caja.y1 + my }, hasta: t + 1 });
+        }
+      }
+      const lectura: Lectura = seCruzo
+        ? { tipo: 'incompleto', motivo: 'Alguien se cruzó: te espero.' }
+        : !pose && poses.length && seg.ancla
+          ? { tipo: 'incompleto', motivo: '' } // falla del detector en este cuadro: no hace falta avisar
+          : medirSentadilla(pose, eje.current);
       if (destacado && t > destacado.hasta) destacado = null;
       dibujar(c, v, pose, poses, destacado?.tipo ?? null);
 
-      let mensaje: string | null = lectura.tipo === 'incompleto' ? lectura.motivo : null;
+      let mensaje: string | null = lectura.tipo === 'incompleto' ? lectura.motivo || null : null;
       let terminaEn: number | null = null;
       const cont = contador.current;
 
@@ -354,7 +366,6 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
           if (t - deEsDesde >= S_PARA_EMPEZAR && ejes.length) {
             eje.current = promedioEjes(ejes);
             seg.fijar(pose); // desde aquí se sigue a esta persona
-            if (cuadrosSola >= 5) ponerModo(false);
             preparando = false;
             ultimoMovimiento = t;
             setFase('contando');

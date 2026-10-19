@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Pose } from './puntos';
 import { pose, type Forma, type Lugar } from './poseSintetica';
 import { elegirPrincipal, Seguidor } from './seguimiento';
+import { P } from './puntos';
 import { ContadorSentadilla, ejeDePie, medirSentadilla, resumir } from './sentadilla';
 
 /** Gimnasio de prueba: quien entrena en el centro y gente que pasa por delante y por detrás. */
@@ -33,6 +34,30 @@ describe('elegir a quién seguir', () => {
     expect(s.elegir([enFrente, atras])).toBeNull();
     const bajando = pose(BUENA, 0.3, 'perfil', 0, 0, ENTRENA);
     expect(s.elegir([enFrente, bajando, atras])).toBe(bajando);
+  });
+});
+
+describe('falla del detector u otra persona', () => {
+  const seguidor = () => {
+    const s = new Seguidor();
+    s.fijar(pose(DE_PIE, 0, 'perfil', 0, 0, ENTRENA));
+    s.elegir([pose(BUENA, 0.8, 'perfil', 0, 0, ENTRENA)]);
+    return s;
+  };
+
+  it('el esqueleto de quien entrena con los pies mal ubicados es una falla (no se tapa)', () => {
+    const s = seguidor();
+    const mal = pose(BUENA, 0.9, 'perfil', 0, 0, ENTRENA);
+    for (const l of ['izq', 'der'] as const) mal.imagen[P.tobillo[l]] = { ...mal.imagen[P.tobillo[l]], y: mal.imagen[P.tobillo[l]].y - 0.15 };
+    expect(s.elegir([mal])).toBeNull();
+    expect(s.clasificar(mal)).toBe('falla');
+  });
+
+  it('alguien a un lado es otra persona (se tapa); alguien encima, no (se espera)', () => {
+    const s = seguidor();
+    expect(s.clasificar(pose(DE_PIE, 0, 'frente', 0, 0, detras(0.12)))).toBe('otra');
+    expect(s.clasificar(pose(DE_PIE, 0, 'frente', 0, 0, delante(0.88)))).toBe('otra');
+    expect(s.clasificar(pose(DE_PIE, 0, 'frente', 0, 0, delante(0.5)))).toBe('falla');
   });
 });
 

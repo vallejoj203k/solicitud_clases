@@ -26,9 +26,7 @@ export function cargarDetector(): Promise<PoseLandmarker> {
         baseOptions: { modelAssetPath: MODELO, delegate },
         runningMode: 'VIDEO',
         // Una persona: el detector la "sigue" de un cuadro al otro, que es rápido y
-        // estable en el fondo de la sentadilla. Con gente alrededor se pasa a varias
-        // (`modoVarias`), porque así re-detecta a todos en cada cuadro: más lento
-        // y a veces pierde a la persona cuando está muy agachada.
+        // estable en el fondo de la sentadilla. Con gente alrededor, ver seguimiento.ts.
         numPoses: 1,
         minPoseDetectionConfidence: 0.5,
         minPosePresenceConfidence: 0.5,
@@ -44,17 +42,11 @@ export function cargarDetector(): Promise<PoseLandmarker> {
   return promesa;
 }
 
-/** Cuántas personas busca el detector en el modo con gente alrededor. */
-export const PERSONAS_CON_GENTE = 3;
-
-/** Pasa a buscar varias personas (con gente alrededor) o una sola (seguirla, lo normal). */
-export function modoVarias(detector: PoseLandmarker, varias: boolean): Promise<void> {
-  return detector.setOptions({ numPoses: varias ? PERSONAS_CON_GENTE : 1 });
-}
-
-/** Las personas que se ven en un cuadro del video (puede no haber ninguna). */
-export function detectar(detector: PoseLandmarker, video: HTMLVideoElement, ms: number): Pose[] {
-  const r = detector.detectForVideo(video, ms);
-  const aspecto = video.videoWidth / (video.videoHeight || 1);
+/**
+ * Las personas que se ven en un cuadro (puede no haber ninguna). La fuente es el
+ * video o una copia del cuadro con alguien tapado (ver PaginaEjercicio).
+ */
+export function detectar(detector: PoseLandmarker, fuente: HTMLVideoElement | HTMLCanvasElement, ms: number, aspecto: number): Pose[] {
+  const r = detector.detectForVideo(fuente, ms);
   return r.landmarks.map((imagen, i) => ({ imagen, mundo: r.worldLandmarks[i], aspecto })).filter((p) => p.mundo?.length);
 }

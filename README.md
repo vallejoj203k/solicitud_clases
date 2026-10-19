@@ -516,20 +516,22 @@ poses sintéticas):
   cuenta; si fue más de 1,5 s, como mal hecha por «no se vio completa» (con el consejo
   de alejarse). Si no vuelve en 6 s, esa no cuenta.
 - **Con gente alrededor, sigue a una sola persona** (`client/src/ejercicio/seguimiento.ts`).
-  El detector trabaja en dos modos: **una persona** (lo normal: la «sigue» de un cuadro al
-  otro, rápido y estable en el fondo de la sentadilla) y **varias** (hasta 3: re-detecta a
-  todos en cada cuadro, más lento y a veces pierde a quien está muy agachado). Al
-  preparar busca varias para elegir a la principal; durante la serie, si lo que ve no es
-  la persona seguida pasa a varias para encontrarla entre todos, y cuando vuelve a estar
-  sola un rato (20 cuadros) vuelve a una. Al preparar se elige la principal: la que
-  se ve más grande de cuerpo entero (la que está al frente), de pie y quieta 1 s (quien
-  camina no cuenta). Desde ahí se la sigue **por los pies**, que en una sentadilla no se
-  mueven: en cada cuadro se toma a quien tenga los tobillos donde los tenía ella y se vea
-  del mismo tamaño (0,8 a 1,25 veces su último tamaño, que se va actualizando porque de
-  frente la tibia se ve más corta al bajar). Quien pase por delante (más grande, pies más
-  abajo) o por detrás (más chico) se ignora y se dibuja en gris; si tapa a quien entrena
-  un momento, la pantalla dice «Alguien se cruzó: te espero» y sigue con la misma
-  persona cuando vuelve a verse. Cada serie elige de nuevo (si cambia quien entrena).
+  El detector busca una persona y la «sigue» de un cuadro al otro: es rápido, estable en
+  el fondo de la sentadilla y quien pasa por detrás no lo desvía. (Buscar varias personas
+  a la vez lo obligaba a re-detectar a todos en cada cuadro: más lento y perdía a quien
+  estaba muy agachado, y las repeticiones buenas salían como poca profundidad.) Al
+  preparar se fija a la persona de pie y quieta 1 s frente a la cámara (quien camina no
+  cuenta). Desde ahí cada cuadro se valida **por los pies**, que en una sentadilla no se
+  mueven: vale si los tobillos están donde estaban y se ve del mismo tamaño (0,8 a 1,25
+  veces su último tamaño, que se va actualizando porque de frente la tibia se ve más
+  corta al bajar). Lo que no coincide es:
+  - una **falla del detector** (el esqueleto está donde estaba la persona pero con los
+    pies mal ubicados, pasa en el fondo de la sentadilla): se ignora ese cuadro;
+  - **otra persona** (su cuerpo está en otro lado): el detector se pasó a ella. Se la tapa
+    con un rectángulo negro en una copia del cuadro durante 1 s para que el detector la
+    suelte y vuelva a encontrar a quien entrena. Si está encima de quien entrena
+    (tapándola de verdad), no se la tapa: la pantalla dice «Alguien se cruzó: te espero».
+  Las demás personas se dibujan en gris. Cada serie fija de nuevo (si cambia quien entrena).
 - **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
   o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
   (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
