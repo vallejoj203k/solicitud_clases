@@ -534,7 +534,8 @@ poses sintéticas):
     (tapándola de verdad), no se la tapa: la pantalla dice «Alguien se cruzó: te espero».
   Las demás personas se dibujan en gris. Cada serie fija de nuevo (si cambia quien entrena).
 - **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
-  o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
+  (contando solo mientras se la ve) o deja de verse 4 s (10 s si se ve a otras personas:
+  alguien la está tapando), con cuenta regresiva, o con el botón **Terminar serie**. Con voz
   (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
   («3, más abajo»). La pantalla no se apaga durante la serie.
 

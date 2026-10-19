@@ -48,6 +48,8 @@ const S_PARA_EMPEZAR = 1;
 const S_PARA_TERMINAR = 10;
 /** Con al menos una repetición: segundos sin ver a la persona para terminar la serie. */
 const S_FUERA_PARA_TERMINAR = 4;
+/** Lo mismo, pero si se ve a otras personas (alguien la está tapando): se espera más. */
+const S_TAPADA_PARA_TERMINAR = 10;
 /** Cuadros seguidos en los que el detector falla antes de rendirse. */
 const FALLOS_SEGUIDOS_MAX = 30;
 /** Los últimos segundos antes de terminar solo se muestran como cuenta regresiva. */
@@ -385,19 +387,21 @@ function Conteo({ ejercicio }: { ejercicio: Ejercicio }) {
           destacado = { tipo: rep.buena ? 'bien' : 'mal', hasta: t + 0.7 };
           if (vozRef.current) hablar(rep.buena ? String(rep.numero) : `${rep.numero}, ${VOZ_FALLA[rep.fallas[0]]}`);
         }
-        if (cont.fase !== 'arriba') ultimoMovimiento = t;
+        // "Quieta de pie" solo corre mientras se la ve: tapada no se sabe si se movió.
+        if (cont.fase !== 'arriba' || lectura.tipo !== 'ok') ultimoMovimiento = t;
         // Terminar sola: de pie sin bajar un rato, o fuera de cuadro.
         if (lectura.tipo === 'ok') fueraDesde = null;
         else fueraDesde ??= t;
         if (cont.repeticiones.length > 0) {
           const quieta = t - ultimoMovimiento;
           const fuera = fueraDesde === null ? 0 : t - fueraDesde;
-          if (quieta >= S_PARA_TERMINAR || fuera >= S_FUERA_PARA_TERMINAR) {
+          const limiteFuera = poses.length > 0 ? S_TAPADA_PARA_TERMINAR : S_FUERA_PARA_TERMINAR;
+          if (quieta >= S_PARA_TERMINAR || fuera >= limiteFuera) {
             cancelAnimationFrame(raf);
             terminar();
             return;
           }
-          const resta = Math.min(S_PARA_TERMINAR - quieta, fueraDesde === null ? Infinity : S_FUERA_PARA_TERMINAR - fuera);
+          const resta = Math.min(S_PARA_TERMINAR - quieta, fueraDesde === null ? Infinity : limiteFuera - fuera);
           if (resta <= S_CUENTA_REGRESIVA) terminaEn = Math.ceil(resta);
         }
       }
