@@ -512,9 +512,10 @@ poses sintéticas):
   frente). La profundidad se juzga solo por el muslo: con las rodillas muy adelante la
   rodilla se cierra aunque la cadera quede alta. Bajar en menos de 0,6 s no la marca
   mala, pero suma el consejo de bajar con control. Los umbrales están en `UMBRALES`.
-- Si se deja de ver a la persona en medio de una repetición y vuelve, la repetición
-  cuenta; si fue más de 1,5 s, como mal hecha por «no se vio completa» (con el consejo
-  de alejarse). Si no vuelve en 6 s, esa no cuenta.
+- Si se deja de ver a la persona en medio de una repetición (alguien se cruzó) y vuelve,
+  la repetición cuenta. Si fue más de 1,5 s y no se la vio llegar al paralelo, sale como
+  mal hecha por «no se vio completa» (no se sabe si bajó; con el consejo de alejarse); si
+  se la vio llegar, vale. Si no vuelve en 6 s, esa no cuenta.
 - **Con gente alrededor, sigue a una sola persona** (`client/src/ejercicio/seguimiento.ts`).
   El detector busca una persona y la «sigue» de un cuadro al otro: es rápido, estable en
   el fondo de la sentadilla y quien pasa por detrás no lo desvía. (Buscar varias personas
@@ -533,7 +534,8 @@ poses sintéticas):
     (tapándola de verdad), no se la tapa: la pantalla dice «Alguien se cruzó: te espero».
   Las demás personas se dibujan en gris. Cada serie fija de nuevo (si cambia quien entrena).
 - **Termina sola** si, después de al menos una repetición, la persona se queda de pie 10 s
-  o sale de cuadro 4 s (con cuenta regresiva), o con el botón **Terminar serie**. Con voz
+  (contando solo mientras se la ve) o deja de verse 4 s (10 s si se ve a otras personas:
+  alguien la está tapando), con cuenta regresiva, o con el botón **Terminar serie**. Con voz
   (se puede apagar) dice el número de cada repetición y, si salió mal, qué corregir
   («3, más abajo»). La pantalla no se apaga durante la serie.
 

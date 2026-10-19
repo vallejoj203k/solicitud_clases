@@ -160,19 +160,25 @@ describe('contador', () => {
     expect(c.repeticiones.map((r) => r.buena)).toEqual([true]);
   });
 
-  it('si se pierde a la persona en medio y vuelve, la repetición cuenta (como "no se vio completa" si fue mucho)', () => {
-    const conPerdida = (cuadrosPerdidos: number) => {
+  it('si se pierde a la persona en medio y vuelve, la repetición cuenta', () => {
+    /** Baja hasta `hasta` (avance 0 a 1), se pierde `perdidos` cuadros y vuelve a verse subiendo. */
+    const conPerdida = (perdidos: number, forma: Forma = BUENA, hasta = 1) => {
       const c = new ContadorSentadilla();
       let t = 0;
-      for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(BUENA, 0, 'perfil')), (t += 1 / 30));
-      for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(BUENA, i / 30, 'perfil')), (t += 1 / 30));
-      for (let i = 0; i < cuadrosPerdidos; i++) c.procesar(medirSentadilla(null), (t += 1 / 30));
-      for (let i = 0; i <= 30; i++) c.procesar(medirSentadilla(pose(BUENA, 1 - i / 30, 'perfil')), (t += 1 / 30));
+      for (let i = 0; i < 30; i++) c.procesar(medirSentadilla(pose(forma, 0, 'perfil')), (t += 1 / 30));
+      for (let i = 0; i <= 30; i++) c.procesar(medirSentadilla(pose(forma, (hasta * i) / 30, 'perfil')), (t += 1 / 30));
+      for (let i = 0; i < perdidos; i++) c.procesar(medirSentadilla(null), (t += 1 / 30));
+      for (let i = 0; i <= 30; i++) c.procesar(medirSentadilla(pose(forma, 0.5 * (1 - i / 30), 'perfil')), (t += 1 / 30));
       return c.repeticiones;
     };
+    // Un momento sin verla: nada cambia.
     expect(conPerdida(10).map((r) => r.fallas)).toEqual([[]]);
-    expect(conPerdida(60).map((r) => r.fallas)).toEqual([['fuera']]);
-    expect(resumir(conPerdida(60)).consejos[0]).toMatch(/no se te veía entero/);
+    // Mucho rato, pero ya se la había visto llegar al paralelo: buena.
+    expect(conPerdida(60).map((r) => r.fallas)).toEqual([[]]);
+    // Mucho rato sin haberla visto llegar al paralelo: no se sabe.
+    const sinFondo = conPerdida(60, BUENA, 0.5);
+    expect(sinFondo.map((r) => r.fallas)).toEqual([['fuera']]);
+    expect(resumir(sinFondo).consejos[0]).toMatch(/no se te veía entero/);
     // Si no vuelve en mucho rato, se fue: no cuenta.
     expect(conPerdida(250).length).toBe(0);
   });
