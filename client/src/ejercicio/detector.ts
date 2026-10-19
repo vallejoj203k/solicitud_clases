@@ -25,6 +25,8 @@ export function cargarDetector(): Promise<PoseLandmarker> {
       PoseLandmarker.createFromOptions(archivos, {
         baseOptions: { modelAssetPath: MODELO, delegate },
         runningMode: 'VIDEO',
+        // Una persona: el detector la "sigue" de un cuadro al otro, que es rápido y
+        // estable en el fondo de la sentadilla. Con gente alrededor, ver seguimiento.ts.
         numPoses: 1,
         minPoseDetectionConfidence: 0.5,
         minPosePresenceConfidence: 0.5,
@@ -40,9 +42,11 @@ export function cargarDetector(): Promise<PoseLandmarker> {
   return promesa;
 }
 
-/** La pose de un cuadro del video, o null si no hay nadie. */
-export function detectar(detector: PoseLandmarker, video: HTMLVideoElement, ms: number): Pose | null {
-  const r = detector.detectForVideo(video, ms);
-  if (!r.landmarks.length || !r.worldLandmarks.length) return null;
-  return { imagen: r.landmarks[0], mundo: r.worldLandmarks[0], aspecto: video.videoWidth / (video.videoHeight || 1) };
+/**
+ * Las personas que se ven en un cuadro (puede no haber ninguna). La fuente es el
+ * video o una copia del cuadro con alguien tapado (ver PaginaEjercicio).
+ */
+export function detectar(detector: PoseLandmarker, fuente: HTMLVideoElement | HTMLCanvasElement, ms: number, aspecto: number): Pose[] {
+  const r = detector.detectForVideo(fuente, ms);
+  return r.landmarks.map((imagen, i) => ({ imagen, mundo: r.worldLandmarks[i], aspecto })).filter((p) => p.mundo?.length);
 }
